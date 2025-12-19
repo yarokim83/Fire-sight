@@ -7,153 +7,153 @@ const hotspots = [
         x: 45, y: 65, // 펌프 위치
         label: "주펌프 (Main Pump)",
         desc: "NFTC 102: 체절운전 시 정격토출압력의 140% 이하, 정격운전 시 정격토출압력 이상일 것.",
-        highRiseDesc: "★고층 건축물: 스프링클러와 겸용 시, 펌프 토출측에 압력 릴리프 밸브 추가 확인 필요 (과압 방지)."
+        highRiseDesc: "★고층 건물 전용 주의사항 (NFTC 강화 기준): 스프링클러 겸용 시 토출측 압력 릴리프 밸브 설치 및 과압 방지 조치 필수."
     },
     {
         id: 2,
         x: 50, y: 40, // 순환배관 위치
         label: "순환배관 & 릴리프밸브",
         desc: "구경 20mm 이상. 체절압력 미만에서 개방되어 수온 상승 방지.",
-        highRiseDesc: "★고층 건축물: 릴리프 밸브의 개방 압력이 고압에 견디는지 확인 (배관 스케줄 40 이상 권장)."
+        highRiseDesc: "★고층 건물 전용: 고압 릴리프 밸브 사용. 개방 시 배관 충격 및 고여있는 물의 배수 처리 확인."
     },
     {
         id: 3,
         x: 65, y: 50, // 성능시험배관 위치
         label: "성능시험배관 & 유량계",
-        desc: "유량계는 정격토출량의 175% 이상 측정 가능한지 확인. (개폐밸브는 전단 직관부에 설치)",
-        highRiseDesc: "★고층 건축물: 고압으로 인한 유량계 파손 주의. 전단 밸브 서서히 개방하여 수격현상 방지."
+        desc: "정격토출량의 175% 이상 측정 가능할 것. 유량계 전단에 개폐밸브 설치.",
+        highRiseDesc: "★고층 건물 전용: 고압 유수 검지 장치 및 유량계 파손 방지를 위한 감압 밸브 설치 여부 점검."
     },
     {
         id: 4,
         x: 30, y: 55, // 기동용수압개폐장치 위치
         label: "기동용 수압개폐장치 (압력챔버)",
-        desc: "용적 100L 이상. 펌프의 기동/정지 압력 세팅값 확인.",
-        highRiseDesc: "★고층 건축물: 전자식 기동용 압력스위치(Digital Pressure Switch) 사용 권장 (반응속도 및 내구성)."
+        desc: "용적 100L 이상. 기동/정지 압력 세팅값 적정성 확인.",
+        highRiseDesc: "★고층 건물 전용: 디지털 압력 스위치 사용 권장. 잦은 기동 방지를 위한 차압 설정 세밀화."
     }
 ];
 
-export default function VisualLearning() {
+export default function VisualLearning({ isHighRise, setIsHighRise }) {
     const [selectedHotspot, setSelectedHotspot] = useState(null);
-    const [isHighRise, setIsHighRise] = useState(false);
 
     return (
         <div className="flex h-full">
-            {/* Diagram Area */}
-            <div className="flex-1 bg-slate-900 relative flex items-center justify-center p-8 overflow-hidden">
+            {/* Diagram Section */}
+            <div className="flex-1 bg-slate-950 relative flex items-center justify-center p-8 overflow-hidden">
 
-                {/* Toggle Switch */}
-                <div className="absolute top-6 left-6 z-10 flex items-center space-x-3 bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-lg">
-                    <span className={`text-sm font-medium ${!isHighRise ? 'text-white' : 'text-slate-500'}`}>Standard</span>
-
+                {/* High-Rise Toggle Switch */}
+                <div className="absolute top-6 left-6 z-10 flex items-center space-x-3 bg-slate-900/80 backdrop-blur-sm p-3 rounded-lg border border-slate-700 shadow-xl select-none">
+                    <span className={`text-sm font-bold ${!isHighRise ? 'text-white' : 'text-slate-500'}`}>Standard</span>
                     <button
                         onClick={() => setIsHighRise(!isHighRise)}
-                        className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${isHighRise ? 'bg-orange-500' : 'bg-slate-600'}`}
+                        className={`w-14 h-7 rounded-full p-1 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-blue-500 ${isHighRise ? 'bg-orange-600' : 'bg-slate-700'}`}
                     >
-                        <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${isHighRise ? 'translate-x-6' : 'translate-x-0'}`} />
+                        <div className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-300 ${isHighRise ? 'translate-x-7' : 'translate-x-0'}`} />
                     </button>
-
-                    <span className={`text-sm font-medium ${isHighRise ? 'text-orange-400' : 'text-slate-500'}`}>High-Rise (&gt;30F)</span>
+                    <span className={`text-sm font-bold ${isHighRise ? 'text-orange-500' : 'text-slate-500'}`}>High-Rise</span>
                 </div>
 
-                {/* Diagram Placeholder / Container */}
-                <div className="relative w-full max-w-3xl aspect-[4/3] bg-slate-800 rounded-xl border border-slate-700 shadow-2xl overflow-hidden">
-                    {/* Decorative Grid */}
-                    <div className="absolute inset-0 opacity-10"
-                        style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
+                {/* SVG Diagram Container */}
+                <div className="relative w-full max-w-4xl aspect-[16/9] bg-slate-900 rounded-xl border border-slate-800 shadow-2xl overflow-hidden">
+                    {/* Grid Pattern Background */}
+                    <div className="absolute inset-0 opacity-5"
+                        style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }}>
                     </div>
 
-                    {/* SVG Schematic */}
-                    <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                    <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
                         <defs>
-                            {/* Valve Symbol Definition */}
-                            <symbol id="valve" viewBox="0 0 10 10">
-                                <path d="M0 0 L10 10 L10 0 L0 10 Z" fill="#475569" stroke="white" strokeWidth="0.5" />
-                            </symbol>
-                            {/* Check Valve Symbol */}
-                            <symbol id="check-valve" viewBox="0 0 10 10">
-                                <path d="M1 5 L9 5 M7 2 L9 5 L7 8" stroke="white" strokeWidth="1" />
-                                <circle cx="5" cy="5" r="4.5" stroke="white" strokeWidth="0.5" fill="#475569" />
-                            </symbol>
+                            <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                                <feGaussianBlur stdDeviation="2" result="blur" />
+                                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                            </filter>
+                            {/* Symbol: Valve */}
+                            <path id="valve-symbol" d="M0 0 L10 5 L0 10 Z M10 0 L0 5 L10 10 Z" fill="#64748b" stroke="white" strokeWidth="0.5" />
                         </defs>
 
-                        {/* 1. Main Suction Pipe (Left to Pump) */}
-                        <path d="M0 80 L40 80" stroke="#64748b" strokeWidth="4" />
-                        <use href="#valve" x="15" y="75" width="10" height="10" />
+                        {/* Pipes Group: fill="none" is critical here */}
+                        <g fill="none">
+                            {/* Suction Pipe */}
+                            <path d="M10 80 L45 80" stroke="#475569" strokeWidth="3" />
 
-                        {/* 2. Main Pump (Center Bottom) */}
-                        <g transform="translate(50, 80)">
-                            <circle r="8" fill="#1e293b" stroke="#f97316" strokeWidth="2" /> {/* Pump Body */}
-                            <rect x="-10" y="-12" width="20" height="12" fill="#334155" strokeWidth="0" /> {/* Motor connect */}
-                            <rect x="-12" y="-4" width="24" height="8" rx="2" fill="#cbd5e1" /> {/* Base */}
+                            {/* Discharge Pipe */}
+                            <path d="M45 70 L45 20 L80 20" stroke="#475569" strokeWidth="3" />
+
+                            {/* Circulation Pipe */}
+                            <path d="M45 65 L25 65 L25 85" stroke="#475569" strokeWidth="2" strokeDasharray="2,2" />
+
+                            {/* Flow Meter Pipe */}
+                            <path d="M45 40 L80 40" stroke="#475569" strokeWidth="2" />
+
+                            {/* Pressure Chamber Pipe */}
+                            <path d="M45 35 L30 35 L30 50" stroke="#475569" strokeWidth="2" />
                         </g>
 
-                        {/* 3. Main Discharge Pipe (Pump to Top) */}
-                        <path d="M50 72 L50 20 L50 0" stroke="#64748b" strokeWidth="4" />
+                        {/* Components */}
+                        {/* Main Pump */}
+                        <circle cx="45" cy="80" r="8" fill="#1e293b" stroke="#f59e0b" strokeWidth="2" filter="url(#glow)" />
+                        <text x="45" y="82" textAnchor="middle" fontSize="3" fill="white" fontWeight="bold">PUMP</text>
 
-                        {/* 4. Check Valve on Discharge */}
-                        <circle cx="50" cy="60" r="4" fill="#1e293b" stroke="white" strokeWidth="1" />
-                        <path d="M48 62 L52 58 M48 58 L52 62" stroke="white" strokeWidth="1" /> {/* Simple Check symbol */}
+                        {/* Check Valve */}
+                        <path d="M43 55 L47 55" stroke="white" strokeWidth="1" />
+                        <circle cx="45" cy="55" r="3" stroke="white" strokeWidth="1" fill="none" />
 
-                        {/* 5. Circulation Piping (Branch Left) */}
-                        <path d="M50 70 L28 70 L28 90" stroke="#64748b" strokeWidth="2" strokeDasharray="4 2" />
-                        <rect x="23" y="72" width="10" height="6" fill="#fca5a5" stroke="none" /> {/* Relief Valve Box */}
-                        <text x="35" y="88" fontSize="3" fill="#94a3b8">Drain</text>
+                        {/* Relief Valve */}
+                        <rect x="23" y="68" width="4" height="6" fill="#ef4444" />
 
-                        {/* 6. Performance Test Piping (Branch Right) */}
-                        <path d="M50 45 L90 45" stroke="#64748b" strokeWidth="3" />
-                        <use href="#valve" x="60" y="40" width="10" height="10" /> {/* Test Valve */}
-                        <circle cx="80" cy="45" r="3" fill="#0f172a" stroke="#ffffff" strokeWidth="1" /> {/* Flow Meter */}
-                        <path d="M80 45 L80 42" stroke="white" strokeWidth="1" /> {/* Meter indicator */}
+                        {/* Flow Meter Component */}
+                        <rect x="65" y="38" width="6" height="4" fill="#3b82f6" />
 
-                        {/* 7. Pressure Chamber (Branch Top Left) */}
-                        <path d="M50 30 L25 30 L25 20" stroke="#64748b" strokeWidth="2" />
-                        <rect x="20" y="10" width="10" height="15" rx="1" fill="#be123c" stroke="white" strokeWidth="1" />
-                        <line x1="25" y1="10" x2="25" y2="6" stroke="#94a3b8" strokeWidth="1" /> {/* Gauge stem */}
-                        <circle cx="25" cy="4" r="2" fill="white" />
+                        {/* Pressure Chamber Component */}
+                        <rect x="25" y="50" width="10" height="15" rx="2" fill="#be123c" />
+
                     </svg>
 
-                    {/* Hotspots */}
+                    {/* Interactive Hotspots */}
                     {hotspots.map((spot) => (
                         <button
                             key={spot.id}
                             onClick={() => setSelectedHotspot(spot)}
                             style={{ left: `${spot.x}%`, top: `${spot.y}%` }}
-                            className={`absolute w-6 h-6 -ml-3 -mt-3 rounded-full border-2 shadow-[0_0_15px_rgba(239,68,68,0.5)] transition-all duration-300 z-20 hover:scale-125
-                ${selectedHotspot?.id === spot.id
-                                    ? 'bg-red-500 border-white scale-125 animate-pulse'
-                                    : 'bg-red-500/80 border-red-300 hover:bg-red-500'
-                                }`}
+                            className={`absolute w-6 h-6 -ml-3 -mt-3 rounded-full border-2 shadow-[0_0_15px_rgba(239,68,68,0.6)] transform transition-transform duration-200 z-20
+                                ${selectedHotspot?.id === spot.id ? 'bg-red-600 border-white scale-125' : 'bg-red-600/60 border-red-300 hover:scale-110 hover:bg-red-600'}`}
+                            aria-label={`Select ${spot.label}`}
                         >
-                            <span className="sr-only">{spot.label}</span>
+                            <span className="absolute inset-0 rounded-full bg-red-500 opacity-75 animate-ping"></span>
                         </button>
                     ))}
                 </div>
             </div>
 
-            {/* Info Panel */}
-            <div className="w-80 bg-slate-800 border-l border-slate-700 flex flex-col p-6 shadow-xl z-20 transition-all duration-300">
+            {/* Info Panel Sidebar */}
+            <div className="w-96 bg-slate-900 border-l border-slate-700 p-6 flex flex-col shadow-2xl z-30">
                 {selectedHotspot ? (
-                    <div className="animate-fade-in space-y-6">
-                        <div>
-                            <h3 className="text-2xl font-bold text-white mb-1">{selectedHotspot.label}</h3>
+                    <div className="animate-fade-in-up">
+                        <div className="mb-6 pb-4 border-b border-slate-700">
+                            <h2 className="text-2xl font-bold text-white mb-2">{selectedHotspot.label}</h2>
+                            <span className="text-xs font-mono text-slate-400">ID: {selectedHotspot.id}</span>
                         </div>
 
-                        <div className={`p-4 rounded-lg border ${isHighRise ? 'bg-orange-500/10 border-orange-500/50' : 'bg-blue-500/10 border-blue-500/50'}`}>
-                            <div className="flex items-start space-x-3 mb-2">
-                                {isHighRise ? <AlertCircle className="text-orange-500 shrink-0" size={20} /> : <CheckCircle2 className="text-blue-500 shrink-0" size={20} />}
-                                <h4 className={`font-semibold ${isHighRise ? 'text-orange-400' : 'text-blue-400'}`}>
+                        <div className={`p-5 rounded-xl border mb-4 shadow-inner ${isHighRise ? 'bg-orange-950/30 border-orange-500/50' : 'bg-blue-950/30 border-blue-500/50'}`}>
+                            <div className="flex items-center gap-2 mb-3">
+                                {isHighRise ? <AlertCircle className="text-orange-500" size={24} /> : <CheckCircle2 className="text-blue-500" size={24} />}
+                                <h3 className={`font-bold text-lg ${isHighRise ? 'text-orange-400' : 'text-blue-400'}`}>
                                     {isHighRise ? 'High-Rise Checkpoint' : 'Standard Checkpoint'}
-                                </h4>
+                                </h3>
                             </div>
-                            <p className="text-slate-300 text-sm leading-relaxed">
+                            <p className="text-slate-300 leading-relaxed text-sm">
                                 {isHighRise ? selectedHotspot.highRiseDesc : selectedHotspot.desc}
                             </p>
                         </div>
+
+                        {isHighRise && (
+                            <div className="mt-4 p-3 bg-red-900/20 border border-red-800/50 rounded text-red-300 text-xs">
+                                ⚠ 고층 건축물은 화재안전기준(NFTC)의 강화된 규정을 반드시 준수해야 합니다.
+                            </div>
+                        )}
                     </div>
                 ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-slate-500 text-center">
-                        <Info size={48} className="mb-4 opacity-50" />
-                        <p>Click a red hotspot on the diagram to view inspection details.</p>
+                    <div className="flex flex-col items-center justify-center h-full text-slate-500 opacity-60">
+                        <Info size={64} strokeWidth={1} className="mb-4" />
+                        <p className="text-center font-medium">다이어그램의 붉은 점을 클릭하여<br />세부 점검 항목을 확인하세요.</p>
                     </div>
                 )}
             </div>

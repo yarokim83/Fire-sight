@@ -2,17 +2,32 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Eraser, Eye, PenTool, CheckCircle2 } from 'lucide-react';
 
 const QUESTIONS = {
-    id: 1,
-    q: "Q. 옥내소화전 펌프의 체절운전 시험 순서를 쓰시오.",
-    a: "1. 펌프 토출측 개폐밸브 폐쇄\n2. 성능시험배관 개폐밸브 폐쇄\n3. 릴리프 밸브 조절볼트 잠금\n4. 펌프 수동 기동\n5. 체절압력(140% 이하) 확인\n6. 릴리프 밸브 서서히 개방하여 작동 압력을 확인"
+    standard: {
+        q: "Q. 옥내소화전 펌프의 체절운전 시험 순서를 쓰시오.",
+        a: "1. 펌프 토출측 개폐밸브 폐쇄\n2. 성능시험배관 개폐밸브 폐쇄\n3. 릴리프 밸브 조절볼트 잠금\n4. 펌프 수동 기동\n5. 체절압력(140% 이하) 확인\n6. 릴리프 밸브 서서히 개방하여 작동 압력 확인"
+    },
+    highRise: {
+        q: "Q. [고층] 펌프 체절운전 시 '릴리프 밸브' 점검 핵심 포인트 3가지는?",
+        a: "1. 고압용 릴리프 밸브 설치 여부 확인\n2. 체절압력 미만에서 개방 여부(배관 보호)\n3. 개방 시 배수관으로의 원활한 배수 확인"
+    }
 };
 
-export default function Workbook() {
+export default function Workbook({ isHighRise }) {
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [showAnswer, setShowAnswer] = useState(false);
     const [context, setContext] = useState(null);
+
+    const currentData = isHighRise ? QUESTIONS.highRise : QUESTIONS.standard;
+
+    // Clear canvas when question changes (HighRise toggle)
+    useEffect(() => {
+        if (context && canvasRef.current) {
+            context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+            setShowAnswer(false);
+        }
+    }, [isHighRise, context]);
 
     // Initialize Canvas
     useEffect(() => {
@@ -34,6 +49,7 @@ export default function Workbook() {
             initCanvas();
 
             const handleResize = () => {
+                // In a real scenario, we might want to save/restore image data, but for now we re-init
                 const imageData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
                 canvas.width = parent.clientWidth;
                 canvas.height = parent.clientHeight;
@@ -64,7 +80,7 @@ export default function Workbook() {
     };
 
     const startDrawing = (e) => {
-        e.preventDefault();
+        if (e.cancelable) e.preventDefault();
         setIsDrawing(true);
         const { x, y } = getCoordinates(e);
         context?.beginPath();
@@ -72,7 +88,7 @@ export default function Workbook() {
     };
 
     const draw = (e) => {
-        e.preventDefault();
+        if (e.cancelable) e.preventDefault();
         if (!isDrawing) return;
         const { x, y } = getCoordinates(e);
         context?.lineTo(x, y);
@@ -93,45 +109,52 @@ export default function Workbook() {
     return (
         <div className="flex flex-col h-full bg-slate-900 p-4">
             {/* 1. Header: Question */}
-            <div className="bg-slate-800 p-4 rounded-t-xl border-b border-slate-700 shadow-sm flex items-start gap-3">
-                <div className="bg-orange-600 text-white font-bold px-3 py-1 rounded text-sm md:text-base shrink-0 mt-1">
-                    TEST
+            <div className={`p-4 rounded-t-xl border-b transition-colors duration-500 shadow-lg z-10 ${isHighRise ? 'bg-slate-800/90 border-orange-500/30' : 'bg-slate-800 border-slate-700'}`}>
+                <div className="flex items-start gap-3">
+                    <div className={`font-bold px-3 py-1 rounded text-sm md:text-base shrink-0 mt-1 transition-all duration-300 shadow-md ${isHighRise ? 'bg-red-600 text-white ring-2 ring-red-400/50' : 'bg-orange-600 text-white'}`}>
+                        {isHighRise ? '고층 전용' : 'TEST'}
+                    </div>
+                    <h2 className={`text-lg md:text-xl font-bold leading-relaxed transition-colors duration-300 ${isHighRise ? 'text-orange-100' : 'text-white'}`}>
+                        {currentData.q}
+                    </h2>
                 </div>
-                <h2 className="text-lg md:text-xl font-semibold text-white leading-relaxed">
-                    {QUESTIONS.q}
-                </h2>
             </div>
 
             {/* 2. Main Canvas Area */}
             <div ref={containerRef} className="flex-1 relative bg-slate-800 rounded-b-xl overflow-hidden border border-t-0 border-slate-700 shadow-inner">
 
-                {/* Grid Background (Radial) */}
-                <div className="absolute inset-0 pointer-events-none opacity-20"
+                {/* Grid Background (Graph Paper Style) */}
+                <div className="absolute inset-0 pointer-events-none opacity-10"
                     style={{
-                        backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)',
-                        backgroundSize: '20px 20px'
+                        backgroundImage: 'linear-gradient(#94a3b8 1px, transparent 1px), linear-gradient(90deg, #94a3b8 1px, transparent 1px)',
+                        backgroundSize: '30px 30px'
+                    }}
+                />
+                <div className="absolute inset-0 pointer-events-none opacity-5"
+                    style={{
+                        backgroundImage: 'linear-gradient(#94a3b8 0.5px, transparent 0.5px), linear-gradient(90deg, #94a3b8 0.5px, transparent 0.5px)',
+                        backgroundSize: '10px 10px'
                     }}
                 />
 
-                {/* Answer Overlay (Behind Canvas) */}
-                <div className={`absolute inset-0 p-8 flex flex-col justify-start pointer-events-none transition-opacity duration-500 ${showAnswer ? 'opacity-100' : 'opacity-0'}`}>
+                {/* Answer Overlay (Behind Canvas - For Self Grading) */}
+                <div className={`absolute inset-0 p-8 flex flex-col justify-start pointer-events-none transition-all duration-500 z-0 ${showAnswer ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
                     <div
-                        className="text-[#4ADE80] font-mono text-xl md:text-2xl leading-loose select-none whitespace-pre-line"
-                        style={{ textShadow: '0 0 10px rgba(74, 222, 128, 0.2)' }}
+                        className="text-[#4ADE80] font-mono text-xl md:text-2xl leading-loose select-none whitespace-pre-line tracking-wide drop-shadow-md"
                     >
-                        {QUESTIONS.a}
+                        {currentData.a}
                     </div>
 
-                    <div className="mt-auto flex items-center text-emerald-500/50 text-sm border-t border-emerald-500/20 pt-4">
+                    <div className="mt-auto flex items-center text-emerald-500/70 text-sm border-t border-emerald-500/20 pt-4">
                         <CheckCircle2 className="mr-2" size={16} />
-                        <span>자가 채점 모드: 녹색 정답 위에 덧쓰며 확인해보세요.</span>
+                        <span>TIP: 정답 텍스트 위에 덧쓰면서 암기해보세요.</span>
                     </div>
                 </div>
 
                 {/* Canvas (Top Layer) */}
                 <canvas
                     ref={canvasRef}
-                    className="absolute inset-0 w-full h-full cursor-cell touch-none"
+                    className="absolute inset-0 w-full h-full cursor-cell touch-none z-10"
                     onMouseDown={startDrawing}
                     onMouseMove={draw}
                     onMouseUp={stopDrawing}
@@ -143,22 +166,22 @@ export default function Workbook() {
 
                 {/* Placeholder Helper */}
                 {!isDrawing && !showAnswer && (
-                    <div className="absolute bottom-4 right-4 text-slate-600 text-sm pointer-events-none animate-pulse">
-                        <PenTool className="inline mr-1" size={14} />
-                        Write your answer here
+                    <div className="absolute bottom-4 right-4 text-slate-500 text-sm pointer-events-none animate-pulse flex items-center bg-slate-900/50 px-3 py-1 rounded-full backdrop-blur-sm">
+                        <PenTool className="inline mr-2" size={14} />
+                        Write here with Apple Pencil
                     </div>
                 )}
             </div>
 
             {/* 3. Footer: Controls */}
             <div className="mt-4 flex justify-between items-center">
-                <div className="text-slate-500 text-sm hidden md:block">
-                    Use Apple Pencil or Mouse
+                <div className="text-slate-500 text-xs md:text-sm font-medium hidden md:block pl-2">
+                    * Apple Pencil 및 터치 지원
                 </div>
                 <div className="flex space-x-3 w-full md:w-auto justify-end">
                     <button
                         onClick={clearCanvas}
-                        className="flex items-center justify-center space-x-2 px-5 py-3 rounded-xl bg-slate-700 text-slate-300 hover:bg-red-500/20 hover:text-red-400 transition-all font-medium active:scale-95 touch-manipulation"
+                        className="flex items-center justify-center space-x-2 px-5 py-3 rounded-xl bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white transition-all font-bold active:scale-95 touch-manipulation shadow-lg"
                     >
                         <Eraser size={20} />
                         <span>지우기</span>
@@ -166,9 +189,9 @@ export default function Workbook() {
 
                     <button
                         onClick={() => setShowAnswer(!showAnswer)}
-                        className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-xl transition-all font-bold shadow-lg active:scale-95 touch-manipulation min-w-[140px] ${showAnswer
-                                ? 'bg-emerald-600 text-white ring-2 ring-emerald-400/50'
-                                : 'bg-orange-600 text-white hover:bg-orange-500'
+                        className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-xl transition-all font-bold shadow-lg active:scale-95 touch-manipulation min-w-[140px] border ring-1 ring-white/10 ${showAnswer
+                                ? 'bg-emerald-600 text-white border-emerald-500'
+                                : 'bg-orange-600 text-white hover:bg-orange-500 border-orange-500'
                             }`}
                     >
                         <Eye size={20} />
