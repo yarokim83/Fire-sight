@@ -1,35 +1,58 @@
-import React from 'react';
-import { BookOpen, PenTool } from 'lucide-react';
+import React, { useState } from 'react';
+import { BookOpen, PenTool, Book, ChevronLeft, ChevronRight } from 'lucide-react';
 
-export default function Sidebar({ currentMode, setMode }) {
+export default function Sidebar({ currentMode, setMode, subject }) {
+    const [isCollapsed, setIsCollapsed] = useState(false);
+
+    // Dynamic styles based on Subject Theme
+    const theme = subject === 'mechanical'
+        ? { activeBg: 'bg-blue-600', activeText: 'text-white', hover: 'hover:bg-blue-900/30 hover:text-blue-200' }
+        : { activeBg: 'bg-orange-600', activeText: 'text-white', hover: 'hover:bg-orange-900/30 hover:text-orange-200' };
+
+    const NavItem = ({ mode, icon: Icon, label }) => (
+        <button
+            onClick={() => setMode(mode)}
+            className={`w-full flex items-center space-x-3 px-3 py-3 rounded-xl transition-all duration-200 mb-1 font-medium group relative
+                ${currentMode === mode
+                    ? `${theme.activeBg} ${theme.activeText} shadow-md`
+                    : `text-slate-400 ${theme.hover}`
+                }`}
+        >
+            <Icon size={22} className="shrink-0" />
+            {!isCollapsed && <span className="whitespace-nowrap overflow-hidden transition-all duration-300">{label}</span>}
+
+            {/* Tooltip for Collapsed Mode & iPad Touch */}
+            {isCollapsed && (
+                <div className="absolute left-full ml-4 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-50 pointer-events-none shadow-xl border border-slate-700">
+                    {label}
+                </div>
+            )}
+        </button>
+    );
+
     return (
-        <div className="w-64 bg-slate-800 border-r border-slate-700 flex flex-col p-4 shadow-lg z-10">
-            <h1 className="text-xl font-bold mb-8 text-orange-500 tracking-wider">Fire-Sight Lite</h1>
-            <nav className="space-y-2">
-                <button
-                    onClick={() => setMode('visual')}
-                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 ${currentMode === 'visual'
-                            ? 'bg-orange-600 text-white shadow-md'
-                            : 'text-slate-400 hover:bg-slate-700 hover:text-white'
-                        }`}
-                >
-                    <BookOpen size={20} />
-                    <span className="font-medium">Visual Learning</span>
-                </button>
-                <button
-                    onClick={() => setMode('workbook')}
-                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 ${currentMode === 'workbook'
-                            ? 'bg-orange-600 text-white shadow-md'
-                            : 'text-slate-400 hover:bg-slate-700 hover:text-white'
-                        }`}
-                >
-                    <PenTool size={20} />
-                    <span className="font-medium">Workbook</span>
-                </button>
+        <div className={`${isCollapsed ? 'w-20' : 'w-64'} bg-slate-900 border-r border-slate-700/50 flex flex-col p-4 shadow-xl z-30 transition-all duration-300 relative`}>
+
+            {/* Navigation Menus */}
+            <nav className="flex-1 space-y-2 mt-4">
+                <NavItem mode="visual" icon={BookOpen} label="Visual Learning" />
+                <NavItem mode="workbook" icon={PenTool} label="Workbook" />
+                <NavItem mode="reference" icon={Book} label="Reference" />
             </nav>
 
-            <div className="mt-auto pt-4 border-t border-slate-700 text-xs text-slate-500 text-center">
-                iPad Web App v1.0
+            {/* Collapse Toggle Button (Bottom) */}
+            <button
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="absolute -right-3 top-1/2 transform -translate-y-1/2 w-6 h-12 bg-slate-800 border border-slate-700 rounded-r-lg flex items-center justify-center text-slate-400 hover:text-white shadow-md hover:bg-slate-700 transition"
+            >
+                {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+            </button>
+
+            {/* Footer */}
+            <div className={`mt-auto pt-4 border-t border-slate-800 transition-opacity duration-200 ${isCollapsed ? 'opacity-0' : 'opacity-100'}`}>
+                <div className="text-[10px] text-slate-600 text-center font-mono">
+                    Fire-Sight Lite v2.0
+                </div>
             </div>
         </div>
     );
