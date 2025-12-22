@@ -3,7 +3,7 @@ import {
     Scale, BookOpen, Building2, Calculator,
     FileText, ExternalLink, Search, Clock,
     X, AlertTriangle, FileCheck, Map, ArrowRightCircle, BookOpenCheck,
-    LogIn, Loader2, HardDrive, User, Info, Tag
+    LogIn, Loader2, HardDrive, User, Info, Tag, Trash2
 } from 'lucide-react';
 
 // Google Drive Folder ID
@@ -81,7 +81,23 @@ const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiIn
     const [previewPage, setPreviewPage] = useState(null);
     const [loading, setLoading] = useState(false);
     const [driveFiles, setDriveFiles] = useState([]);
+    const [deletedFileIds, setDeletedFileIds] = useState([]);
     const [categorized, setCategorized] = useState({ L1: [], L2: [], L3: [], L4: [] });
+
+    // Load deleted files from LocalStorage on mount
+    useEffect(() => {
+        const savedDeleted = JSON.parse(localStorage.getItem('fireSight_deletedRefs') || '[]');
+        setDeletedFileIds(savedDeleted);
+    }, []);
+
+    const handleDeleteFile = (e, fileId) => {
+        e.stopPropagation();
+        if (window.confirm("선택한 자료를 삭제하시겠습니까? (목록에서 숨김 처리됩니다)")) {
+            const updated = [...deletedFileIds, fileId];
+            setDeletedFileIds(updated);
+            localStorage.setItem('fireSight_deletedRefs', JSON.stringify(updated));
+        }
+    };
 
     const categories = [
         { id: 'L1', label: '행정법규', icon: <Scale size={18} />, description: '설치 대상물, 자체점검 주기 및 소방 행정 근거' },
@@ -190,7 +206,7 @@ const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiIn
     };
 
     const currentCategory = categories.find(c => c.id === activeTab);
-    const displayFiles = categorized[activeTab] || [];
+    const displayFiles = (categorized[activeTab] || []).filter(f => !deletedFileIds.includes(f.id));
 
     // [2. 인터랙션 로직 구현]
     const handleCardClick = (file) => {
@@ -283,8 +299,15 @@ const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiIn
                                 <div
                                     key={file.id}
                                     onClick={() => handleCardClick(file)}
-                                    className="group bg-slate-900/40 border border-slate-800/60 p-5 rounded-2xl hover:border-blue-500/30 hover:bg-slate-900/60 transition-all duration-300 cursor-pointer flex flex-col justify-between"
+                                    className="group bg-slate-900/40 border border-slate-800/60 p-5 rounded-2xl hover:border-blue-500/30 hover:bg-slate-900/60 transition-all duration-300 cursor-pointer flex flex-col justify-between relative"
                                 >
+                                    <button
+                                        onClick={(e) => handleDeleteFile(e, file.id)}
+                                        className="absolute top-3 right-3 p-1.5 text-slate-600 hover:text-red-500 hover:bg-slate-800 rounded-lg transition-colors opacity-0 group-hover:opacity-100 z-10"
+                                        title="목록에서 제거"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
                                     <div>
                                         {/* Tags if meta exists */}
                                         <div className="flex flex-wrap gap-2 mb-3">

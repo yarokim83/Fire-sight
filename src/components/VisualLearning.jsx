@@ -4,7 +4,7 @@ import {
     Settings, Gauge, Waves, Power, Bell, Radio, Cpu, Eye, EyeOff,
     Info, BookOpen, CheckCircle2, AlertTriangle, Globe, Lightbulb,
     Layers, Target, Ruler, ArrowUpDown, Flame, Volume2, Siren,
-    Grid, Wind, Activity, Image as ImageIcon, LayoutGrid
+    Grid, Wind, Activity, Image as ImageIcon, LayoutGrid, Trash2
 } from 'lucide-react';
 import VisualDetail from './VisualDetail';
 import { sprinklerVisualData } from '../data/sprinklerData';
@@ -177,17 +177,22 @@ export default function VisualLearning({ isExamMode, setIsExamMode, setMode, sub
     const [selectedTheme, setSelectedTheme] = useState(null);
     const [customData, setCustomData] = useState([]);
 
+    const [deletedDefaultIds, setDeletedDefaultIds] = useState([]);
+
     useEffect(() => {
-        const saved = localStorage.getItem('fireSight_customData');
-        if (saved) {
-            const parsed = JSON.parse(saved);
+        const savedCustom = localStorage.getItem('fireSight_customData');
+        if (savedCustom) {
+            const parsed = JSON.parse(savedCustom);
             const visuals = parsed.filter(item => item.type === 'visual');
             setCustomData(visuals);
         }
+
+        const savedDeleted = JSON.parse(localStorage.getItem('fireSight_deletedDefault') || '[]');
+        setDeletedDefaultIds(savedDeleted);
     }, []);
 
-    // Merge built-in and custom data
-    const allVisualData = [...sprinklerVisualData, ...customData];
+    // Merge built-in and custom data, then filter out soft-deleted default items
+    const allVisualData = [...sprinklerVisualData, ...customData].filter(item => !deletedDefaultIds.includes(item.id));
 
     // define derived lists
     const MECHANICAL_TOPICS = TOPICS.filter(t => t.targetSubject === 'mechanical');
@@ -228,6 +233,25 @@ export default function VisualLearning({ isExamMode, setIsExamMode, setMode, sub
     const handleBackToList = () => {
         setViewMode('list');
         setSelectedDiagram(null);
+    };
+
+    const handleDeleteItem = (e, item) => {
+        e.stopPropagation(); // prevent card click
+
+        if (window.confirm("이 학습 자료를 정말 삭제하시겠습니까? (삭제 후 복구 불가)")) {
+            if (item.isCustom) {
+                // Custom Data: Hard Delete
+                const saved = JSON.parse(localStorage.getItem('fireSight_customData') || '[]');
+                const updated = saved.filter(d => d.id !== item.id);
+                localStorage.setItem('fireSight_customData', JSON.stringify(updated));
+                setCustomData(prev => prev.filter(d => d.id !== item.id));
+            } else {
+                // Default Data: Soft Delete
+                const updated = [...deletedDefaultIds, item.id];
+                localStorage.setItem('fireSight_deletedDefault', JSON.stringify(updated));
+                setDeletedDefaultIds(updated);
+            }
+        }
     };
 
     // RENDER: DASHBOARD
@@ -295,6 +319,20 @@ export default function VisualLearning({ isExamMode, setIsExamMode, setMode, sub
                                 className="flex flex-col text-left bg-slate-900 border border-slate-800 rounded-xl overflow-hidden hover:border-blue-500 transition-all hover:shadow-lg group">
                                 {/* Thumbnail Placeholder */}
                                 <div className="h-48 bg-slate-800 relative overflow-hidden group-hover:opacity-90 transition-opacity">
+                                    <div className="absolute top-3 right-3 flex gap-2 z-10">
+                                        {item.isCustom && (
+                                            <div className="px-2 py-1 bg-emerald-600 text-white text-[10px] font-bold rounded shadow-lg border border-emerald-500/50">
+                                                🆕 My
+                                            </div>
+                                        )}
+                                        <button
+                                            onClick={(e) => handleDeleteItem(e, item)}
+                                            className={`p-1 bg-slate-900/80 rounded-lg backdrop-blur border border-slate-700 transition-colors shadow-lg ${item.isCustom ? 'text-slate-400 hover:text-red-500 hover:border-red-500/50' : 'text-slate-600 hover:text-red-400'}`}
+                                            title="삭제하기"
+                                        >
+                                            <Trash2 size={12} />
+                                        </button>
+                                    </div>
                                     {item.imageUrl && !item.imageUrl.includes('placeholder') ? (
                                         <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />
                                     ) : (

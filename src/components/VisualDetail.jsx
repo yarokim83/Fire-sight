@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Maximize2, X, CheckCircle2, BookOpen, Download } from 'lucide-react';
+import { ArrowLeft, Maximize2, X, CheckCircle2, BookOpen, Download, Trash2 } from 'lucide-react';
 
 const VisualDetail = ({ data, onBack }) => {
     const [isImageModalOpen, setImageModalOpen] = useState(false);
@@ -8,13 +8,35 @@ const VisualDetail = ({ data, onBack }) => {
 
     // 📥 이미지 다운로드 핸들러
     const handleDownload = (e) => {
-        e.stopPropagation(); // 부모 클릭 방지
+        e.stopPropagation();
         const link = document.createElement('a');
         link.href = data.imageUrl;
-        link.download = `${data.title}.png`; // 파일명 지정
+        link.download = `${data.title}.png`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    };
+
+    // 🗑️ 자료 삭제 핸들러 (추가된 기능)
+    const handleDelete = () => {
+        // 1. 삭제 확인
+        if (!window.confirm(`'${data.title}' 자료를 정말 삭제하시겠습니까?`)) return;
+
+        // 2. 삭제 로직
+        if (data.isCustom) {
+            // Hard Delete
+            const storedData = JSON.parse(localStorage.getItem('fireSight_customData') || '[]');
+            const updatedData = storedData.filter(item => item.id !== data.id);
+            localStorage.setItem('fireSight_customData', JSON.stringify(updatedData));
+        } else {
+            // Soft Delete (Hide Default)
+            const deletedDefaults = JSON.parse(localStorage.getItem('fireSight_deletedDefault') || '[]');
+            const updated = [...deletedDefaults, data.id];
+            localStorage.setItem('fireSight_deletedDefault', JSON.stringify(updated));
+        }
+
+        alert("삭제되었습니다.");
+        window.location.reload();
     };
 
     if (!data) return null;
@@ -35,6 +57,20 @@ const VisualDetail = ({ data, onBack }) => {
                         <p className="text-xs text-slate-500">핵심 구성요소 {components.length}개</p>
                     </div>
                 </div>
+
+                {/* 우측 상단 컨트롤: 삭제 버튼 추가 */}
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleDelete}
+                        className={`p-2 rounded-full transition-all ${data.isCustom
+                            ? "text-slate-500 hover:text-red-500 hover:bg-red-500/10"
+                            : "text-slate-600 hover:text-red-400 hover:bg-red-500/10"
+                            }`}
+                        title={data.isCustom ? "자료 삭제" : "기본 자료는 삭제 불가"}
+                    >
+                        <Trash2 size={20} />
+                    </button>
+                </div>
             </div>
 
             {/* 2. 메인 컨텐츠 영역 */}
@@ -45,18 +81,16 @@ const VisualDetail = ({ data, onBack }) => {
                     <div className="lg:w-1/2 p-4 flex flex-col bg-slate-900/50">
                         <div className="relative group w-full h-64 lg:h-full bg-slate-950 rounded-xl border border-slate-800 overflow-hidden flex items-center justify-center">
 
-                            {/* 📌 중요: 아이패드 롱프레스(복사/저장) 허용을 위한 스타일 적용 */}
                             <img
                                 src={data.imageUrl}
                                 alt="System Diagram"
                                 className="max-w-full max-h-full object-contain p-2 select-none"
-                                style={{ WebkitTouchCallout: 'default' }} // iOS 길게 누르기 메뉴 허용
+                                style={{ WebkitTouchCallout: 'default' }}
                                 onError={(e) => { e.target.src = "https://placehold.co/800x600/1e293b/ffffff?text=No+Image"; }}
                             />
 
-                            {/* 우측 상단 컨트롤 버튼 그룹 */}
-                            <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                {/* 다운로드 버튼 (아이패드용) */}
+                            {/* 이미지 컨트롤 버튼 그룹 */}
+                            <div className="absolute top-3 right-3 flex gap-2 transition-opacity">
                                 <button
                                     onClick={handleDownload}
                                     title="이미지 저장"
@@ -64,7 +98,6 @@ const VisualDetail = ({ data, onBack }) => {
                                 >
                                     <Download size={18} />
                                 </button>
-                                {/* 확대 버튼 */}
                                 <button
                                     onClick={() => setImageModalOpen(true)}
                                     title="크게 보기"
@@ -102,8 +135,11 @@ const VisualDetail = ({ data, onBack }) => {
                                     </p>
                                 </div>
                             ))}
+
                             {components.length === 0 && (
-                                <div className="text-center py-10 text-slate-500">등록된 구성요소 정보가 없습니다.</div>
+                                <div className="text-center py-10 text-slate-500">
+                                    등록된 구성요소 정보가 없습니다.
+                                </div>
                             )}
                         </div>
                     </div>
@@ -116,14 +152,12 @@ const VisualDetail = ({ data, onBack }) => {
                     <button className="absolute top-5 right-5 text-slate-400 hover:text-white z-50">
                         <X size={32} />
                     </button>
-                    {/* 모달 이미지에서도 저장 가능하도록 설정 */}
                     <img
                         src={data.imageUrl}
                         alt="Full Preview"
                         className="max-w-full max-h-screen object-contain rounded-lg shadow-2xl"
                         style={{ WebkitTouchCallout: 'default' }}
                     />
-                    {/* 모달 하단 다운로드 버튼 */}
                     <button
                         onClick={(e) => { e.stopPropagation(); handleDownload(e); }}
                         className="absolute bottom-10 bg-emerald-600 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 hover:bg-emerald-500"

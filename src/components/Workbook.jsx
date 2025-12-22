@@ -3,7 +3,7 @@ import {
     Calculator, Activity, Settings, Gauge, Droplets, ArrowRight,
     CheckCircle2, AlertTriangle, Info, ChevronRight, Zap,
     Ruler, Target, HelpCircle, BookOpen, RotateCcw, Play, Cable, Radio,
-    LayoutGrid, Wind, Bell, PenTool
+    LayoutGrid, Wind, Bell, PenTool, Trash2
 } from 'lucide-react';
 import ProblemSolver from './ProblemSolver';
 import { sprinklerProblems } from '../data/sprinklerData';
@@ -126,16 +126,21 @@ export default function Workbook({ isExamMode, subject: initialSubject }) {
     const [selectedProblem, setSelectedProblem] = useState(null);
     const [customData, setCustomData] = useState([]);
 
+    const [deletedDefaultIds, setDeletedDefaultIds] = useState([]);
+
     useEffect(() => {
-        const saved = localStorage.getItem('fireSight_customData');
-        if (saved) {
-            const parsed = JSON.parse(saved);
+        const savedCustom = localStorage.getItem('fireSight_customData');
+        if (savedCustom) {
+            const parsed = JSON.parse(savedCustom);
             const problems = parsed.filter(item => item.type === 'workbook');
             setCustomData(problems);
         }
+
+        const savedDeleted = JSON.parse(localStorage.getItem('fireSight_deletedDefault') || '[]');
+        setDeletedDefaultIds(savedDeleted);
     }, []);
 
-    const allProblems = [...sprinklerProblems, ...customData];
+    const allProblems = [...sprinklerProblems, ...customData].filter(item => !deletedDefaultIds.includes(item.id));
 
     // Initial Subject Handling (Optional)
     const activeTopics = initialSubject === 'electrical'
@@ -167,6 +172,27 @@ export default function Workbook({ isExamMode, subject: initialSubject }) {
     const handleBackToList = () => {
         setViewMode('list');
         setSelectedProblem(null);
+    };
+
+    const handleDeleteItem = (e, item) => {
+        e.stopPropagation(); // prevent card click
+
+        if (!item.isCustom) {
+            alert("기본 제공 문제는 삭제할 수 없습니다.");
+            return;
+        }
+
+        if (window.confirm("이 문제를 삭제하시겠습니까?")) {
+            // Hard Delete for Custom Data
+            const saved = JSON.parse(localStorage.getItem('fireSight_customData') || '[]');
+            const updated = saved.filter(d => d.id !== item.id);
+            localStorage.setItem('fireSight_customData', JSON.stringify(updated));
+
+            // Update State
+            setCustomData(prev => prev.filter(d => d.id !== item.id));
+
+            alert("삭제되었습니다.");
+        }
     };
 
     // Derived Theme
@@ -253,15 +279,104 @@ export default function Workbook({ isExamMode, subject: initialSubject }) {
                         <button key={problem.id} onClick={() => handleProblemSelect(problem)}
                             className="bg-slate-900 p-6 rounded-xl border border-slate-800 hover:border-blue-500 hover:bg-slate-800 transition-all text-left group shadow-lg"
                         >
-                            <div className="flex items-center justify-between mb-3">
-                                <span className={`px-3 py-1 rounded text-xs font-bold uppercase tracking-wider ${problem.type === 'descriptive' ? 'bg-purple-500/20 text-purple-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                                    {problem.type === 'descriptive' ? '서술형 (Descriptive)' : '객관식 (Multiple Choice)'}
-                                </span>
-                                <span className="text-slate-500 text-xs font-mono">Q{index + 1}</span>
+                            <div className="flex items-start justify-between mb-3">
+                                <div className="flex flex-col gap-2">
+                                    <div className="flex gap-2 items-center">
+                                        {/* Type Badge */}
+                                        <span className={`px-3 py-1 rounded text-xs font-bold uppercase tracking-wider 
+                                            ${problem.problemType === 'calculation' ? 'bg-orange-500/20 text-orange-400' :
+                                                problem.problemType === 'short' ? 'bg-indigo-500/20 text-indigo-400' :
+                                                    problem.type === 'descriptive' || problem.problemType === 'descriptive' ? 'bg-purple-500/20 text-purple-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                                            {problem.problemType === 'calculation' ? '실무형' :
+                                                problem.problemType === 'short' ? '단답형' :
+                                                    problem.type === 'descriptive' || problem.problemType === 'descriptive' ? '서술형' : '객관식'}
+                                        </span>
+
+                                        {/* 2027 Exam: Descriptive Keywords Badge */}
+                                        {problem.problemType === 'descriptive' && problem.keywords && (
+                                            <div className="flex gap-1">
+                                                {problem.keywords.split(/[\s,]+/).filter(k => k).map((k, i) => (
+                                                    <span key={i} className="px-1.5 py-0.5 bg-slate-800 text-slate-400 text-[10px] rounded border border-slate-700">
+                                                        {k.startsWith('#') ? k : `#${k}`}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-2 items-start opacity-0 group-hover:opacity-100 transition-opacity">
+                                    {problem.isCustom && (
+                                        <>
+                                            <span className="px-2 py-1 bg-blue-600/30 text-blue-300 text-[10px] font-bold rounded border border-blue-500/30">
+                                                🆕 My
+                                            </span>
+                                            <button
+                                                onClick={(e) => handleDeleteItem(e, problem)}
+                                                className="p-1.5 bg-slate-800 text-slate-500 hover:text-red-500 rounded border border-slate-700 hover:border-red-500/50 transition-colors"
+                                                title="삭제하기"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
                             </div>
-                            <h3 className="text-lg font-bold text-slate-200 group-hover:text-white mb-2 line-clamp-1">{problem.question}</h3>
-                            <div className="flex items-center gap-2 text-sm text-slate-500">
-                                <PenTool size={14} /> <span>문제 풀기 Start</span>
+
+                            <div className="flex justify-between items-end">
+                                <div className="flex-1 pr-4">
+                                    <h3 className="text-lg font-bold text-slate-200 group-hover:text-white mb-2 line-clamp-2 leading-relaxed">
+                                        <span className="text-slate-500 text-sm font-mono mr-2">Q{index + 1}.</span>
+                                        {problem.question}
+                                    </h3>
+
+                                    {/* 2027 Exam: Interactive Elements */}
+                                    <div className="flex gap-3 mt-3" onClick={e => e.stopPropagation()}>
+                                        {/* Short Answer: Check Answer */}
+                                        {problem.problemType === 'short' && problem.answer && (
+                                            <details className="text-sm">
+                                                <summary className="cursor-pointer text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1 select-none">
+                                                    <CheckCircle2 size={14} /> 정답 확인
+                                                </summary>
+                                                <div className="mt-2 p-2 bg-indigo-950/30 border border-indigo-500/30 rounded text-indigo-200">
+                                                    {problem.answer} <span className="text-slate-500 text-xs ml-2">({problem.reference})</span>
+                                                </div>
+                                            </details>
+                                        )}
+
+                                        {/* Calculation: View Solution */}
+                                        {problem.problemType === 'calculation' && problem.solution && (
+                                            <details className="text-sm w-full">
+                                                <summary className="cursor-pointer text-orange-400 hover:text-orange-300 font-bold flex items-center gap-1 select-none">
+                                                    <Calculator size={14} /> 풀이 보기
+                                                </summary>
+                                                <div className="mt-2 p-3 bg-slate-950 border border-slate-800 rounded text-slate-300 font-mono text-xs whitespace-pre-wrap">
+                                                    {problem.solution}
+                                                    <div className="mt-2 pt-2 border-t border-slate-800 flex justify-between items-center font-bold text-orange-400">
+                                                        <span>답: {problem.finalAnswer} {problem.unit}</span>
+                                                    </div>
+                                                </div>
+                                            </details>
+                                        )}
+
+                                        {/* Descriptive: Model Answer (Optional) */}
+                                        {problem.problemType === 'descriptive' && problem.modelAnswer && (
+                                            <details className="text-sm w-full">
+                                                <summary className="cursor-pointer text-purple-400 hover:text-purple-300 font-bold flex items-center gap-1 select-none">
+                                                    <BookOpen size={14} /> 모범 답안
+                                                </summary>
+                                                <div className="mt-2 p-3 bg-slate-950 border border-slate-800 rounded text-slate-300 text-xs whitespace-pre-wrap leading-relaxed">
+                                                    {problem.modelAnswer}
+                                                </div>
+                                            </details>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Start Button Label */}
+                                <div className="items-center gap-2 text-sm text-slate-500 hidden md:flex shrink-0">
+                                    <PenTool size={14} /> <span>문제 풀기 Start</span>
+                                </div>
                             </div>
                         </button>
                     ))}
