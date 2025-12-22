@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Droplets, Zap, Box, CircleDot, ArrowRight, ChevronRight,
+    Droplets, Zap, Box, CircleDot, ArrowRight, ArrowLeft, ChevronRight,
     Settings, Gauge, Waves, Power, Bell, Radio, Cpu, Eye, EyeOff,
     Info, BookOpen, CheckCircle2, AlertTriangle, Globe, Lightbulb,
-    Layers, Target, Ruler, ArrowUpDown, Flame, Volume2, Siren
+    Layers, Target, Ruler, ArrowUpDown, Flame, Volume2, Siren,
+    Grid, Wind, Activity, Image as ImageIcon, LayoutGrid
 } from 'lucide-react';
+import VisualDetail from './VisualDetail';
+import { sprinklerVisualData } from '../data/sprinklerData';
 
 // =====================================================================
 // DATA: 기계분야 (수계 소화설비)
@@ -115,205 +118,226 @@ const ELECTRICAL_SPECIFIC = {
 };
 
 // =====================================================================
+// TOPIC MENU DATA
+// =====================================================================
+const TOPICS = [
+    {
+        id: 'water',
+        label: '수계 소화설비',
+        labelEn: 'Water Based Systems',
+        desc: '스프링클러, 옥내소화전 등 물을 이용한 소화설비의 계통과 원리를 학습합니다.',
+        count: 12, // Dummy count
+        icon: Droplets,
+        color: 'blue',
+        progress: 75,
+        targetSubject: 'mechanical'
+    },
+    {
+        id: 'gas',
+        label: '가스/제연 설비',
+        labelEn: 'Gas & Smoke Control',
+        desc: '이산화탄소, 할론 소화설비 및 거실/부속실 제연설비의 작동 흐름을 이해합니다.',
+        count: 8,
+        icon: Wind,
+        color: 'slate',
+        progress: 30, // Mock Progress
+        targetSubject: 'mechanical' // For now mapped to mechanical context
+    },
+    {
+        id: 'alarm',
+        label: '경보/전기 설비',
+        labelEn: 'Alarm & Electrical',
+        desc: '자동화재탐지설비, 비상방송, 유도등 등 전기적 신호 전달 체계를 분석합니다.',
+        count: 15,
+        icon: Bell,
+        color: 'amber',
+        progress: 60,
+        targetSubject: 'electrical'
+    },
+    {
+        id: 'basic',
+        label: '기계/전기 기초',
+        labelEn: 'Basic Engineering',
+        desc: '유체역학 기초, 전압강하 계산, 시퀀스 회로 등 소방 엔지니어링의 기초를 다집니다.',
+        count: 5,
+        icon: Activity, // Updated to Activity as Ruler substitute
+        color: 'emerald', // Green
+        progress: 15,
+        targetSubject: 'mechanical' // General
+    }
+];
+
+// =====================================================================
 // COMPONENT
 // =====================================================================
-export default function VisualLearning({ isExamMode, setIsExamMode, setMode, subject }) {
-    const [activeTab, setActiveTab] = useState('common');
-    const [selectedEquipment, setSelectedEquipment] = useState('');
-    const [selectedNode, setSelectedNode] = useState(null);
-    const [revealedNodes, setRevealedNodes] = useState(new Set());
-    const [revealedValues, setRevealedValues] = useState(new Set());
+export default function VisualLearning({ isExamMode, setIsExamMode, setMode, subject: initialSubject }) {
+    const [viewMode, setViewMode] = useState('dashboard'); // 'dashboard', 'list', 'canvas'
+    const [selectedTopic, setSelectedTopic] = useState(null);
+    const [selectedDiagram, setSelectedDiagram] = useState(null);
+    const [selectedTheme, setSelectedTheme] = useState(null);
+    const [customData, setCustomData] = useState([]);
 
-    // Determine data based on subject
-    const isMechanical = subject === 'mechanical';
-    const commonNodes = isMechanical ? MECHANICAL_COMMON_NODES : ELECTRICAL_COMMON_NODES;
-    const specificEquipments = isMechanical ? MECHANICAL_SPECIFIC : ELECTRICAL_SPECIFIC;
-    const equipmentList = Object.keys(specificEquipments);
-
-    // Set default equipment when subject changes
     useEffect(() => {
-        setSelectedEquipment(equipmentList[0] || '');
-        setActiveTab('common');
-        setSelectedNode(null);
-        setRevealedNodes(new Set());
-        setRevealedValues(new Set());
-    }, [subject]);
+        const saved = localStorage.getItem('fireSight_customData');
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            const visuals = parsed.filter(item => item.type === 'visual');
+            setCustomData(visuals);
+        }
+    }, []);
 
-    // Reset revealed state when Exam Mode is toggled
-    useEffect(() => {
-        setRevealedNodes(new Set());
-        setRevealedValues(new Set());
-    }, [isExamMode, subject]);
+    // Merge built-in and custom data
+    const allVisualData = [...sprinklerVisualData, ...customData];
 
-    const specificData = specificEquipments[selectedEquipment];
-    const specificNodes = specificData?.nodes || [];
-    const allNodes = activeTab === 'common' ? commonNodes : [...commonNodes, ...specificNodes];
+    // define derived lists
+    const MECHANICAL_TOPICS = TOPICS.filter(t => t.targetSubject === 'mechanical');
+    const ELECTRICAL_TOPICS = TOPICS.filter(t => t.targetSubject === 'electrical');
 
-    // Theme
-    const theme = isMechanical
-        ? { accent: 'text-blue-400', bg: 'bg-blue-600', border: 'border-blue-500', glow: 'shadow-blue-500/30', line: 'bg-blue-500', nodeBg: 'bg-blue-900/50 hover:bg-blue-800/70', nodeActiveBg: 'bg-blue-700 ring-2 ring-blue-400', tabActive: 'bg-blue-600 text-white', tabInactive: 'bg-slate-800 text-slate-400 hover:bg-slate-700', icon: Droplets }
-        : { accent: 'text-orange-400', bg: 'bg-orange-600', border: 'border-orange-500', glow: 'shadow-orange-500/30', line: 'bg-orange-500', nodeBg: 'bg-orange-900/50 hover:bg-orange-800/70', nodeActiveBg: 'bg-orange-700 ring-2 ring-orange-400', tabActive: 'bg-orange-600 text-white', tabInactive: 'bg-slate-800 text-slate-400 hover:bg-slate-700', icon: Zap };
+    // Filter topics based on subject prop or fallback
+    const activeTopics = initialSubject === 'electrical' ? ELECTRICAL_TOPICS : MECHANICAL_TOPICS;
 
-    const handleNodeClick = (node) => {
-        setSelectedNode(node);
-        if (isExamMode) setRevealedNodes(prev => new Set(prev).add(node.id));
+    const handleTopicClick = (topic) => {
+        // Filter data for this topic
+        const topicItems = allVisualData.filter(item => item.category === topic.id);
+
+        if (topicItems.length > 0) {
+            setSelectedTopic(topic);
+            setViewMode('list');
+            // Simplified theme set
+            const isMech = topic.targetSubject === 'mechanical';
+            setSelectedTheme({
+                color: isMech ? 'blue' : 'orange',
+                icon: topic.icon
+            });
+        } else {
+            alert("🚧 데이터 준비 중입니다 (Upload via Smart Upload!)");
+        }
     };
 
-    const handleValueReveal = (valueKey) => {
-        if (isExamMode) setRevealedValues(prev => new Set(prev).add(`${selectedNode?.id}-${valueKey}`));
+    const handleDiagramSelect = (diagram) => {
+        setSelectedDiagram(diagram);
+        setViewMode('canvas');
     };
 
-    const getNodeLabel = (node) => !isExamMode ? node.label : (revealedNodes.has(node.id) ? node.label : '???');
-    const getDisplayValue = (node, key, value) => {
-        if (!isExamMode) return value;
-        const valueId = `${node.id}-${key}`;
-        return revealedValues.has(valueId) ? value : <span className="bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded cursor-pointer hover:bg-yellow-500/40" onClick={(e) => { e.stopPropagation(); handleValueReveal(key); }}>?</span>;
+    const handleBackToDashboard = () => {
+        setViewMode('dashboard');
+        setSelectedTopic(null);
+        setSelectedDiagram(null);
     };
 
-    return (
-        <div className="flex h-full w-full bg-slate-950 text-white overflow-hidden">
-            {/* Main Diagram Area */}
-            <div className="flex-1 relative p-6 overflow-hidden flex flex-col">
-                {/* Header */}
-                <div className="mb-4">
-                    <div className="flex items-center justify-between mb-4">
-                        <div>
-                            <h2 className={`text-xl font-bold ${theme.accent} flex items-center gap-2`}>
-                                <theme.icon size={24} />
-                                {isMechanical ? '수계 소화설비 계통도' : '경보·피난설비 계통도'}
-                            </h2>
-                            <p className="text-slate-500 text-xs mt-1">NFTC 2024 통합 해설서 기반</p>
-                        </div>
-                    </div>
-                    {/* Sub Tabs */}
-                    <div className="flex items-center gap-2">
-                        <button onClick={() => setActiveTab('common')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'common' ? theme.tabActive : theme.tabInactive}`}>
-                            📐 공통 기술기준
-                        </button>
-                        <button onClick={() => setActiveTab('specific')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'specific' ? theme.tabActive : theme.tabInactive}`}>
-                            🔧 개별 설비기준
-                        </button>
-                        {activeTab === 'specific' && (
-                            <div className="ml-4 flex items-center gap-2">
-                                <span className="text-xs text-slate-500">설비 선택:</span>
-                                <select value={selectedEquipment} onChange={(e) => setSelectedEquipment(e.target.value)}
-                                    className={`bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-1.5 focus:ring-2 ${theme.accent}`}>
-                                    {equipmentList.map(eq => (<option key={eq} value={eq}>{eq} ({specificEquipments[eq].code})</option>))}
-                                </select>
-                            </div>
-                        )}
-                    </div>
+    const handleBackToList = () => {
+        setViewMode('list');
+        setSelectedDiagram(null);
+    };
+
+    // RENDER: DASHBOARD
+    if (viewMode === 'dashboard') {
+        return (
+            <div className="flex flex-col h-full bg-slate-950 p-6 overflow-y-auto w-full animate-in fade-in duration-500">
+                <div className="mb-8">
+                    <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
+                        <LayoutGrid className="text-blue-500" /> 설비별 도면 학습
+                    </h2>
+                    <p className="text-slate-400">학습할 설비 분류를 선택하세요.</p>
                 </div>
+                {/* Topic Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {activeTopics.map(topic => (
+                        <button key={topic.id} onClick={() => handleTopicClick(topic)}
+                            className={`group relative overflow-hidden rounded-2xl p-6 border transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl text-left
+                            ${topic.subject === 'mechanical' ? 'bg-slate-900 border-slate-800 hover:border-blue-500/50' : 'bg-slate-900 border-slate-800 hover:border-orange-500/50'}`}>
 
-                {/* Diagram Canvas */}
-                <div className="flex-1 relative bg-slate-900/50 rounded-2xl border border-slate-800 shadow-2xl overflow-hidden">
-                    <div className="absolute top-4 left-4 text-xs font-mono text-slate-600 bg-slate-900/80 px-3 py-1 rounded border border-slate-800">
-                        {activeTab === 'common' ? '공통 계통' : `${selectedEquipment} 계통 + 개별 구성요소`}
-                    </div>
-                    {/* SVG Lines */}
-                    <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
-                        <defs>
-                            <linearGradient id="flowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                                <stop offset="0%" style={{ stopColor: isMechanical ? '#3b82f6' : '#ea580c', stopOpacity: 0.2 }} />
-                                <stop offset="50%" style={{ stopColor: isMechanical ? '#60a5fa' : '#fb923c', stopOpacity: 1 }} />
-                                <stop offset="100%" style={{ stopColor: isMechanical ? '#3b82f6' : '#ea580c', stopOpacity: 0.2 }} />
-                            </linearGradient>
-                        </defs>
-                        <line x1="15%" y1="30%" x2="90%" y2="30%" stroke="url(#flowGrad)" strokeWidth="4" strokeDasharray="10 5" className="animate-pulse" />
-                        {activeTab === 'specific' && specificNodes.length > 0 && (
-                            <>
-                                <line x1="50%" y1="35%" x2="50%" y2="65%" stroke="url(#flowGrad)" strokeWidth="3" strokeDasharray="8 4" className="animate-pulse" />
-                                <line x1="25%" y1="70%" x2="75%" y2="70%" stroke="url(#flowGrad)" strokeWidth="3" strokeDasharray="8 4" className="animate-pulse" />
-                            </>
-                        )}
-                    </svg>
-                    {/* Nodes */}
-                    {allNodes.map((node) => {
-                        const Icon = node.icon;
-                        const isSelected = selectedNode?.id === node.id;
-                        const isRevealed = revealedNodes.has(node.id);
-                        const isSpecific = specificNodes.some(n => n.id === node.id);
-                        return (
-                            <button key={node.id} onClick={() => handleNodeClick(node)}
-                                style={{ left: `${node.x}%`, top: `${node.y}%`, transform: 'translate(-50%, -50%)' }}
-                                className={`absolute z-10 flex flex-col items-center justify-center p-3 rounded-xl border transition-all duration-300 min-w-[90px] group
-                                    ${isSelected ? theme.nodeActiveBg : theme.nodeBg}
-                                    ${isSpecific ? 'border-emerald-500/50' : theme.border} border-opacity-50 hover:border-opacity-100 shadow-xl hover:shadow-2xl ${theme.glow}`}>
-                                {isSpecific && <div className="absolute -top-2 -right-2 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center text-[8px] text-white font-bold">+</div>}
-                                <div className={`p-2 rounded-full mb-1 transition-colors ${isSelected ? theme.bg : 'bg-slate-800 group-hover:bg-slate-700'}`}>
-                                    <Icon size={20} className={isSelected ? 'text-white' : theme.accent} />
+                            {/* Icon & Title */}
+                            <div className="flex justify-between items-start mb-4">
+                                <div className={`p-3 rounded-xl ${topic.subject === 'mechanical' ? 'bg-blue-500/10 text-blue-400' : 'bg-orange-500/10 text-orange-400'}`}>
+                                    <topic.icon size={28} />
                                 </div>
-                                <span className={`text-[10px] font-bold text-center whitespace-nowrap ${isExamMode && !isRevealed ? 'text-slate-500 italic' : 'text-white'}`}>{getNodeLabel(node)}</span>
-                            </button>
-                        );
-                    })}
-                    {/* Legend */}
-                    <div className="absolute bottom-4 left-4 flex items-center gap-4 text-[10px] text-slate-500 bg-slate-900/80 px-3 py-2 rounded-lg border border-slate-800">
-                        <div className="flex items-center gap-1"><div className={`w-6 h-1 ${theme.line} rounded animate-pulse`}></div><span>{isMechanical ? '배관 흐름' : '신호 흐름'}</span></div>
-                        <div className="flex items-center gap-1"><div className={`w-3 h-3 rounded ${theme.nodeBg} ${theme.border} border`}></div><span>공통 요소</span></div>
-                        <div className="flex items-center gap-1"><div className="w-3 h-3 rounded bg-emerald-900/50 border border-emerald-500"></div><span>개별 설비</span></div>
-                    </div>
-                </div>
-            </div>
+                                <span className={`text-xs font-bold px-2 py-1 rounded border ${topic.subject === 'mechanical' ? 'text-blue-500 border-blue-500/20 bg-blue-500/10' : 'text-orange-500 border-orange-500/20 bg-orange-500/10'}`}>
+                                    {topic.subject === 'mechanical' ? '기계분야' : '전기분야'}
+                                </span>
+                            </div>
 
-            {/* Side Panel */}
-            <div className={`w-[400px] bg-slate-900 border-l ${theme.border} border-opacity-30 p-5 flex flex-col shadow-2xl overflow-y-auto`}>
-                <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
-                    <BookOpen className={theme.accent} size={18} />
-                    <h3 className="font-bold text-base text-white">NFTC 2024 기술해설</h3>
-                </div>
-                {selectedNode ? (
-                    <div className="flex-1 flex flex-col animate-in slide-in-from-right-4 duration-300 space-y-4 overflow-y-auto">
-                        <div className={`flex items-center gap-3 p-3 rounded-xl ${theme.nodeBg} ${theme.border} border`}>
-                            <selectedNode.icon className={theme.accent} size={24} />
-                            <div className="flex-1"><h4 className="font-bold text-white text-base">{selectedNode.label}</h4><p className="text-[10px] text-slate-500">{selectedNode.nftc?.article}</p></div>
-                        </div>
-                        {selectedNode.values && (
-                            <div className="grid grid-cols-2 gap-2">
-                                {Object.entries(selectedNode.values).map(([key, val]) => (
-                                    <div key={key} className="bg-slate-800/50 rounded-lg p-2 border border-slate-700">
-                                        <p className="text-[9px] text-slate-500 uppercase mb-1">{key}</p>
-                                        <p className="text-xs font-bold text-white">{getDisplayValue(selectedNode, key, val)}</p>
-                                    </div>
-                                ))}
+                            <h3 className="text-xl font-bold text-white mb-1 group-hover:text-blue-400 transition-colors">{topic.label}</h3>
+                            <p className="text-slate-500 text-sm mb-4 line-clamp-2">{topic.desc}</p>
+
+                            {/* Progress Bar (Mock) */}
+                            <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                <div className={`h-full ${topic.color.replace('text-', 'bg-')}`} style={{ width: `${Math.random() * 60 + 10}%` }}></div>
                             </div>
-                        )}
-                        <div className="bg-slate-800/30 rounded-xl p-4 border border-slate-700">
-                            <div className="flex items-center gap-2 text-xs font-bold mb-2" style={{ color: isMechanical ? '#60a5fa' : '#fb923c' }}><Target size={14} /> 설치 목적 및 기준</div>
-                            <p className="text-xs text-slate-400 mb-2 italic">{selectedNode.nftc?.purpose}</p>
-                            <p className="text-xs text-slate-300 leading-relaxed">{selectedNode.nftc?.standard}</p>
-                        </div>
-                        <div className="bg-slate-800/30 rounded-xl p-4 border border-slate-700">
-                            <div className="flex items-center gap-2 text-xs text-emerald-400 font-bold mb-2"><Lightbulb size={14} /> 기술적 해설</div>
-                            <p className="text-xs text-slate-300 leading-relaxed">{selectedNode.nftc?.commentary}</p>
-                        </div>
-                        <div className="bg-slate-800/30 rounded-xl p-4 border border-slate-700">
-                            <div className="flex items-center gap-2 text-xs text-amber-400 font-bold mb-2"><Globe size={14} /> 국외 기준 비교 (NFPA)</div>
-                            <p className="text-xs text-slate-300 leading-relaxed">{selectedNode.nftc?.nfpa}</p>
-                        </div>
-                        {selectedNode.tips && (
-                            <div className="bg-amber-500/10 rounded-xl p-4 border border-amber-500/30">
-                                <div className="flex items-center gap-2 text-xs text-amber-400 font-bold mb-2"><AlertTriangle size={14} /> 기술사 TIP</div>
-                                <ul className="space-y-1">{selectedNode.tips.map((tip, i) => (<li key={i} className="flex items-start gap-2 text-xs text-amber-200/80"><CheckCircle2 size={12} className="shrink-0 mt-0.5" /> {tip}</li>))}</ul>
-                            </div>
-                        )}
-                        <button onClick={() => setMode && setMode('workbook')} className={`mt-auto w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-white transition-all ${theme.bg} hover:opacity-90 shadow-lg`}>
-                            <span>관련 문제 풀기</span><ChevronRight size={18} />
+                            <div className="mt-2 text-xs text-slate-500 text-right">진도율 {Math.floor(Math.random() * 60 + 10)}%</div>
                         </button>
-                    </div>
-                ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-center text-slate-500">
-                        <div className="p-5 rounded-full bg-slate-800/50 mb-4 border border-slate-700"><Info size={36} className="opacity-30" /></div>
-                        <p className="text-sm">좌측 계통도에서<br />구성요소를 선택하세요.</p>
-                    </div>
-                )}
-                {isExamMode && (
-                    <div className="mt-4 pt-3 border-t border-slate-800">
-                        <div className="flex items-center justify-between text-[10px]"><span className="text-slate-500">암기 진행률:</span><span className={`font-bold ${theme.accent}`}>{revealedNodes.size + revealedValues.size} 항목</span></div>
-                        <div className="w-full h-1.5 bg-slate-800 rounded-full mt-2 overflow-hidden"><div className={`h-full ${theme.bg} transition-all duration-500`} style={{ width: `${Math.min(100, ((revealedNodes.size + revealedValues.size) / (allNodes.length * 3)) * 100)}%` }} /></div>
-                    </div>
-                )}
+                    ))}
+                </div>
             </div>
-        </div>
-    );
+        );
+    }
+
+    // RENDER: LIST VIEW
+    if (viewMode === 'list') {
+        const ThemeIcon = selectedTheme?.icon || Droplets;
+        const highlightColor = selectedTheme?.color === 'orange' ? 'text-orange-500' : 'text-blue-500';
+
+        return (
+            <div className="flex flex-col h-full bg-slate-950 p-6 overflow-y-auto w-full animate-in fade-in duration-300">
+                <button onClick={handleBackToDashboard} className="flex items-center gap-2 text-slate-400 hover:text-white mb-6 w-fit font-bold text-sm transition-colors">
+                    <ArrowLeft size={18} /> 도면 목록으로 돌아가기
+                </button>
+
+                <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+                    <ThemeIcon className={highlightColor} /> {selectedTopic?.label} 상세 도면
+                </h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {allVisualData
+                        .filter(item => item.category === selectedTopic.id)
+                        .map(item => (
+                            <button key={item.id} onClick={() => handleDiagramSelect(item)}
+                                className="flex flex-col text-left bg-slate-900 border border-slate-800 rounded-xl overflow-hidden hover:border-blue-500 transition-all hover:shadow-lg group">
+                                {/* Thumbnail Placeholder */}
+                                <div className="h-48 bg-slate-800 relative overflow-hidden group-hover:opacity-90 transition-opacity">
+                                    {item.imageUrl && !item.imageUrl.includes('placeholder') ? (
+                                        <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="absolute inset-0 flex items-center justify-center text-slate-600">
+                                            <ImageIcon size={48} />
+                                        </div>
+                                    )}
+                                    {/* Label Badge */}
+                                    <div className="absolute top-3 left-3 px-2 py-1 bg-black/60 backdrop-blur rounded text-[10px] font-bold text-white uppercase tracking-wider border border-white/10">
+                                        {item.category.toUpperCase()} SYSTEM
+                                    </div>
+                                </div>
+
+                                <div className="p-5 flex-1 flex flex-col">
+                                    <h3 className="text-lg font-bold text-white mb-2 group-hover:text-blue-400 transition-colors">{item.title}</h3>
+                                    <p className="text-sm text-slate-400 line-clamp-2 mb-4">{item.description}</p>
+                                    <div className="mt-auto flex items-center gap-2 text-xs font-bold text-blue-500 group-hover:translate-x-1 transition-transform">
+                                        <span>학습 시작하기</span> <ArrowRight size={14} />
+                                    </div>
+                                </div>
+                            </button>
+                        ))}
+                </div>
+            </div>
+        );
+    }
+
+    // RENDER: CANVAS VIEW Using VisualDetail
+    if (viewMode === 'canvas' && selectedDiagram) {
+        return (
+            <div className="h-full w-full bg-slate-950">
+                <VisualDetail
+                    data={selectedDiagram}
+                    onBack={handleBackToList}
+                />
+            </div>
+        );
+    }
+
+    // Fallback
+    return null;
+}
+// Helper to keep icon consistent
+function GalleryIconHelper() {
+    return <ImageIcon size={12} />;
 }

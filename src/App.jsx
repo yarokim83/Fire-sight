@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
+import SmartUpload from './components/SmartUpload'
 import Sidebar from './components/Sidebar'
 import VisualLearning from './components/VisualLearning'
 import Workbook from './components/Workbook'
 import Reference from './components/Reference'
+import Dashboard from './components/Dashboard'
 import { Flame, Droplets, Zap, Eye, EyeOff } from 'lucide-react'
 
 
@@ -35,7 +37,7 @@ const THEME_CONFIG = {
 };
 
 function App() {
-  const [mode, setMode] = useState('visual'); // 'visual' | 'workbook' | 'reference'
+  const [mode, setMode] = useState('dashboard'); // 'dashboard' | 'visual' | 'workbook' | 'reference'
   const [subject, setSubject] = useState('mechanical'); // 'mechanical' | 'electrical'
   const [isExamMode, setIsExamMode] = useState(false); // false: NFTC, true: Exam
 
@@ -157,6 +159,10 @@ function App() {
 
   const renderContent = () => {
     switch (mode) {
+      case 'dashboard':
+        return <Dashboard setMode={setMode} subject={subject} />;
+      case 'smart-upload':
+        return <SmartUpload onSaveComplete={() => setMode('dashboard')} />;
       case 'workbook':
         return <Workbook isExamMode={isExamMode} subject={subject} />;
       case 'reference':
