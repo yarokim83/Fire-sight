@@ -5,6 +5,7 @@ import VisualLearning from './components/VisualLearning'
 import Workbook from './components/Workbook'
 import Reference from './components/Reference'
 import Dashboard from './components/Dashboard'
+import StrategyView from './components/StrategyView'
 import { Flame, Droplets, Zap, Eye, EyeOff } from 'lucide-react'
 
 
@@ -174,6 +175,8 @@ function App() {
           gapiInited={gapiInited}
           gisInited={gisInited}
         />;
+      case 'strategy':
+        return <StrategyView />;
       case 'visual':
       default:
         return <VisualLearning isExamMode={isExamMode} setIsExamMode={setIsExamMode} setMode={setMode} subject={subject} />;

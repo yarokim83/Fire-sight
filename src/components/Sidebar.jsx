@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, PenTool, Book, ChevronLeft, ChevronRight, LayoutDashboard, Camera, RefreshCw } from 'lucide-react';
+import { BookOpen, PenTool, Book, ChevronLeft, ChevronRight, LayoutDashboard, Camera, RefreshCw, Zap } from 'lucide-react';
 
 export default function Sidebar({ currentMode, setMode, subject }) {
     const [isCollapsed, setIsCollapsed] = useState(false);
@@ -40,6 +40,7 @@ export default function Sidebar({ currentMode, setMode, subject }) {
                 <NavItem mode="visual" icon={BookOpen} label="Visual Learning" />
                 <NavItem mode="workbook" icon={PenTool} label="Workbook" />
                 <NavItem mode="reference" icon={Book} label="Reference" />
+                <NavItem mode="strategy" icon={Zap} label="Strategy" />
 
                 {/* Reset Data Button */}
                 <div className="pt-4 mt-4 border-t border-slate-800">
