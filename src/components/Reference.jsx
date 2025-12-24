@@ -3,7 +3,7 @@ import {
     Scale, BookOpen, Building2, Calculator,
     FileText, ExternalLink, Search, Clock,
     X, AlertTriangle, FileCheck, Map, ArrowRightCircle, BookOpenCheck,
-    LogIn, Loader2, HardDrive, User, Info, Tag, Trash2, FolderInput
+    LogIn, Loader2, HardDrive, User, Info, Tag, Trash2, FolderInput, PenTool
 } from 'lucide-react';
 
 // Google Drive Folder ID
@@ -79,7 +79,7 @@ const summaryDatabase = {
     }
 };
 
-const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiInited }) => {
+const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiInited, onDataToss }) => {
     const [activeTab, setActiveTab] = useState('L1');
     const [selectedSummary, setSelectedSummary] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -232,9 +232,12 @@ const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiIn
             fileObj.meta = meta; // Attach meta
 
             // 2. Priority-based Classification
+            // [UPDATED] Strict Classification for user request
             if (/(해설서|해설|수리계산|부록|심화)/.test(fileName)) { cats.L4.push(fileObj); return; }
             if (/(건축|방화|피난|셔터|계단)/.test(fileName)) { cats.L3.push(fileObj); return; }
+            // Specific keywords for L2 (Technical Standards)
             if (/(NFTC|NFPC|기술기준|성능기준|설치기준)/.test(fileName)) { cats.L2.push(fileObj); return; }
+            // Specific keywords for L1 (Laws)
             if (/(법|령|규칙|행정|예방|다중이용)/.test(fileName)) { cats.L1.push(fileObj); return; }
 
             // 3. Smart Fallback
@@ -297,6 +300,25 @@ const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiIn
             setIsModalOpen(true);
         } else {
             window.open(file.webViewLink, '_blank');
+        }
+    };
+
+    const handleCreateProblem = () => {
+        if (!selectedSummary) return;
+
+        const problemData = {
+            type: 'workbook',
+            title: `[문제] ${selectedSummary.title}`,
+            description: selectedSummary.desc || '',
+            source: selectedSummary.fileName, // Reference Source
+            content: selectedSummary.desc || '', // Pre-fill content
+            keywords: selectedSummary.tags || []
+        };
+
+        if (onDataToss) {
+            onDataToss(problemData);
+        } else {
+            console.error("onDataToss prop is missing");
         }
     };
 
@@ -520,8 +542,15 @@ const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiIn
                             )}
                         </div>
                         <div className="px-6 py-5 bg-slate-900/50 border-t border-slate-700 flex gap-3 shrink-0">
-                            <button onClick={() => openPdf(selectedSummary.webViewLink)} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 active:scale-95 flex items-center justify-center gap-2"><ExternalLink size={18} />PDF 원문 전체 열기</button>
-                            <button onClick={() => setIsModalOpen(false)} className="px-6 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition-colors active:scale-95">닫기</button>
+                            {/* [NEW] Data Toss Button */}
+                            <button
+                                onClick={handleCreateProblem}
+                                className="flex-1 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-orange-500/20 active:scale-95 flex items-center justify-center gap-2"
+                            >
+                                <PenTool size={18} /> 문제로 만들기
+                            </button>
+                            <button onClick={() => openPdf(selectedSummary.webViewLink)} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 active:scale-95 flex items-center justify-center gap-2"><ExternalLink size={18} />PDF 원문 열기</button>
+                            {/* <button onClick={() => setIsModalOpen(false)} className="px-6 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition-colors active:scale-95">닫기</button> */}
                         </div>
                     </div>
                 </div>

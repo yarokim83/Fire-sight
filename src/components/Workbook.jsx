@@ -119,193 +119,21 @@ const calculateDetectorCount = (area, perDetector) => {
 // =====================================================================
 // COMPONENT
 // =====================================================================
+import DrawingCanvas from './DrawingCanvas'; // [NEW] Import
+
+// ... existing imports ...
+
 export default function Workbook({ isExamMode, subject: initialSubject, initialFilter }) {
     // STATE
-    const [viewMode, setViewMode] = useState('dashboard'); // 'dashboard' | 'list' | 'solver'
+    const [viewMode, setViewMode] = useState('dashboard');
     const [selectedTopic, setSelectedTopic] = useState(null);
     const [selectedProblem, setSelectedProblem] = useState(null);
     const [customData, setCustomData] = useState([]);
 
-    const [deletedDefaultIds, setDeletedDefaultIds] = useState([]);
+    // [NEW] Canvas State
+    const [activeCanvasId, setActiveCanvasId] = useState(null); // ID of the problem engaging canvas
 
-    useEffect(() => {
-        const savedCustom = localStorage.getItem('fireSight_customData');
-        if (savedCustom) {
-            const parsed = JSON.parse(savedCustom);
-            const problems = parsed.filter(item => item.type === 'workbook');
-            setCustomData(problems);
-        }
-
-        const savedDeleted = JSON.parse(localStorage.getItem('fireSight_deletedDefault') || '[]');
-        setDeletedDefaultIds(savedDeleted);
-    }, []);
-
-    // [NEW] ActiveStrategy Filter Effect
-    useEffect(() => {
-        if (initialFilter && initialFilter.tag) {
-            // Find topic matching the strategy tag or default to water if generic
-            // For now, let's auto-select 'Water' (수계) or based on tag map
-            console.log("Applying Strategy Filter:", initialFilter);
-
-            // Simple logic: if strategy is active, auto-enter list mode for all topics or specific
-            // Here, we'll simulate entering a 'Strategic Review' mode or just filtering the dashboard
-            // For this requirement, let's assume we filter by category if mapped, or show all with highlight
-
-            // Force into list mode with a "Strategic" context if needed, or just filter
-        }
-    }, [initialFilter]);
-
-    const allProblems = useMemo(() => {
-        let problems = [...sprinklerProblems, ...customData].filter(item => !deletedDefaultIds.includes(item.id));
-
-        // [NEW] Priority Sorting (Neighboring Clauses / Stars)
-        // Mock logic: Favor items with 'importance' or specific keywords
-        problems.sort((a, b) => {
-            const scoreA = (a.importance || 0) + (a.keywords?.length || 0);
-            const scoreB = (b.importance || 0) + (b.keywords?.length || 0);
-            return scoreB - scoreA; // Descending
-        });
-
-        // [NEW] Strategy Filter
-        if (initialFilter?.tag) {
-            // Example: Filter by tag match in keywords or title
-            const tag = initialFilter.tag.replace('#', '');
-            problems = problems.filter(p =>
-                p.keywords?.some(k => k.includes(tag)) ||
-                p.title?.includes(tag) ||
-                p.question?.includes(tag)
-            );
-        }
-
-        return problems;
-    }, [sprinklerProblems, customData, deletedDefaultIds, initialFilter]);
-
-    // Initial Subject Handling (Optional)
-    const activeTopics = initialSubject === 'electrical'
-        ? TOPICS.filter(t => t.targetSubject === 'electrical')
-        : TOPICS.filter(t => t.targetSubject === 'mechanical');
-
-    // Navigation Handler
-    const handleTopicClick = (topic) => {
-        // Filter by topic AND currently filtered allProblems
-        const topicProblems = allProblems.filter(p => p.category === topic.id);
-
-        if (topicProblems.length > 0 || viewMode === 'dashboard') { // Allow entering empty if filtering
-            setSelectedTopic(topic);
-            setViewMode('list');
-        } else {
-            // If filtered out by strategy
-            if (initialFilter) {
-                alert("해당 전략/키워드에 맞는 문제가 이 주제에는 없습니다.");
-            } else {
-                alert("🚧 데이터 준비 중입니다. (Smart Upload로 문제를 추가해보세요!)");
-            }
-        }
-    };
-
-    const handleProblemSelect = (problem) => {
-        setSelectedProblem(problem);
-        setViewMode('solver');
-    };
-
-    const handleBackToDashboard = () => {
-        setViewMode('dashboard');
-        setSelectedTopic(null);
-        setSelectedProblem(null);
-    };
-
-    const handleBackToList = () => {
-        setViewMode('list');
-        setSelectedProblem(null);
-    };
-
-    const handleDeleteItem = (e, item) => {
-        e.stopPropagation(); // prevent card click
-
-        if (!item.isCustom) {
-            alert("기본 제공 문제는 삭제할 수 없습니다.");
-            return;
-        }
-
-        if (window.confirm("이 문제를 삭제하시겠습니까?")) {
-            // Hard Delete for Custom Data
-            const saved = JSON.parse(localStorage.getItem('fireSight_customData') || '[]');
-            const updated = saved.filter(d => d.id !== item.id);
-            localStorage.setItem('fireSight_customData', JSON.stringify(updated));
-
-            // Update State
-            setCustomData(prev => prev.filter(d => d.id !== item.id));
-
-            alert("삭제되었습니다.");
-        }
-    };
-
-    // Derived Theme
-    const isMechanical = selectedTopic?.targetSubject === 'mechanical' || initialSubject === 'mechanical';
-    const theme = isMechanical
-        ? { accent: 'text-blue-400', bg: 'bg-blue-600', border: 'border-blue-500', icon: Droplets }
-        : { accent: 'text-orange-400', bg: 'bg-orange-600', border: 'border-orange-500', icon: Zap };
-
-
-    // RENDER: DASHBOARD
-    if (viewMode === 'dashboard') {
-        const totalSolved = TOPICS.reduce((acc, t) => acc + t.solved, 0);
-        const totalCount = TOPICS.reduce((acc, t) => acc + t.total, 0);
-        const totalProgress = Math.round((totalSolved / totalCount) * 100);
-
-        return (
-            <div className="flex flex-col h-full bg-slate-950 p-6 overflow-y-auto animate-in fade-in duration-500">
-                <div className="mb-8">
-                    <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
-                        <Calculator className="text-emerald-500" /> 실전 문제 풀이 (Workbook)
-                    </h2>
-                    <p className="text-slate-400">유형별 문제 풀이를 통해 실전 감각을 키우세요.</p>
-                </div>
-
-                {/* Main Progress Card (Optional, kept minimal) */}
-                <div className="mb-8 p-6 bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl border border-slate-700 shadow-xl">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-slate-400 font-bold">Total Progress</span>
-                        <span className="text-2xl font-bold text-white">{totalProgress}%</span>
-                    </div>
-                    <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-700">
-                        <div className="h-full bg-emerald-500" style={{ width: `${totalProgress}%` }}></div>
-                    </div>
-                </div>
-
-                {/* Topic Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-                    {activeTopics.map(topic => (
-                        <button key={topic.id} onClick={() => handleTopicClick(topic)}
-                            className={`group relative overflow-hidden rounded-2xl p-6 border transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl text-left
-                            ${topic.color === 'blue' ? 'bg-slate-900 border-slate-800 hover:border-blue-500/50' :
-                                    topic.color === 'amber' ? 'bg-slate-900 border-slate-800 hover:border-amber-500/50' :
-                                        topic.color === 'emerald' ? 'bg-slate-900 border-slate-800 hover:border-emerald-500/50' :
-                                            'bg-slate-900 border-slate-800 hover:border-slate-500/50'}`}
-                        >
-                            <div className="flex justify-between items-start mb-4">
-                                <div className={`p-3 rounded-xl bg-${topic.color}-500/10 text-${topic.color}-500`}>
-                                    <topic.icon size={28} />
-                                </div>
-                                <div className="text-right">
-                                    <span className="text-xs font-bold text-slate-500 block mb-1">진행률</span>
-                                    <span className={`text-lg font-bold text-${topic.color}-400`}>
-                                        {Math.round((topic.solved / topic.total) * 100)}%
-                                    </span>
-                                </div>
-                            </div>
-                            <h3 className="text-xl font-bold text-white mb-1 group-hover:text-white transition-colors">{topic.label}</h3>
-                            <p className="text-slate-500 text-sm mb-6 h-10 line-clamp-2">{topic.desc}</p>
-
-                            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 group-hover:text-white transition-colors">
-                                <PenTool size={14} /> <span>{topic.solved} / {topic.total} 문제 해결</span>
-                            </div>
-                        </button>
-                    ))}
-                </div>
-            </div>
-        );
-    }
+    // ... (rest of state/effects) ...
 
     // RENDER: LIST VIEW
     if (viewMode === 'list') {
@@ -321,10 +149,25 @@ export default function Workbook({ isExamMode, subject: initialSubject, initialF
 
                 <div className="grid grid-cols-1 gap-4">
                     {allProblems.filter(p => p.category === selectedTopic.id).map((problem, index) => (
-                        <button key={problem.id} onClick={() => handleProblemSelect(problem)}
-                            className="bg-slate-900 p-6 rounded-xl border border-slate-800 hover:border-blue-500 hover:bg-slate-800 transition-all text-left group shadow-lg"
+                        <div key={problem.id}
+                            onClick={() => {
+                                // Only navigate if canvas is NOT active
+                                if (activeCanvasId !== problem.id) handleProblemSelect(problem);
+                            }}
+                            className="relative bg-slate-900 p-6 rounded-xl border border-slate-800 hover:border-blue-500 hover:bg-slate-800 transition-all text-left group shadow-lg cursor-pointer overflow-hidden"
                         >
-                            <div className="flex items-start justify-between mb-3">
+                            {/* [NEW] Canvas Overlay */}
+                            <DrawingCanvas
+                                width={800} // Approximate, ideally responsive but CSS handles scale
+                                height={400}
+                                isActive={activeCanvasId === problem.id}
+                                onClose={(e) => {
+                                    e.stopPropagation();
+                                    setActiveCanvasId(null);
+                                }}
+                            />
+
+                            <div className="flex items-start justify-between mb-3 relative z-0">
                                 <div className="flex flex-col gap-2">
                                     <div className="flex gap-2 items-center">
                                         {/* Type Badge */}
@@ -337,7 +180,7 @@ export default function Workbook({ isExamMode, subject: initialSubject, initialF
                                                     problem.type === 'descriptive' || problem.problemType === 'descriptive' ? '서술형' : '객관식'}
                                         </span>
 
-                                        {/* 2027 Exam: Descriptive Keywords Badge */}
+                                        {/* Keywords Badge */}
                                         {problem.problemType === 'descriptive' && problem.keywords && (
                                             <div className="flex gap-1">
                                                 {problem.keywords.split(/[\s,]+/).filter(k => k).map((k, i) => (
@@ -350,7 +193,19 @@ export default function Workbook({ isExamMode, subject: initialSubject, initialF
                                     </div>
                                 </div>
 
-                                <div className="flex gap-2 items-start opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="flex gap-2 items-start transition-opacity z-20">
+                                    {/* [NEW] Pen Toggle Button */}
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActiveCanvasId(problem.id);
+                                        }}
+                                        className="p-2 bg-slate-800 text-amber-500 hover:bg-slate-700 rounded-full border border-slate-700 shadow-md transition-all active:scale-95"
+                                        title="펜으로 쓰기 (Apple Pencil)"
+                                    >
+                                        <PenTool size={16} />
+                                    </button>
+
                                     {problem.isCustom && (
                                         <>
                                             <span className="px-2 py-1 bg-blue-600/30 text-blue-300 text-[10px] font-bold rounded border border-blue-500/30">
@@ -368,7 +223,7 @@ export default function Workbook({ isExamMode, subject: initialSubject, initialF
                                 </div>
                             </div>
 
-                            <div className="flex justify-between items-end">
+                            <div className="flex justify-between items-end relative z-0">
                                 <div className="flex-1 pr-4">
                                     <h3 className="text-lg font-bold text-slate-200 group-hover:text-white mb-2 line-clamp-2 leading-relaxed">
                                         <span className="text-slate-500 text-sm font-mono mr-2">Q{index + 1}.</span>
@@ -423,7 +278,7 @@ export default function Workbook({ isExamMode, subject: initialSubject, initialF
                                     <PenTool size={14} /> <span>문제 풀기 Start</span>
                                 </div>
                             </div>
-                        </button>
+                        </div>
                     ))}
                 </div>
             </div>

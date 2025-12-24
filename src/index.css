@@ -12,3 +12,16 @@ body {
   overflow: hidden;
   /* Prevent scrolling on iPad */
 }
+
+/* Touch Optimization */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+button,
+a,
+input,
+select {
+  touch-action: manipulation;
+}

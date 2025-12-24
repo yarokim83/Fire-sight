@@ -365,20 +365,20 @@ export default function StudyManager() {
                 <table className="w-full text-left border-collapse">
                     <thead className="bg-slate-900 sticky top-0 z-10 shadow-sm">
                         <tr>
-                            <th className="p-4 border-b border-slate-800 w-12 sticky left-0 bg-slate-900 z-20">
+                            <th className="p-4 py-5 border-b border-slate-800 w-12 sticky left-0 bg-slate-900 z-20">
                                 <input
                                     type="checkbox"
                                     checked={paginatedData.length > 0 && paginatedData.every(i => selectedIds.has(i.id))}
                                     onChange={toggleSelectAll}
-                                    className="rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                                    className="scale-125 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-0 focus:ring-offset-0 cursor-pointer touch-target"
                                 />
                             </th>
-                            <th className="p-4 border-b border-slate-800 text-xs font-bold text-slate-500 uppercase tracking-wider w-16 text-center">Type</th>
-                            <th className="p-4 border-b border-slate-800 text-xs font-bold text-slate-500 uppercase tracking-wider">Title</th>
-                            <th className="p-4 border-b border-slate-800 text-xs font-bold text-slate-500 uppercase tracking-wider w-32 hidden md:table-cell">Category</th>
-                            <th className="p-4 border-b border-slate-800 text-xs font-bold text-slate-500 uppercase tracking-wider w-24 text-center">Imp.</th>
-                            <th className="p-4 border-b border-slate-800 text-xs font-bold text-slate-500 uppercase tracking-wider w-24 text-center hidden sm:table-cell">Status</th>
-                            <th className="p-4 border-b border-slate-800 text-xs font-bold text-slate-500 uppercase tracking-wider w-32 hidden lg:table-cell">Date</th>
+                            <th className="p-4 py-5 border-b border-slate-800 text-xs font-bold text-slate-500 uppercase tracking-wider w-16 text-center">Type</th>
+                            <th className="p-4 py-5 border-b border-slate-800 text-xs font-bold text-slate-500 uppercase tracking-wider">Title</th>
+                            <th className="p-4 py-5 border-b border-slate-800 text-xs font-bold text-slate-500 uppercase tracking-wider w-32 hidden md:table-cell">Category</th>
+                            <th className="p-4 py-5 border-b border-slate-800 text-xs font-bold text-slate-500 uppercase tracking-wider w-24 text-center">Imp.</th>
+                            <th className="p-4 py-5 border-b border-slate-800 text-xs font-bold text-slate-500 uppercase tracking-wider w-24 text-center hidden sm:table-cell">Status</th>
+                            <th className="p-4 py-5 border-b border-slate-800 text-xs font-bold text-slate-500 uppercase tracking-wider w-32 hidden lg:table-cell">Date</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/50">
@@ -395,63 +395,63 @@ export default function StudyManager() {
                                         if (e.target.type !== 'checkbox') openDrawer(item);
                                     }}
                                 >
-                                    <td className="p-4 w-12 sticky left-0 bg-slate-950 group-hover:bg-slate-900 transition-colors z-10" onClick={e => e.stopPropagation()}>
+                                    <td className="p-4 py-5 w-12 sticky left-0 bg-slate-950 group-hover:bg-slate-900 transition-colors z-10" onClick={e => e.stopPropagation()}>
                                         <input
                                             type="checkbox"
                                             checked={selectedIds.has(item.id)}
                                             onChange={() => toggleSelect(item.id)}
-                                            className="rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                                            className="scale-125 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-0 focus:ring-offset-0 cursor-pointer touch-target"
                                         />
                                     </td>
-                                    <td className="p-4 text-center">
+                                    <td className="p-4 py-5 text-center">
                                         <div className="flex justify-center items-center h-full">
                                             {getTypeIcon(item.type)}
                                         </div>
                                     </td>
-                                    <td className="p-4">
+                                    <td className="p-4 py-5">
                                         <div className="flex items-center gap-3">
                                             {/* Thumbnail */}
                                             {item.type === 'visual' && (
-                                                <div className="w-10 h-10 shrink-0 rounded-md border border-slate-700 bg-slate-800 overflow-hidden group/thumb">
+                                                <div className="w-12 h-12 shrink-0 rounded-md border border-slate-700 bg-slate-800 overflow-hidden group/thumb">
                                                     {item.imageUrl ? (
                                                         <img src={item.imageUrl} alt="" className="w-full h-full object-cover transition-transform group-hover/thumb:scale-110" />
                                                     ) : (
-                                                        <div className="flex items-center justify-center h-full text-slate-600"><LayoutList size={16} /></div>
+                                                        <div className="flex items-center justify-center h-full text-slate-600"><LayoutList size={20} /></div>
                                                     )}
                                                 </div>
                                             )}
 
                                             <div>
-                                                <div className="font-medium text-slate-200 group-hover:text-white transition-colors line-clamp-1 flex items-center gap-2">
+                                                <div className="font-medium text-base text-slate-200 group-hover:text-white transition-colors line-clamp-1 flex items-center gap-2">
                                                     {item.title}
                                                     {getTagBadge(item.tag)}
                                                 </div>
-                                                <div className="text-xs text-slate-500 line-clamp-1 mt-0.5">{item.description || item.question}</div>
+                                                <div className="text-sm text-slate-500 line-clamp-1 mt-1">{item.description || item.question}</div>
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="p-4 hidden md:table-cell">
-                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${item.category === 'Visual Learning' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                                    <td className="p-4 py-5 hidden md:table-cell">
+                                        <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium border ${item.category === 'Visual Learning' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
                                             'bg-slate-700/30 text-slate-400 border-slate-600/30'
                                             }`}>
                                             {item.category}
                                         </span>
                                     </td>
-                                    <td className="p-4 text-center">
+                                    <td className="p-4 py-5 text-center">
                                         <div className="flex justify-center text-amber-500/80 gap-0.5">
                                             {[...Array(5)].map((_, i) => (
-                                                <Star key={i} size={10} fill={i < item.importance ? "currentColor" : "none"} className={i < item.importance ? "" : "text-slate-700"} />
+                                                <Star key={i} size={12} fill={i < item.importance ? "currentColor" : "none"} className={i < item.importance ? "" : "text-slate-700"} />
                                             ))}
                                         </div>
                                     </td>
-                                    <td className="p-4 text-center hidden sm:table-cell">
-                                        <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full ${item.status === 'complete' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-800 text-slate-500'
+                                    <td className="p-4 py-5 text-center hidden sm:table-cell">
+                                        <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full ${item.status === 'complete' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-800 text-slate-500'
                                             }`}>
-                                            {item.status === 'complete' ? <CheckCircle size={10} /> : <div className="w-2 h-2 rounded-full bg-slate-600" />}
+                                            {item.status === 'complete' ? <CheckCircle size={12} /> : <div className="w-2.5 h-2.5 rounded-full bg-slate-600" />}
                                             {item.status}
                                         </span>
                                     </td>
-                                    <td className="p-4 text-xs text-slate-500 hidden lg:table-cell whitespace-nowrap">
+                                    <td className="p-4 py-5 text-xs text-slate-500 hidden lg:table-cell whitespace-nowrap">
                                         {item.lastStudy}
                                     </td>
                                 </tr>
