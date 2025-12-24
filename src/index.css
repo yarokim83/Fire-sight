@@ -4,13 +4,27 @@
   --color-slate-900: #1e293b;
 }
 
+:root {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* iPad Touch Optimization */
+* {
+  -webkit-tap-highlight-color: transparent;
+  /* Remove gray overlay on tap */
+}
+
 body {
   background-color: var(--color-slate-900);
   color: white;
   margin: 0;
   padding: 0;
   overflow: hidden;
-  /* Prevent scrolling on iPad */
+  /* Prevent pull-to-refresh on body */
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Touch Optimization */

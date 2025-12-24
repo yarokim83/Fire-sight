@@ -249,62 +249,76 @@ function App() {
     <div className={`flex flex-col h-screen w-screen overflow-hidden ${theme.bg} text-white font-sans transition-all duration-500
       ${isExamMode ? 'brightness-90 saturate-50' : ''} 
     `}>
-      <header className={`h-14 border-b ${theme.border} bg-slate-900/80 backdrop-blur-md flex items-center justify-between px-4 z-50 shadow-sm shrink-0 transition-colors duration-500`}>
-        <div className="flex-1 flex items-center gap-2 cursor-pointer" onClick={() => setMode('dashboard')}>
-          <div className="p-1.5 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg shadow-lg">
-            <Flame size={18} className="text-white fill-white" />
+      {/* Header: Hide entirely in Exam Mode */}
+      {!isExamMode && (
+        <header className={`h-14 border-b ${theme.border} bg-slate-900/80 backdrop-blur-md flex items-center justify-between px-4 z-50 shadow-sm shrink-0 transition-colors duration-500`}>
+          <div className="flex-1 flex items-center gap-2 cursor-pointer" onClick={() => setMode('dashboard')}>
+            <div className="p-1.5 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg shadow-lg">
+              <Flame size={18} className="text-white fill-white" />
+            </div>
+            <h1 className="text-lg font-bold tracking-tight text-white">
+              Fire-Sight <span className="font-light text-slate-400">Lite</span>
+              <span className="ml-2 text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 border border-slate-700">v2.0</span>
+            </h1>
           </div>
-          <h1 className="text-lg font-bold tracking-tight text-white">
-            Fire-Sight <span className="font-light text-slate-400">Lite</span>
-            <span className="ml-2 text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 border border-slate-700">v2.0</span>
-          </h1>
-        </div>
 
-        <div className="flex-1 flex justify-center">
-          <div className="flex bg-slate-950/50 p-1 rounded-xl border border-slate-800">
-            <button
-              onClick={() => setSubject('mechanical')}
-              className={`flex items-center space-x-2 px-6 py-1.5 rounded-lg text-sm font-bold transition-all duration-300
-                      ${subject === 'mechanical' ? theme.activeTab : 'text-slate-500 hover:text-slate-300'}`}
-            >
-              <Droplets size={16} />
-              <span>기계분야</span>
-            </button>
-            <button
-              onClick={() => setSubject('electrical')}
-              className={`flex items-center space-x-2 px-6 py-1.5 rounded-lg text-sm font-bold transition-all duration-300
-                      ${subject === 'electrical' ? theme.activeTab : 'text-slate-500 hover:text-slate-300'}`}
-            >
-              <Zap size={16} />
-              <span>전기분야</span>
-            </button>
-          </div>
-        </div>
-
-        <div className="flex-1 flex justify-end items-center gap-4 min-w-fit whitespace-nowrap">
-          <div className="hidden lg:flex flex-col items-end group relative cursor-help">
-            <div className="text-xs font-mono text-slate-500">2027 Inspection Practice</div>
-            <div className="text-[10px] font-bold text-blue-400 transition-colors">Target: {dDay}</div>
-            <div className="absolute top-full right-0 mt-2 p-3 bg-slate-800 border border-slate-600 rounded-xl shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 w-48 text-center">
-              <p className="text-xs text-slate-300">시험 예상일: 2027.09.04</p>
-              <p className="text-xs font-bold text-white mt-1">남은 시간: {dDay}일</p>
+          <div className="flex-1 flex justify-center">
+            <div className="flex bg-slate-950/50 p-1 rounded-xl border border-slate-800">
+              <button
+                onClick={() => setSubject('mechanical')}
+                className={`flex items-center space-x-2 px-6 py-1.5 rounded-lg text-sm font-bold transition-all duration-300
+                        ${subject === 'mechanical' ? theme.activeTab : 'text-slate-500 hover:text-slate-300'}`}
+              >
+                <Droplets size={16} />
+                <span>기계분야</span>
+              </button>
+              <button
+                onClick={() => setSubject('electrical')}
+                className={`flex items-center space-x-2 px-6 py-1.5 rounded-lg text-sm font-bold transition-all duration-300
+                        ${subject === 'electrical' ? theme.activeTab : 'text-slate-500 hover:text-slate-300'}`}
+              >
+                <Zap size={16} />
+                <span>전기분야</span>
+              </button>
             </div>
           </div>
-          <button
-            onClick={() => setIsExamMode(!isExamMode)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border 
-              ${isExamMode
-                ? 'bg-red-500/10 text-red-500 border-red-500/50 shadow-lg shadow-red-500/20 animate-pulse'
-                : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}`}
-          >
-            {isExamMode ? <EyeOff size={14} /> : <Eye size={14} />}
-            {isExamMode ? '집중 모드 ON' : '학습 모드'}
-          </button>
-          <div className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-700'}`} title={isAuthenticated ? "Connected" : "Disconnected"}></div>
-        </div>
-      </header>
+
+          <div className="flex-1 flex justify-end items-center gap-4 min-w-fit whitespace-nowrap">
+            <div className="hidden lg:flex flex-col items-end group relative cursor-help">
+              <div className="text-xs font-mono text-slate-500">2027 Inspection Practice</div>
+              <div className="text-[10px] font-bold text-blue-400 transition-colors">Target: {dDay}</div>
+              <div className="absolute top-full right-0 mt-2 p-3 bg-slate-800 border border-slate-600 rounded-xl shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 w-48 text-center">
+                <p className="text-xs text-slate-300">시험 예상일: 2027.09.04</p>
+                <p className="text-xs font-bold text-white mt-1">남은 시간: {dDay}일</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsExamMode(!isExamMode)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border 
+                ${isExamMode
+                  ? 'bg-red-500/10 text-red-500 border-red-500/50 shadow-lg shadow-red-500/20 animate-pulse'
+                  : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}`}
+            >
+              {isExamMode ? <EyeOff size={14} /> : <Eye size={14} />}
+              {isExamMode ? '집중 모드 ON' : '학습 모드'}
+            </button>
+            <div className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-700'}`} title={isAuthenticated ? "Connected" : "Disconnected"}></div>
+          </div>
+        </header>
+      )}
+
+      {/* Floating Exit Button for Exam Mode */}
+      {isExamMode && (
+        <button
+          onClick={() => setIsExamMode(false)}
+          className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-full shadow-lg shadow-red-600/30 transition-all active:scale-95 animate-in slide-in-from-top-10 fade-in duration-300"
+        >
+          <EyeOff size={18} />
+          <span>Exit Exam Mode</span>
+        </button>
+      )}
       <div className="flex-1 flex overflow-hidden">
-        <Sidebar currentMode={mode} setMode={setMode} subject={subject} isCollapsed={isSidebarCollapsed} setIsCollapsed={setIsSidebarCollapsed} />
+        {!isExamMode && <Sidebar currentMode={mode} setMode={setMode} subject={subject} isCollapsed={isSidebarCollapsed} setIsCollapsed={setIsSidebarCollapsed} />}
         <main className={`flex-1 relative overflow-hidden ${theme.bg} transition-colors duration-500 ${isExamMode ? 'text-lg tracking-wide' : 'text-base'}`}>
           {renderContent()}
         </main>
