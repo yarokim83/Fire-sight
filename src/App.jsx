@@ -9,18 +9,7 @@ import StrategyView from './components/StrategyView'
 import StudyManager from './components/StudyManager'
 import { Flame, Droplets, Zap, Eye, EyeOff, TableProperties } from 'lucide-react'
 
-/* 
-  [SECURITY NOTE] 
-  실제 배포 시에는 .env 파일 등을 사용하여 환경변수로 관리하세요.
-  .env.example is provided for reference.
-*/
-const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
-const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
-
-console.log("[App Debug] API_KEY Loaded:", !!API_KEY);
-console.log("[App Debug] CLIENT_ID Loaded:", !!CLIENT_ID);
-
+// [CRITICAL FIX] Define THEME_CONFIG globally
 const THEME_CONFIG = {
   mechanical: {
     bg: 'bg-slate-900',
@@ -35,6 +24,18 @@ const THEME_CONFIG = {
     text: 'text-orange-400'
   }
 };
+
+/* 
+  [SECURITY NOTE] 
+  실제 배포 시에는 .env 파일 등을 사용하여 환경변수로 관리하세요.
+  .env.example is provided for reference.
+*/
+const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
+const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
+
+console.log("[App Debug] API_KEY Loaded:", !!API_KEY);
+console.log("[App Debug] CLIENT_ID Loaded:", !!CLIENT_ID);
 
 function App() {
   // [NEW] Privacy Layer State
@@ -58,7 +59,7 @@ function App() {
   const [gapiInited, setGapiInited] = useState(false);
   const [gisInited, setGisInited] = useState(false);
 
-  // Theme Config
+  // Theme Config usage inside component
   const theme = THEME_CONFIG[subject];
 
   // D-Day Calculation
@@ -302,7 +303,6 @@ function App() {
           <div className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-700'}`} title={isAuthenticated ? "Connected" : "Disconnected"}></div>
         </div>
       </header>
-
       <div className="flex-1 flex overflow-hidden">
         <Sidebar currentMode={mode} setMode={setMode} subject={subject} isCollapsed={isSidebarCollapsed} setIsCollapsed={setIsSidebarCollapsed} />
         <main className={`flex-1 relative overflow-hidden ${theme.bg} transition-colors duration-500 ${isExamMode ? 'text-lg tracking-wide' : 'text-base'}`}>
