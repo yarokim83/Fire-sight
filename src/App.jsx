@@ -6,6 +6,7 @@ import Workbook from './components/Workbook'
 import Reference from './components/Reference'
 import Dashboard from './components/Dashboard'
 import StrategyView from './components/StrategyView'
+import StudyManager from './components/StudyManager'
 import { Flame, Droplets, Zap, Eye, EyeOff } from 'lucide-react'
 
 
@@ -182,6 +183,8 @@ function App() {
       case 'strategy':
         // [UPDATE] Pass setter to activate strategy
         return <StrategyView setActiveStrategy={setActiveStrategy} />;
+      case 'study-manager':
+        return <StudyManager />;
       case 'visual':
       default:
         return <VisualLearning isExamMode={isExamMode} setIsExamMode={setIsExamMode} setMode={setMode} subject={subject} />;
