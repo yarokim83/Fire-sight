@@ -1,4 +1,4 @@
-const CACHE_NAME = 'firesight-v1';
+const CACHE_NAME = 'firesight-v2-network-first';
 const urlsToCache = [
     '/',
     '/index.html',
@@ -7,6 +7,7 @@ const urlsToCache = [
 ];
 
 self.addEventListener('install', (event) => {
+    self.skipWaiting(); // Force activate new SW
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then((cache) => {
@@ -16,13 +17,28 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+    // Navigation requests (HTML) -> Network First
+    if (event.request.mode === 'navigate') {
+        event.respondWith(
+            fetch(event.request)
+                .then((response) => {
+                    return caches.open(CACHE_NAME).then((cache) => {
+                        cache.put(event.request, response.clone());
+                        return response;
+                    });
+                })
+                .catch(() => {
+                    return caches.match(event.request);
+                })
+        );
+        return;
+    }
+
+    // Asset requests -> Cache First, falling back to network
     event.respondWith(
         caches.match(event.request)
             .then((response) => {
-                if (response) {
-                    return response;
-                }
-                return fetch(event.request);
+                return response || fetch(event.request);
             })
     );
 });
@@ -40,4 +56,5 @@ self.addEventListener('activate', (event) => {
             );
         })
     );
+    self.clients.claim(); // Take control immediately
 });
