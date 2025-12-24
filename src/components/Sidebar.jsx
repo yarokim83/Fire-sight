@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { BookOpen, PenTool, Book, ChevronLeft, ChevronRight, LayoutDashboard, Camera, RefreshCw, Zap } from 'lucide-react';
 
-export default function Sidebar({ currentMode, setMode, subject }) {
-    const [isCollapsed, setIsCollapsed] = useState(false);
+export default function Sidebar({ currentMode, setMode, subject, isCollapsed, setIsCollapsed }) {
+    // const [isCollapsed, setIsCollapsed] = useState(false); // Controlled by App.jsx now
 
     // Dynamic styles based on Subject Theme
     const theme = subject === 'mechanical'

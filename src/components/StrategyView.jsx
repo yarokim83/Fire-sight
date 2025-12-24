@@ -23,14 +23,14 @@ export default function StrategyView() {
     };
 
     const StrategyCard = ({ title, icon: Icon, children, className = "" }) => (
-        <div className={`p-6 rounded-2xl border transition-all duration-300 group hover:shadow-lg ${className} bg-slate-900/40 border-slate-800 hover:border-slate-600`}>
+        <div className={`p-6 rounded-2xl border transition-all duration-300 group hover:shadow-lg ${className} bg-slate-900/40 border-slate-800 hover:border-slate-600 flex flex-col`}>
             <div className="flex items-center gap-3 mb-4">
-                <div className="p-2.5 rounded-lg bg-slate-800 group-hover:bg-slate-700 transition-colors">
+                <div className="p-2.5 rounded-lg bg-slate-800 group-hover:bg-slate-700 transition-colors shrink-0">
                     <Icon size={24} className="text-blue-400 group-hover:text-blue-300" />
                 </div>
-                <h3 className="text-lg font-bold text-slate-200 group-hover:text-white">{title}</h3>
+                <h3 className="text-base md:text-lg font-bold text-slate-200 group-hover:text-white leading-tight">{title}</h3>
             </div>
-            <div className="text-slate-400 leading-relaxed text-sm space-y-2">
+            <div className="text-slate-400 leading-relaxed text-sm space-y-2 flex-1">
                 {children}
             </div>
         </div>
@@ -60,37 +60,33 @@ export default function StrategyView() {
                     className="border-blue-500/30 bg-blue-900/10 hover:border-blue-500/50"
                 >
                     <p className="font-semibold text-blue-200 mb-2">"쓰지 못하면 모르는 것이다."</p>
-                    <p>소방시설관리사 2차는 100% 주관식/서술형 시험입니다. 눈으로 보고 고르는 공부는 실제 시험장에서 무용지물입니다.</p>
+                    <p>소방시설관리사 2차 실기는 100% 주관식입니다. 눈으로 보는 공부가 아닌,</p>
                     <ul className="list-disc list-inside mt-2 text-slate-400/90 space-y-1">
-                        <li>강의 듣는 시간 줄이기</li>
-                        <li><strong>백지에 직접 쓰는 인출(Recall)</strong> 연습에 화력 집중</li>
-                        <li>키워드 중심의 구조화된 답안 작성 훈련</li>
+                        <li><strong>백지에 직접 쓰는 인출(Recall)</strong> 연습에 집중</li>
+                        <li>단순 암기가 아닌 키워드 인출 훈련</li>
                     </ul>
                 </StrategyCard>
 
                 {/* Section 2: 기출 제로 베이스 */}
                 <StrategyCard title="기출 제로 베이스 : 확장 암기 전략" icon={BookOpen}>
-                    <p className="font-semibold text-emerald-200 mb-2">"기출은 정답이 아닌 가이드라인"</p>
-                    <p>이미 출제된 조문이 똑같이 나올 확률은 극히 낮습니다. 기출 조문을 중심으로 범위를 확장해야 합니다.</p>
+                    <p className="font-semibold text-emerald-200 mb-2">"기출은 정답이 아닌 '범위'입니다."</p>
+                    <p>이미 출제된 조문은 다시 나올 확률이 낮습니다. 기출 조문의 주변을 공략하세요.</p>
                     <div className="mt-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
-                        <span className="text-xs font-bold text-slate-500 block mb-1">ACTION PLAN</span>
-                        <div className="flex gap-2 text-sm text-slate-300">
-                            <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
-                            <span>기출 조문의 <strong>주변 조항(Context)</strong> 확인</span>
-                        </div>
-                        <div className="flex gap-2 text-sm text-slate-300 mt-1">
-                            <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
-                            <span><strong>단서 조항 및 예외 규정</strong> 우선 암기</span>
+                        <span className="text-xs font-bold text-slate-500 block mb-1">EXAMPLE</span>
+                        <div className="text-sm text-slate-300">
+                            24회 기출(펌프 배관)의 옆집 조문인<br />
+                            <strong className="text-emerald-400">유수검지장치실 설치기준(NFTC 103)</strong> 등을<br />
+                            Workbook에 우선 등록하여 빈틈을 채우세요.
                         </div>
                     </div>
                 </StrategyCard>
 
                 {/* Section 3: 법령 개정 우선순위 */}
                 <StrategyCard title="법령 개정 우선순위 : 최신성 유지" icon={AlertTriangle}>
-                    <p className="font-semibold text-amber-200 mb-2">"개정 사항은 무조건 A급"</p>
-                    <p>2024~2025년에 대폭 개정된 <strong>NFPC(성능기준) 및 NFTC(기술기준)</strong>은 기출 여부와 관계없이 출제 0순위입니다.</p>
+                    <p className="font-semibold text-amber-200 mb-2">"최신 개정 사항은 A급 순위"</p>
+                    <p>최근 대폭 개정된 <strong>NFPC(성능기준) 및 NFTC(기술기준)</strong>을 최우선순위로 관리하세요.</p>
                     <p className="mt-2 text-slate-400">
-                        Reference 메뉴에서 <span className="text-amber-400 border-b border-amber-500/50">최신 개정 수치와 용어</span>를 가장 먼저 확인하고 Workbook에 등록하세요.
+                        개정된 수치와 용어는 시험 출제 0순위입니다.<br />Reference 메뉴에서 이를 가장 먼저 확인하세요.
                     </p>
                 </StrategyCard>
 

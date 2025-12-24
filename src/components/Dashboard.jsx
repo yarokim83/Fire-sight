@@ -4,18 +4,7 @@ import {
     Flame, Target, ArrowRight, Zap, Droplets, BookOpen, AlertCircle
 } from 'lucide-react';
 
-export default function Dashboard({ setMode, subject }) {
-    // D-Day Calculation
-    const calculateDday = () => {
-        const targetDate = new Date('2025-09-20');
-        const today = new Date();
-        const diffTime = targetDate - today;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return diffDays > 0 ? `D-${diffDays}` : (diffDays === 0 ? 'D-Day' : `D+${Math.abs(diffDays)}`);
-    };
-
-    const dDay = calculateDday();
-
+export default function Dashboard({ setMode, subject, dDay }) {
     // Mock Data for Recent Activity
     const recentActivities = [
         { id: 1, type: 'pdf', title: '소방시설법 시행령 별표 4', desc: '어제 읽음', icon: BookOpen, color: 'text-blue-400', bg: 'bg-blue-500/10', mode: 'reference' },
@@ -30,20 +19,20 @@ export default function Dashboard({ setMode, subject }) {
     return (
         <div className="flex flex-col h-full bg-slate-950 text-white p-6 overflow-y-auto w-full animate-in fade-in duration-500">
             {/* 1. Hero Section */}
-            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 shadow-2xl p-8 mb-8 group">
+            <div className="relative rounded-3xl bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 shadow-2xl p-8 mb-8 group">
                 {/* Background Pattern */}
                 <div className="absolute top-0 right-0 w-64 h-64 bg-red-500/10 rounded-full blur-3xl -mr-16 -mt-16 transition-all group-hover:bg-red-500/20 duration-700"></div>
 
-                <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-                    <div>
+                <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                    <div className="relative z-20">
                         <div className="flex items-center gap-2 mb-2">
                             <span className="px-3 py-1 rounded-full bg-red-500/20 text-red-400 text-xs font-bold border border-red-500/30 flex items-center gap-1">
-                                <Flame size={12} /> 제23회 소방시설관리사
+                                <Flame size={12} /> 2027 소방시설관리사
                             </span>
-                            <span className="text-slate-500 text-xs">2025.09.20 (Sat)</span>
+                            <span className="text-slate-500 text-xs">2027.09.04 (Expected)</span>
                         </div>
-                        <h1 className="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-500 mb-2 leading-tight">
-                            {dDay}
+                        <h1 className="text-2xl md:text-4xl lg:text-5xl font-black text-white mb-2 leading-tight tracking-tight">
+                            {dDay || "D-Day"}
                         </h1>
                         <p className="text-slate-400 font-light text-lg">
                             남은 시간은 충분합니다. <strong className="text-slate-200">오늘도 한 걸음 더.</strong>
