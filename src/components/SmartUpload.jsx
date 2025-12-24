@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Upload, Camera, ScanLine, Save, X, Image as ImageIcon, CheckCircle2 } from 'lucide-react';
 import { analyzeImage } from '../services/geminiService';
 
-export default function SmartUpload({ onSaveComplete }) {
+export default function SmartUpload({ onSaveComplete, initialData }) {
     const [step, setStep] = useState(1); // 1: Upload, 2: Analyzing, 3: Form
     const [previewUrl, setPreviewUrl] = useState('');
     const [base64Image, setBase64Image] = useState('');
@@ -24,6 +24,55 @@ export default function SmartUpload({ onSaveComplete }) {
         finalAnswer: '',
         unit: ''
     });
+
+    // [NEW] Handle Initial Data (Data Toss from Reference)
+    useEffect(() => {
+        if (initialData) {
+            console.log("SmartUpload received initialData:", initialData);
+
+            // 1. Text Data
+            setFormData(prev => ({
+                ...prev,
+                type: initialData.type || 'workbook',
+                title: initialData.title || '',
+                description: initialData.description || '', // Question or Desc
+                reference: initialData.reference || '', // Legacy support
+                // If it's a rich object from Reference
+                ...(initialData.source && { reference: initialData.source }),
+                ...(initialData.content && { description: initialData.content })
+            }));
+
+            // 2. Image Data (Base64 or Blob)
+            if (initialData.image) {
+                // If it's a blob URL or Base64
+                setPreviewUrl(initialData.image);
+                setBase64Image(initialData.image);
+                setStep(2); // Auto-advance to analysis
+            } else if (initialData.imageUrl) {
+                setPreviewUrl(initialData.imageUrl);
+                setBase64Image(initialData.imageUrl);
+                setStep(2);
+            }
+        }
+    }, [initialData]);
+
+    // Handle File Upload & Convert to Base64
+    const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setSelectedFile(file);
+            // Create preview immediately
+            setPreviewUrl(URL.createObjectURL(file));
+            setStep(2);
+
+            // Convert to Base64 for Storage
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setBase64Image(reader.result);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
 
     // Step 2: AI Analysis with Gemini Service
     useEffect(() => {
@@ -55,23 +104,7 @@ export default function SmartUpload({ onSaveComplete }) {
         }
     }, [step, selectedFile]);
 
-    // Handle File Upload & Convert to Base64
-    const handleFileChange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            setSelectedFile(file);
-            // Create preview immediately
-            setPreviewUrl(URL.createObjectURL(file));
-            setStep(2);
 
-            // Convert to Base64 for Storage
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setBase64Image(reader.result);
-            };
-            reader.readAsDataURL(file);
-        }
-    };
 
     // Handle Save to LocalStorage
     const handleSave = () => {

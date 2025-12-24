@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import SmartUpload from './components/SmartUpload'
 import Sidebar from './components/Sidebar'
 import VisualLearning from './components/VisualLearning'
@@ -7,8 +7,9 @@ import Reference from './components/Reference'
 import Dashboard from './components/Dashboard'
 import StrategyView from './components/StrategyView'
 import StudyManager from './components/StudyManager'
-import { Flame, Droplets, Zap, Eye, EyeOff } from 'lucide-react'
+import { Flame, Droplets, Zap, Eye, EyeOff, TableProperties } from 'lucide-react'
 
+// ... (Security Note remains same)
 
 /* 
   [SECURITY NOTE] 
@@ -58,15 +59,14 @@ function App() {
   // Theme Config
   const theme = THEME_CONFIG[subject];
 
-  // [NEW] D-Day Calculation (2027 Exam Target)
-  const calculateDDay = () => {
+  // [NEW] D-Day Calculation (2027 Exam Target) - Optimized with useMemo
+  const dDay = useMemo(() => {
     const targetDate = new Date('2027-09-04'); // Updated Target Date
     const today = new Date();
     const diff = targetDate - today;
     const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
     return days > 0 ? `D-${days}` : 'D-Day';
-  };
-  const dDay = calculateDDay();
+  }, []); // Run once on mount
 
   // [NEW] Auto-Focus Mode Effect
   useEffect(() => {
@@ -79,6 +79,7 @@ function App() {
 
   // [NEW] Data Toss Handler
   const handleDataToss = (data) => {
+    // console.log("Data Tossed:", data);
     setSharedData(data);
     setMode('smart-upload');
   };
@@ -192,7 +193,9 @@ function App() {
   };
 
   return (
-    <div className={`flex flex-col h-screen w-screen overflow-hidden ${theme.bg} text-white font-sans transition-colors duration-500`}>
+    <div className={`flex flex-col h-screen w-screen overflow-hidden ${theme.bg} text-white font-sans transition-all duration-500
+      ${isExamMode ? 'brightness-90 saturate-50' : ''} 
+    `}>
 
       {/* 1. GNB (Global Navigation Bar) */}
       <header className={`h-14 border-b ${theme.border} bg-slate-900/80 backdrop-blur-md flex items-center justify-between px-4 z-50 shadow-sm shrink-0 transition-colors duration-500`}>
@@ -230,7 +233,7 @@ function App() {
         </div>
 
         {/* Right: Info */}
-        <div className="flex-1 flex justify-end items-center gap-4 min-w-fit whitespace-nowrap">
+        <div className="flex-1 flex justify-end items-center gap-4 min-w-fit whitespace-nowrap" style={{ scrollbarGutter: 'stable' }}>
           <div className="hidden lg:flex flex-col items-end group relative cursor-help">
             <div className="text-xs font-mono text-slate-500">2027 Inspection Practice</div>
             <div className="text-[10px] font-bold text-blue-400 transition-colors">
@@ -274,7 +277,9 @@ function App() {
         />
 
         {/* Content Area */}
-        <main className={`flex-1 relative overflow-hidden ${theme.bg} transition-colors duration-500`}>
+        <main className={`flex-1 relative overflow-hidden ${theme.bg} transition-colors duration-500
+           ${isExamMode ? 'text-lg tracking-wide' : 'text-base'}
+        `}>
           {renderContent()}
         </main>
       </div>

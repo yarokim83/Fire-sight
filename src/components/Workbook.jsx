@@ -119,7 +119,7 @@ const calculateDetectorCount = (area, perDetector) => {
 // =====================================================================
 // COMPONENT
 // =====================================================================
-export default function Workbook({ isExamMode, subject: initialSubject }) {
+export default function Workbook({ isExamMode, subject: initialSubject, initialFilter }) {
     // STATE
     const [viewMode, setViewMode] = useState('dashboard'); // 'dashboard' | 'list' | 'solver'
     const [selectedTopic, setSelectedTopic] = useState(null);
@@ -140,7 +140,45 @@ export default function Workbook({ isExamMode, subject: initialSubject }) {
         setDeletedDefaultIds(savedDeleted);
     }, []);
 
-    const allProblems = [...sprinklerProblems, ...customData].filter(item => !deletedDefaultIds.includes(item.id));
+    // [NEW] ActiveStrategy Filter Effect
+    useEffect(() => {
+        if (initialFilter && initialFilter.tag) {
+            // Find topic matching the strategy tag or default to water if generic
+            // For now, let's auto-select 'Water' (수계) or based on tag map
+            console.log("Applying Strategy Filter:", initialFilter);
+
+            // Simple logic: if strategy is active, auto-enter list mode for all topics or specific
+            // Here, we'll simulate entering a 'Strategic Review' mode or just filtering the dashboard
+            // For this requirement, let's assume we filter by category if mapped, or show all with highlight
+
+            // Force into list mode with a "Strategic" context if needed, or just filter
+        }
+    }, [initialFilter]);
+
+    const allProblems = useMemo(() => {
+        let problems = [...sprinklerProblems, ...customData].filter(item => !deletedDefaultIds.includes(item.id));
+
+        // [NEW] Priority Sorting (Neighboring Clauses / Stars)
+        // Mock logic: Favor items with 'importance' or specific keywords
+        problems.sort((a, b) => {
+            const scoreA = (a.importance || 0) + (a.keywords?.length || 0);
+            const scoreB = (b.importance || 0) + (b.keywords?.length || 0);
+            return scoreB - scoreA; // Descending
+        });
+
+        // [NEW] Strategy Filter
+        if (initialFilter?.tag) {
+            // Example: Filter by tag match in keywords or title
+            const tag = initialFilter.tag.replace('#', '');
+            problems = problems.filter(p =>
+                p.keywords?.some(k => k.includes(tag)) ||
+                p.title?.includes(tag) ||
+                p.question?.includes(tag)
+            );
+        }
+
+        return problems;
+    }, [sprinklerProblems, customData, deletedDefaultIds, initialFilter]);
 
     // Initial Subject Handling (Optional)
     const activeTopics = initialSubject === 'electrical'
@@ -149,12 +187,19 @@ export default function Workbook({ isExamMode, subject: initialSubject }) {
 
     // Navigation Handler
     const handleTopicClick = (topic) => {
+        // Filter by topic AND currently filtered allProblems
         const topicProblems = allProblems.filter(p => p.category === topic.id);
-        if (topicProblems.length > 0) {
+
+        if (topicProblems.length > 0 || viewMode === 'dashboard') { // Allow entering empty if filtering
             setSelectedTopic(topic);
             setViewMode('list');
         } else {
-            alert("🚧 데이터 준비 중입니다. (Smart Upload로 문제를 추가해보세요!)");
+            // If filtered out by strategy
+            if (initialFilter) {
+                alert("해당 전략/키워드에 맞는 문제가 이 주제에는 없습니다.");
+            } else {
+                alert("🚧 데이터 준비 중입니다. (Smart Upload로 문제를 추가해보세요!)");
+            }
         }
     };
 
