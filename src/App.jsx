@@ -7,7 +7,7 @@ import Reference from './components/Reference'
 import Dashboard from './components/Dashboard'
 import StrategyView from './components/StrategyView'
 import StudyManager from './components/StudyManager'
-import { Flame, Droplets, Zap, Eye, EyeOff, TableProperties } from 'lucide-react'
+import { Flame, Droplets, Zap, Eye, EyeOff, TableProperties, WifiOff } from 'lucide-react'
 
 // [CRITICAL FIX] Define THEME_CONFIG globally
 const THEME_CONFIG = {
@@ -249,6 +249,15 @@ function App() {
     <div className={`flex flex-col h-screen w-screen overflow-hidden ${theme.bg} text-white font-sans transition-all duration-500
       ${isExamMode ? 'brightness-90 saturate-50' : ''} 
     `}>
+      {/* Offline Banner */}
+      {!isOnline && (
+        <div className="bg-red-500/10 text-red-200 text-xs py-1.5 text-center border-b border-red-500/20 flex justify-center items-center gap-2 animate-in slide-in-from-top-2">
+          <WifiOff size={12} />
+          <span className="font-bold">오프라인 모드</span>
+          <span className="opacity-75">- 저장된 자료만 열람 가능합니다</span>
+        </div>
+      )}
+
       {/* Header: Hide entirely in Exam Mode */}
       {!isExamMode && (
         <header className={`h-14 border-b ${theme.border} bg-slate-900/80 backdrop-blur-md flex items-center justify-between px-4 z-50 shadow-sm shrink-0 transition-colors duration-500`}>

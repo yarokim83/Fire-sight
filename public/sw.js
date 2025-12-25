@@ -1,4 +1,4 @@
-const CACHE_NAME = 'firesight-v2-network-first';
+const CACHE_NAME = 'firesight-v3-offline-ready';
 const urlsToCache = [
     '/',
     '/index.html',
@@ -28,17 +28,36 @@ self.addEventListener('fetch', (event) => {
                     });
                 })
                 .catch(() => {
-                    return caches.match(event.request);
+                    return caches.match('/index.html') || caches.match(event.request);
                 })
         );
         return;
     }
 
-    // Asset requests -> Cache First, falling back to network
+    // Asset requests -> Stale-While-Revalidate (Cache First, Background Update)
+    // Or Cache First, Fallback to Network and Cache
     event.respondWith(
         caches.match(event.request)
             .then((response) => {
-                return response || fetch(event.request);
+                if (response) return response; // Return hit
+
+                // Clone request stream
+                const fetchRequest = event.request.clone();
+
+                return fetch(fetchRequest).then((response) => {
+                    // Check if valid response
+                    if (!response || response.status !== 200 || response.type !== 'basic') {
+                        return response;
+                    }
+
+                    // Cache the new response
+                    const responseToCache = response.clone();
+                    caches.open(CACHE_NAME).then((cache) => {
+                        cache.put(event.request, responseToCache);
+                    });
+
+                    return response;
+                });
             })
     );
 });

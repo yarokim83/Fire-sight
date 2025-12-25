@@ -93,9 +93,28 @@ const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiIn
     const [manualCategories, setManualCategories] = useState(() => JSON.parse(localStorage.getItem('fireSight_manualCategories') || '{}'));
     const [activeMenuFileId, setActiveMenuFileId] = useState(null); // For dropdown
 
+    // [NEW] Offline Support State
+    const [offlineFiles, setOfflineFiles] = useState([]); // IDs of files saved locally
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
+    const [downloadingId, setDownloadingId] = useState(null);
+
     useEffect(() => {
         const savedDeleted = JSON.parse(localStorage.getItem('fireSight_deletedRefs') || '[]');
         setDeletedFileIds(savedDeleted);
+
+        // Init Offline List
+        getAllFileIds().then(ids => setOfflineFiles(ids));
+
+        // Network Listeners
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
     }, []);
 
     // Re-run categorization when manualCategories changes
@@ -136,14 +155,38 @@ const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiIn
         { id: 'L4', label: '심화/부록', icon: <Calculator size={18} />, description: '고난도 수리계산 및 국외 기준 비교 데이터' }
     ];
 
+    const [isLoaded, setIsLoaded] = useState(false); // [NEW] Prevent multiple calls
+
     useEffect(() => {
-        if (isAuthenticated && gapiInited) {
-            fetchDriveFiles();
-        }
-    }, [isAuthenticated, gapiInited]);
+        // [Optimized] Only fetch if not loaded and authenticated
+        if (isLoaded || !isAuthenticated || !gapiInited) return;
+
+        fetchDriveFiles().then(() => {
+            setIsLoaded(true);
+        }).catch(err => {
+            console.error("Quota error or network issue:", err);
+        });
+    }, [isAuthenticated, gapiInited, isLoaded]);
 
     const fetchDriveFiles = async () => {
         setLoading(true);
+
+        // 1. Check Local Cache
+        const cached = localStorage.getItem('fireSight_driveCache');
+        if (cached) {
+            const parsed = JSON.parse(cached);
+            const now = new Date().getTime();
+            // 1 hour cache validity
+            if (now - parsed.timestamp < 3600 * 1000) {
+                console.log("Using cached drive list");
+                setDriveFiles(parsed.files);
+                categorizeFiles(parsed.files);
+                setLoading(false);
+                setIsLoaded(true);
+                return;
+            }
+        }
+
         try {
             let targetFolderId = FOLDER_ID;
             if (FOLDER_ID && FOLDER_ID.includes('drive.google.com')) {
@@ -177,11 +220,25 @@ const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiIn
             const files = response.result.files || [];
             console.log("Fetched Files:", files.length);
 
+            // [NEW] Cache the result
+            localStorage.setItem('fireSight_driveCache', JSON.stringify({
+                timestamp: new Date().getTime(),
+                files: files
+            }));
+
             setDriveFiles(files);
             categorizeFiles(files);
         } catch (err) {
             console.error("Drive Fetch Error:", err);
-            alert(`자료를 불러오는데 실패했습니다.`);
+            // On error, try to use stale cache if available
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                setDriveFiles(parsed.files);
+                categorizeFiles(parsed.files);
+                alert("최신 자료를 불러오지 못해 저장된 목록을 표시합니다.");
+            } else {
+                alert(`자료를 불러오는데 실패했습니다.`);
+            }
         } finally {
             setLoading(false);
         }
@@ -293,14 +350,58 @@ const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiIn
         ? displaySearchResults.filter(f => !deletedFileIds.includes(f.id))
         : (categorized[activeTab] || []).filter(f => !deletedFileIds.includes(f.id));
 
-    const handleCardClick = (file) => {
+    const handleDownload = async (e, file) => {
+        e.stopPropagation();
+        if (offlineFiles.includes(file.id)) {
+            if (window.confirm("기기에 저장된 파일을 삭제하시겠습니까?")) {
+                await deleteFile(file.id);
+                const ids = await getAllFileIds();
+                setOfflineFiles(ids);
+            }
+            return;
+        }
+
+        if (!isOnline) {
+            alert("오프라인 상태에서는 다운로드할 수 없습니다.");
+            return;
+        }
+
+        setDownloadingId(file.id);
+        try {
+            const token = window.gapi.client.getToken()?.access_token;
+            if (!token) throw new Error("No access token");
+
+            const response = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if (!response.ok) throw new Error("Download failed");
+
+            const blob = await response.blob();
+            await saveFile(file.id, file.meta || { name: file.name }, blob);
+
+            const ids = await getAllFileIds();
+            setOfflineFiles(ids);
+            alert("오프라인 저장이 완료되었습니다.");
+        } catch (err) {
+            console.error(err);
+            alert("다운로드 중 오류가 발생했습니다.");
+        } finally {
+            setDownloadingId(null);
+        }
+    };
+
+    const handleCardClick = async (file) => {
+        // If it's a summary card, open modal (metadata is local)
         if (file.meta) {
-            setSelectedSummary({ ...file.meta, webViewLink: file.webViewLink, fileName: file.name });
+            setSelectedSummary({ ...file.meta, webViewLink: file.webViewLink, fileName: file.name, id: file.id }); // Add ID
             setPreviewPage(null);
             setIsModalOpen(true);
-        } else {
-            window.open(file.webViewLink, '_blank');
+            return;
         }
+
+        // Direct file opening
+        openPdf(file.webViewLink, null, file.id);
     };
 
     const handleCreateProblem = () => {
@@ -322,7 +423,29 @@ const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiIn
         }
     };
 
-    const openPdf = (link, page) => {
+    const openPdf = async (link, page, fileId) => {
+        // 1. Try Local
+        const targetId = fileId || selectedSummary?.id;
+        if (targetId && offlineFiles.includes(targetId)) {
+            try {
+                const localFile = await getFile(targetId);
+                if (localFile) {
+                    const url = URL.createObjectURL(localFile.blob);
+                    // Append page hash if needed (PDF.js supports #page=)
+                    // Blob URLs might not support #page same way as web viewers, but standard usually works
+                    const finalUrl = page ? `${url}#page=${page}` : url;
+                    window.open(finalUrl, '_blank');
+                    return;
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        // 2. Fallback to Network
+        if (!isOnline) {
+            alert("오프라인 상태입니다. 다운로드된 파일만 열 수 있습니다.");
+            return;
+        }
+
         const url = page ? `${link}#page=${page}` : link;
         window.open(url, '_blank');
     };
@@ -400,79 +523,99 @@ const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiIn
                         </div>
                     ) : displayFiles.length > 0 ? (
                         <div className="flex-1 overflow-y-auto pr-2 grid grid-cols-1 lg:grid-cols-2 gap-4 content-start pb-10">
-                            {displayFiles.map((file) => (
-                                <div
-                                    key={file.id}
-                                    onClick={() => handleCardClick(file)}
-                                    className="group bg-slate-900/40 border border-slate-800/60 p-5 rounded-2xl hover:border-blue-500/30 hover:bg-slate-900/60 transition-all duration-300 cursor-pointer flex flex-col justify-between relative"
-                                >
-                                    {/* Action Buttons: Move & Delete */}
-                                    <div className="absolute top-3 right-3 flex gap-1 z-20">
-                                        {/* Move Button with Dropdown */}
-                                        <div className="relative">
+                            {displayFiles.map((file) => {
+                                const isSaved = offlineFiles.includes(file.id);
+                                const isUnavailable = !isOnline && !isSaved;
+
+                                return (
+                                    <div
+                                        key={file.id}
+                                        onClick={() => !isUnavailable && handleCardClick(file)}
+                                        className={`group bg-slate-900/40 border p-5 rounded-2xl transition-all duration-300 flex flex-col justify-between relative
+                                        ${isUnavailable ? 'opacity-40 grayscale cursor-not-allowed border-slate-800' : 'border-slate-800/60 hover:border-blue-500/30 hover:bg-slate-900/60 cursor-pointer'} 
+                                        ${isSaved ? 'ring-1 ring-emerald-500/30 bg-emerald-900/10' : ''}`}
+                                    >
+                                        {/* Action Buttons: Move & Delete */}
+                                        <div className="absolute top-3 right-3 flex gap-1 z-20">
+                                            {/* Download Button */}
                                             <button
-                                                onClick={(e) => { e.stopPropagation(); setActiveMenuFileId(activeMenuFileId === file.id ? null : file.id); }}
-                                                className={`p-1.5 rounded-lg transition-colors ${activeMenuFileId === file.id ? 'bg-slate-700 text-blue-400 opacity-100' : 'text-slate-600 hover:text-blue-400 hover:bg-slate-800 opacity-0 group-hover:opacity-100'}`}
-                                                title="폴더 이동"
+                                                onClick={(e) => handleDownload(e, file)}
+                                                className={`p-1.5 rounded-lg transition-all 
+                                                ${isSaved ? 'text-emerald-400 bg-emerald-500/10' : 'text-slate-600 hover:text-blue-400 hover:bg-slate-800 opacity-0 group-hover:opacity-100'}
+                                                ${isUnavailable ? 'hidden' : ''}
+                                            `}
+                                                title={isSaved ? "오프라인 저장됨 (클릭 시 삭제)" : "다운로드"}
                                             >
-                                                <FolderInput size={16} />
+                                                {downloadingId === file.id ? <Loader2 size={16} className="animate-spin" /> :
+                                                    isSaved ? <Check size={16} /> : <Download size={16} />}
                                             </button>
 
-                                            {/* Move Dropdown Menu */}
-                                            {activeMenuFileId === file.id && (
-                                                <div className="absolute right-0 top-full mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-30">
-                                                    <div className="px-3 py-2 text-xs font-bold text-slate-500 bg-slate-900/50 border-b border-slate-700">이동할 카테고리 선택</div>
-                                                    {categories.filter(c => c.id !== activeTab).map(cat => (
-                                                        <button
-                                                            key={cat.id}
-                                                            onClick={(e) => { e.stopPropagation(); handleMoveFile(file.id, cat.id); }}
-                                                            className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors flex items-center gap-2"
-                                                        >
-                                                            {cat.icon}
-                                                            {cat.label}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            )}
+                                            {/* Move Button with Dropdown */}
+                                            <div className="relative">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setActiveMenuFileId(activeMenuFileId === file.id ? null : file.id); }}
+                                                    className={`p-1.5 rounded-lg transition-colors ${activeMenuFileId === file.id ? 'bg-slate-700 text-blue-400 opacity-100' : 'text-slate-600 hover:text-blue-400 hover:bg-slate-800 opacity-0 group-hover:opacity-100'}`}
+                                                    title="폴더 이동"
+                                                >
+                                                    <FolderInput size={16} />
+                                                </button>
+
+                                                {/* Move Dropdown Menu */}
+                                                {activeMenuFileId === file.id && (
+                                                    <div className="absolute right-0 top-full mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-30">
+                                                        <div className="px-3 py-2 text-xs font-bold text-slate-500 bg-slate-900/50 border-b border-slate-700">이동할 카테고리 선택</div>
+                                                        {categories.filter(c => c.id !== activeTab).map(cat => (
+                                                            <button
+                                                                key={cat.id}
+                                                                onClick={(e) => { e.stopPropagation(); handleMoveFile(file.id, cat.id); }}
+                                                                className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors flex items-center gap-2"
+                                                            >
+                                                                {cat.icon}
+                                                                {cat.label}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <button onClick={(e) => handleDeleteFile(e, file.id)} className="p-1.5 text-slate-600 hover:text-red-500 hover:bg-slate-800 rounded-lg transition-colors opacity-0 group-hover:opacity-100" title="목록에서 제거">
+                                                <Trash2 size={16} />
+                                            </button>
                                         </div>
 
-                                        <button onClick={(e) => handleDeleteFile(e, file.id)} className="p-1.5 text-slate-600 hover:text-red-500 hover:bg-slate-800 rounded-lg transition-colors opacity-0 group-hover:opacity-100" title="목록에서 제거">
-                                            <Trash2 size={16} />
-                                        </button>
-                                    </div>
-
-                                    <div>
-                                        <div className="flex flex-wrap gap-2 mb-3">
-                                            <span className="px-2 py-0.5 bg-slate-800 text-blue-400 rounded text-[10px] font-mono border border-slate-700 uppercase">PDF</span>
-                                            {/* Show manual tag if exists */}
-                                            {manualCategories[file.id] && (
-                                                <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded text-[10px] border border-purple-500/30 flex items-center gap-1">
-                                                    <FolderInput size={8} /> 수동이동
-                                                </span>
-                                            )}
-                                            {file.meta?.tags?.map((tag, i) => (
-                                                <span key={i} className={`px-2 py-0.5 rounded text-[10px] ${searchTerm && tag.toLowerCase().includes(searchTerm.toLowerCase()) ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-blue-500/10 text-blue-300'}`}>
-                                                    {tag}
-                                                </span>
-                                            ))}
+                                        <div>
+                                            <div className="flex flex-wrap gap-2 mb-3">
+                                                <span className="px-2 py-0.5 bg-slate-800 text-blue-400 rounded text-[10px] font-mono border border-slate-700 uppercase">PDF</span>
+                                                {/* Show manual tag if exists */}
+                                                {manualCategories[file.id] && (
+                                                    <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded text-[10px] border border-purple-500/30 flex items-center gap-1">
+                                                        <FolderInput size={8} /> 수동이동
+                                                    </span>
+                                                )}
+                                                {file.meta?.tags?.map((tag, i) => (
+                                                    <span key={i} className={`px-2 py-0.5 rounded text-[10px] ${searchTerm && tag.toLowerCase().includes(searchTerm.toLowerCase()) ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-blue-500/10 text-blue-300'}`}>
+                                                        {tag}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                            <h3 className="font-bold text-slate-200 group-hover:text-white mb-2 leading-tight flex items-start justify-between pr-12">
+                                                <span>{file.name}</span>
+                                            </h3>
+                                            <p className="text-sm text-slate-500 leading-relaxed line-clamp-2">
+                                                {file.meta ? file.meta.desc : '요약 정보가 없습니다. 클릭하여 원문을 확인하세요.'}
+                                            </p>
                                         </div>
-                                        <h3 className="font-bold text-slate-200 group-hover:text-white mb-2 leading-tight flex items-start justify-between pr-12">
-                                            <span>{file.name}</span>
-                                        </h3>
-                                        <p className="text-sm text-slate-500 leading-relaxed line-clamp-2">
-                                            {file.meta ? file.meta.desc : '요약 정보가 없습니다. 클릭하여 원문을 확인하세요.'}
-                                        </p>
-                                    </div>
-                                    <div className="mt-4 pt-4 border-t border-slate-800/50 flex items-center justify-between">
-                                        <div className="text-[10px] text-slate-600 flex items-center gap-1">
-                                            <HardDrive size={10} /> {isSearching ? (file.meta?.tags && file.meta.tags[0] ? file.meta.tags[0] : 'Drive') : 'Drive'}
+                                        <div className="mt-4 pt-4 border-t border-slate-800/50 flex items-center justify-between">
+                                            <div className="text-[10px] text-slate-600 flex items-center gap-1">
+                                                <HardDrive size={10} /> {isSearching ? (file.meta?.tags && file.meta.tags[0] ? file.meta.tags[0] : 'Drive') : 'Drive'}
+                                            </div>
+                                            <span className="text-xs font-bold text-blue-500 group-hover:underline flex items-center gap-1">
+                                                {file.meta ? 'Smart Summary' : 'Open PDF'} <ExternalLink size={10} />
+                                            </span>
                                         </div>
-                                        <span className="text-xs font-bold text-blue-500 group-hover:underline flex items-center gap-1">
-                                            {file.meta ? 'Smart Summary' : 'Open PDF'} <ExternalLink size={10} />
-                                        </span>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     ) : (
                         <div className="flex-1 flex flex-col items-center justify-center text-slate-500 opacity-60">
