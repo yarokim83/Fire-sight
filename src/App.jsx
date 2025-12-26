@@ -278,7 +278,7 @@ function App() {
             </div>
             <h1 className="text-lg font-bold tracking-tight text-white">
               Fire-Sight <span className="font-light text-slate-400">Lite</span>
-              <span className="ml-2 text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 border border-slate-700">v2.0</span>
+              <span className="ml-2 text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 border border-slate-700">v2.1</span>
             </h1>
           </div>
 
