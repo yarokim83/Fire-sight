@@ -5,6 +5,7 @@ import {
     X, AlertTriangle, FileCheck, Map, ArrowRightCircle, BookOpenCheck,
     LogIn, Loader2, HardDrive, User, Info, Tag, Trash2, FolderInput, PenTool
 } from 'lucide-react';
+import { getAllFileIds, saveFile, deleteFile, getFile } from '../utils/db';
 
 // Google Drive Folder ID
 const FOLDER_ID = import.meta.env.VITE_GOOGLE_DRIVE_FOLDER_ID;
