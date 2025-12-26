@@ -3,7 +3,7 @@ import {
     Scale, BookOpen, Building2, Calculator,
     FileText, ExternalLink, Search, Clock,
     X, AlertTriangle, FileCheck, Map, ArrowRightCircle, BookOpenCheck,
-    LogIn, Loader2, HardDrive, User, Info, Tag, Trash2, FolderInput, PenTool
+    LogIn, Loader2, HardDrive, User, Info, Tag, Trash2, FolderInput, PenTool, Download, Check
 } from 'lucide-react';
 import { getAllFileIds, saveFile, deleteFile, getFile } from '../utils/db';
 
