@@ -5,7 +5,7 @@ import {
     X, AlertTriangle, FileCheck, Map, ArrowRightCircle, BookOpenCheck,
     LogIn, Loader2, HardDrive, User, Info, Tag, Trash2, FolderInput, PenTool, Download, Check
 } from 'lucide-react';
-import { getAllFileIds, saveFile, deleteFile, getFile } from '../utils/db';
+import { getAllFileIds, saveFile, deleteFile, getFile, getAllSavedFiles } from '../utils/db';
 
 // Google Drive Folder ID
 const FOLDER_ID = import.meta.env.VITE_GOOGLE_DRIVE_FOLDER_ID;
@@ -158,16 +158,42 @@ const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiIn
 
     const [isLoaded, setIsLoaded] = useState(false); // [NEW] Prevent multiple calls
 
-    useEffect(() => {
-        // [Optimized] Only fetch if not loaded and authenticated
-        if (isLoaded || !isAuthenticated || !gapiInited) return;
-
-        fetchDriveFiles().then(() => {
+    const loadFilesFromIndexedDB = async () => {
+        setLoading(true);
+        try {
+            const savedFiles = await getAllSavedFiles();
+            // Transform saved files to match driveFiles structure if needed
+            const files = savedFiles.map(f => ({
+                id: f.id,
+                name: f.meta?.name || f.meta?.title || f.name || 'Untitled', // Ensure name exists
+                meta: f.meta,
+                webViewLink: null, // Offline, so no web link
+                mimeType: 'application/pdf', // Assuming PDFs
+                isOffline: true
+            }));
+            setDriveFiles(files);
+            categorizeFiles(files);
             setIsLoaded(true);
-        }).catch(err => {
-            console.error("Quota error or network issue:", err);
-        });
-    }, [isAuthenticated, gapiInited, isLoaded]);
+        } catch (err) {
+            console.error("Failed to load offline files:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        // [Optimized] Logic to switch between Online/Offline sources
+        if (isLoaded) return; // Prevent reload if already loaded
+
+        if (isOnline) {
+            if (isAuthenticated && gapiInited) {
+                fetchDriveFiles().then(() => setIsLoaded(true));
+            }
+        } else {
+            // Offline Mode: Load from IndexedDB
+            loadFilesFromIndexedDB();
+        }
+    }, [isAuthenticated, gapiInited, isLoaded, isOnline]);
 
     const fetchDriveFiles = async () => {
         setLoading(true);

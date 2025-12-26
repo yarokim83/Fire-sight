@@ -79,3 +79,16 @@ export const getAllFileIds = async () => {
         request.onerror = (e) => reject(e.target.error);
     });
 };
+
+export const getAllSavedFiles = async () => {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readonly');
+        const store = transaction.objectStore(STORE_NAME);
+        // getAll() returns all records in the store
+        const request = store.getAll();
+
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = (e) => reject(e.target.error);
+    });
+};
