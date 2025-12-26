@@ -251,10 +251,8 @@ function App() {
     `}>
       {/* Offline Banner */}
       {!isOnline && (
-        <div className="bg-red-500/10 text-red-200 text-xs py-1.5 text-center border-b border-red-500/20 flex justify-center items-center gap-2 animate-in slide-in-from-top-2">
-          <WifiOff size={12} />
-          <span className="font-bold">오프라인 모드</span>
-          <span className="opacity-75">- 저장된 자료만 열람 가능합니다</span>
+        <div className="bg-red-600 text-white text-center py-1 text-xs animate-pulse">
+          오프라인 모드: 로컬에 저장된 데이터만 열람 가능합니다.
         </div>
       )}
 
