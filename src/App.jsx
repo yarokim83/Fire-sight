@@ -43,6 +43,19 @@ function App() {
   const [pinInput, setPinInput] = useState('');
   const pinInputRef = useRef(null);
 
+  // [NEW] Offline Detection
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   // Navigation & View State
   const [mode, setMode] = useState('dashboard');
   const [subject, setSubject] = useState('mechanical');
