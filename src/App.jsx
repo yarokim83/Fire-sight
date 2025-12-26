@@ -25,6 +25,8 @@ const THEME_CONFIG = {
   }
 };
 
+const APP_VERSION = 'v2.1';
+
 /* 
   [SECURITY NOTE] 
   실제 배포 시에는 .env 파일 등을 사용하여 환경변수로 관리하세요.
@@ -224,7 +226,10 @@ function App() {
               Unlock System
             </button>
           </form>
-          <p className="text-center text-slate-600 text-xs mt-6">Fire Safety Manager Prep 2027</p>
+          <div className="text-center mt-6">
+            <p className="text-slate-600 text-xs">Fire Safety Manager Prep 2027</p>
+            <p className="text-slate-700 text-[10px] mt-1 font-mono">{APP_VERSION}</p>
+          </div>
         </div>
       </div>
     );
@@ -278,7 +283,7 @@ function App() {
             </div>
             <h1 className="text-lg font-bold tracking-tight text-white">
               Fire-Sight <span className="font-light text-slate-400">Lite</span>
-              <span className="ml-2 text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 border border-slate-700">v2.1</span>
+              <span className="ml-2 text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 border border-slate-700">{APP_VERSION}</span>
             </h1>
           </div>
 
