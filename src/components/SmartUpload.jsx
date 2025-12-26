@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, Camera, ScanLine, Save, X, Image as ImageIcon, CheckCircle2 } from 'lucide-react';
 import { analyzeImage } from '../services/geminiService';
+import { saveCustomProblem } from '../utils/db';
 
 export default function SmartUpload({ onSaveComplete, initialData }) {
     const [step, setStep] = useState(1); // 1: Upload, 2: Analyzing, 3: Form
@@ -106,8 +107,8 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
 
 
 
-    // Handle Save to LocalStorage
-    const handleSave = () => {
+    // Handle Save to IndexedDB (and LocalStorage for redundancy if needed, but DB is primary)
+    const handleSave = async () => {
         if (!formData.title) {
             alert("제목을 입력해주세요.");
             return;
@@ -138,15 +139,19 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
         };
 
         try {
-            const existingData = JSON.parse(localStorage.getItem('fireSight_customData') || '[]');
-            const updatedData = [newItem, ...existingData];
-            localStorage.setItem('fireSight_customData', JSON.stringify(updatedData));
+            // Save to IndexedDB
+            await saveCustomProblem(newItem);
+
+            // Also keep simple metadata in localStorage for fast load? 
+            // Actually, loading all from DB is better. 
+            // We maintain localStorage for fallback or legacy, but DB is safer for images.
+            // Let's just use DB.
 
             alert('보관함에 저장되었습니다!');
             if (onSaveComplete) onSaveComplete();
         } catch (error) {
             console.error("Storage Error:", error);
-            alert("저장 용량이 부족하거나 오류가 발생했습니다. (이미지 크기를 줄여주세요)");
+            alert("저장 중 오류가 발생했습니다.");
         }
     };
 

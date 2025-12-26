@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import ProblemSolver from './ProblemSolver';
 import { sprinklerProblems } from '../data/sprinklerData';
+import { getAllCustomProblems } from '../utils/db';
 
 // =====================================================================
 // CONSTANTS: 기계분야 (수리계산)
@@ -129,6 +130,21 @@ export default function Workbook({ isExamMode, subject: initialSubject, initialF
     const [selectedTopic, setSelectedTopic] = useState(null);
     const [selectedProblem, setSelectedProblem] = useState(null);
     const [customData, setCustomData] = useState([]);
+
+    // [NEW] Load Custom Data from IndexedDB
+    useEffect(() => {
+        const loadCustomData = async () => {
+            try {
+                const data = await getAllCustomProblems();
+                // Sort by date desc
+                data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                setCustomData(data);
+            } catch (err) {
+                console.error("Failed to load custom problems:", err);
+            }
+        };
+        loadCustomData();
+    }, []);
 
     // [NEW] Canvas State
     const [activeCanvasId, setActiveCanvasId] = useState(null); // ID of the problem engaging canvas
