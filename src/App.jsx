@@ -25,7 +25,7 @@ const THEME_CONFIG = {
   }
 };
 
-const APP_VERSION = 'v2.1';
+const APP_VERSION = 'v2.2';
 
 /* 
   [SECURITY NOTE] 
@@ -228,7 +228,7 @@ function App() {
           </form>
           <div className="text-center mt-6">
             <p className="text-slate-600 text-xs">Fire Safety Manager Prep 2027</p>
-            <p className="text-slate-700 text-[10px] mt-1 font-mono">{APP_VERSION}</p>
+            <p className="text-slate-500 text-[10px] mt-1 font-mono">{APP_VERSION}</p>
           </div>
         </div>
       </div>
