@@ -6,6 +6,7 @@
   <link rel="icon" type="image/svg+xml" href="/vite.svg" />
   <link rel="manifest" href="/manifest.json" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="FireSight" />
@@ -16,30 +17,16 @@
   <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
   <script>
-    // [CACHE-BUSTER] Force Unregister Service Worker to clear stale cache
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.getRegistrations().then(function (registrations) {
-          for (let registration of registrations) {
-            registration.unregister().then(() => {
-              console.log('SW Unregistered (Cache Buster)');
-              // Optional: Reload page once if needed, but let's just kill the SW first
-              // window.location.reload(); 
-            });
-          }
-        });
-
-        // Register new one only after cleaning - actually, let's keep it unregistered for this fix
-        // to ensure immediate update. User can re-enable later if needed for PWA.
-        /*
-        navigator.serviceWorker.register('/sw.js?v=' + new Date().getTime())
+        // Register SW immediately with version query to bypass browser cache
+        navigator.serviceWorker.register('/sw.js')
           .then(registration => {
             console.log('SW registered: ', registration);
           })
           .catch(registrationError => {
             console.log('SW registration failed: ', registrationError);
           });
-        */
       });
     }
   </script>
