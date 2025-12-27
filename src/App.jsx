@@ -252,6 +252,7 @@ function App() {
           gapiInited={gapiInited}
           gisInited={gisInited}
           onDataToss={handleDataToss}
+          isOnline={isOnline}
         />;
       case 'strategy':
         return <StrategyView setActiveStrategy={setActiveStrategy} />;

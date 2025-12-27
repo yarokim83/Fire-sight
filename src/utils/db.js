@@ -1,145 +1,98 @@
+import { openDB } from 'idb';
+
 const DB_NAME = 'fire-sight-db';
 const DB_VERSION = 2;
-const STORE_NAME = 'files';
+const FILE_STORE = 'files';
+const ANSWER_STORE = 'answers';
+const CUSTOM_PROBLEM_STORE = 'custom_problems';
 
-export const initDB = () => {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-        request.onerror = (event) => {
-            console.error("IndexedDB error:", event.target.error);
-            reject(event.target.error);
-        };
-
-        request.onsuccess = (event) => {
-            resolve(event.target.result);
-        };
-
-        request.onupgradeneeded = (event) => {
-            const db = event.target.result;
-            if (!db.objectStoreNames.contains(STORE_NAME)) {
-                db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+// 1. 데이터베이스 초기화 (Initialize DB)
+export const initDB = async () => {
+    return openDB(DB_NAME, DB_VERSION, {
+        upgrade(db) {
+            // Files Store (PDFs)
+            if (!db.objectStoreNames.contains(FILE_STORE)) {
+                db.createObjectStore(FILE_STORE, { keyPath: 'id' });
             }
-            // [NEW] Stores for Offline Workbooks
-            if (!db.objectStoreNames.contains('answers')) {
-                db.createObjectStore('answers', { keyPath: 'problemId' });
+            // Answers Store (Workbook)
+            if (!db.objectStoreNames.contains(ANSWER_STORE)) {
+                db.createObjectStore(ANSWER_STORE, { keyPath: 'problemId' });
             }
-            if (!db.objectStoreNames.contains('custom_problems')) {
-                db.createObjectStore('custom_problems', { keyPath: 'id' });
+            // Custom Problems Store (Smart Upload)
+            if (!db.objectStoreNames.contains(CUSTOM_PROBLEM_STORE)) {
+                db.createObjectStore(CUSTOM_PROBLEM_STORE, { keyPath: 'id' });
             }
-        };
+        },
     });
 };
 
-export const saveFile = async (fileId, meta, blob) => {
+// =====================================================================
+// FILE OPERATIONS (Reference.jsx)
+// =====================================================================
+
+export const saveFile = async (id, meta, blob) => {
     const db = await initDB();
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction([STORE_NAME], 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
-
-        const fileData = {
-            id: fileId,
-            meta: meta,
-            blob: blob,
-            savedAt: new Date().toISOString()
-        };
-
-        const request = store.put(fileData);
-
-        request.onsuccess = () => resolve(true);
-        request.onerror = (e) => reject(e.target.error);
-    });
+    const fileData = {
+        id,
+        meta,
+        blob, // Storing Blob directly
+        savedAt: new Date().toISOString()
+    };
+    return db.put(FILE_STORE, fileData);
 };
 
-export const getFile = async (fileId) => {
+export const getFile = async (id) => {
     const db = await initDB();
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction([STORE_NAME], 'readonly');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.get(fileId);
-
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = (e) => reject(e.target.error);
-    });
+    return db.get(FILE_STORE, id);
 };
 
-export const deleteFile = async (fileId) => {
+export const deleteFile = async (id) => {
     const db = await initDB();
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction([STORE_NAME], 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.delete(fileId);
-
-        request.onsuccess = () => resolve(true);
-        request.onerror = (e) => reject(e.target.error);
-    });
+    return db.delete(FILE_STORE, id);
 };
 
 export const getAllFileIds = async () => {
     const db = await initDB();
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction([STORE_NAME], 'readonly');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.getAllKeys();
-
-        request.onsuccess = () => resolve(request.result || []);
-        request.onerror = (e) => reject(e.target.error);
-    });
+    return db.getAllKeys(FILE_STORE);
 };
 
 export const getAllSavedFiles = async () => {
     const db = await initDB();
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction([STORE_NAME], 'readonly');
-        const store = transaction.objectStore(STORE_NAME);
-        // getAll() returns all records in the store
-        const request = store.getAll();
-
-        request.onsuccess = () => resolve(request.result || []);
-        request.onerror = (e) => reject(e.target.error);
-    });
+    return db.getAll(FILE_STORE);
 };
+
+// =====================================================================
+// ANSWER OPERATIONS (Workbook.jsx / ProblemSolver.jsx)
+// =====================================================================
 
 export const saveAnswer = async (problemId, answer) => {
     const db = await initDB();
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['answers'], 'readwrite');
-        const store = transaction.objectStore('answers');
-        const request = store.put({ problemId, answer, updatedAt: new Date().toISOString() });
-        request.onsuccess = () => resolve(true);
-        request.onerror = (e) => reject(e.target.error);
+    return db.put(ANSWER_STORE, {
+        problemId,
+        answer,
+        updatedAt: new Date().toISOString()
     });
 };
 
 export const getAnswer = async (problemId) => {
     const db = await initDB();
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['answers'], 'readonly');
-        const store = transaction.objectStore('answers');
-        const request = store.get(problemId);
-        request.onsuccess = () => resolve(request.result ? request.result.answer : '');
-        request.onerror = (e) => reject(e.target.error);
-    });
+    const result = await db.get(ANSWER_STORE, problemId);
+    return result ? result.answer : '';
 };
+
+// =====================================================================
+// CUSTOM PROBLEM OPERATIONS (SmartUpload.jsx)
+// =====================================================================
 
 export const saveCustomProblem = async (problem) => {
     const db = await initDB();
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['custom_problems'], 'readwrite');
-        const store = transaction.objectStore('custom_problems');
-        const request = store.put({ ...problem, savedAt: new Date().toISOString() });
-        request.onsuccess = () => resolve(true);
-        request.onerror = (e) => reject(e.target.error);
+    return db.put(CUSTOM_PROBLEM_STORE, {
+        ...problem,
+        savedAt: new Date().toISOString()
     });
 };
 
 export const getAllCustomProblems = async () => {
     const db = await initDB();
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['custom_problems'], 'readonly');
-        const store = transaction.objectStore('custom_problems');
-        const request = store.getAll();
-        request.onsuccess = () => resolve(request.result || []);
-        request.onerror = (e) => reject(e.target.error);
-    });
+    return db.getAll(CUSTOM_PROBLEM_STORE);
 };

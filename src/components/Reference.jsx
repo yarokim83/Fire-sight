@@ -80,7 +80,7 @@ const summaryDatabase = {
     }
 };
 
-const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiInited, onDataToss }) => {
+const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiInited, onDataToss, isOnline }) => {
     const [activeTab, setActiveTab] = useState('L1');
     const [selectedSummary, setSelectedSummary] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -96,7 +96,7 @@ const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiIn
 
     // [NEW] Offline Support State
     const [offlineFiles, setOfflineFiles] = useState([]); // IDs of files saved locally
-    const [isOnline, setIsOnline] = useState(navigator.onLine);
+    // isOnline is now passed as prop
     const [downloadingId, setDownloadingId] = useState(null);
 
     useEffect(() => {
@@ -105,17 +105,6 @@ const Reference = ({ subject, isAuthenticated, handleLogin, handleLogout, gapiIn
 
         // Init Offline List
         getAllFileIds().then(ids => setOfflineFiles(ids));
-
-        // Network Listeners
-        const handleOnline = () => setIsOnline(true);
-        const handleOffline = () => setIsOnline(false);
-        window.addEventListener('online', handleOnline);
-        window.addEventListener('offline', handleOffline);
-
-        return () => {
-            window.removeEventListener('online', handleOnline);
-            window.removeEventListener('offline', handleOffline);
-        };
     }, []);
 
     // Re-run categorization when manualCategories changes
