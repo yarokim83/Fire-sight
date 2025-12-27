@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Download, CheckCircle, Trash2, FileText, WifiOff, ExternalLink } from 'lucide-react';
-import { saveFile as savePDF, getAllSavedFiles, deleteFile as deletePDF, getFile as getPDF } from '../utils/db'; // Aliased for compatibility with request
+import { Download, CheckCircle, Trash2, FileText, WifiOff, ExternalLink, LogIn } from 'lucide-react';
+import { saveFile as savePDF, getAllSavedFiles, deleteFile as deletePDF, getFile as getPDF } from '../utils/db';
 
-// Google Drive Folder ID
 const FOLDER_ID = import.meta.env.VITE_GOOGLE_DRIVE_FOLDER_ID;
 
 function Reference({ subject, isAuthenticated, handleLogin, isOnline, onDataToss }) {
-    const [driveFiles, setDriveFiles] = useState([]); // 구글 드라이브 목록
-    const [savedFiles, setSavedFiles] = useState([]); // 로컬 저장 목록
+    const [driveFiles, setDriveFiles] = useState([]);
+    const [savedFiles, setSavedFiles] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
 
-    // 1. 초기 로드: 온라인이면 드라이브 목록을, 오프라인이면 로컬 목록을 로드
     useEffect(() => {
         const syncFiles = async () => {
             setIsLoading(true);
@@ -18,7 +16,6 @@ function Reference({ subject, isAuthenticated, handleLogin, isOnline, onDataToss
             setSavedFiles(localFiles);
 
             if (isOnline && isAuthenticated) {
-                // 구글 드라이브 파일 목록 가져오는 기존 로직 호출
                 fetchDriveFiles();
             }
             setIsLoading(false);
@@ -29,13 +26,11 @@ function Reference({ subject, isAuthenticated, handleLogin, isOnline, onDataToss
     const fetchDriveFiles = async () => {
         if (!window.gapi || !window.gapi.client) return;
 
-        // 1. Check Local Cache
         const cached = localStorage.getItem('fireSight_driveCache');
         if (cached) {
             const parsed = JSON.parse(cached);
             const now = new Date().getTime();
             if (now - parsed.timestamp < 3600 * 1000) {
-                console.log("Using cached drive list");
                 setDriveFiles(parsed.files);
                 return;
             }
@@ -76,38 +71,29 @@ function Reference({ subject, isAuthenticated, handleLogin, isOnline, onDataToss
             const files = response.result.files || [];
             console.log("Fetched Files:", files.length);
 
-            // Cache the result
             localStorage.setItem('fireSight_driveCache', JSON.stringify({
                 timestamp: new Date().getTime(),
                 files: files
             }));
-
             setDriveFiles(files);
         } catch (err) {
             console.error("Drive Fetch Error:", err);
-            // On error, use cache if available
-            if (cached) {
-                setDriveFiles(JSON.parse(cached).files);
-            }
+            if (cached) setDriveFiles(JSON.parse(cached).files);
         }
     };
 
-    // 2. 오프라인 저장 실행 (구글 드라이브 -> IndexedDB)
     const handleDownload = async (file) => {
         if (!isOnline) return alert("오프라인 상태에서는 다운로드할 수 없습니다.");
 
         try {
-            // 구글 드라이브에서 파일 Blob 데이터 가져오기
             const response = await window.gapi.client.drive.files.get({
                 fileId: file.id,
                 alt: 'media',
             });
 
             const blob = new Blob([response.body], { type: 'application/pdf' });
-            // Call with meta object { name: file.name } to match DB schema expected by saveFile
             await savePDF(file.id, { name: file.name }, blob);
 
-            // 로컬 상태 업데이트
             const updatedLocal = await getAllSavedFiles();
             setSavedFiles(updatedLocal);
             alert(`${file.name} 저장 완료!`);
@@ -117,20 +103,14 @@ function Reference({ subject, isAuthenticated, handleLogin, isOnline, onDataToss
         }
     };
 
-    // 3. 스마트 파일 열기 (로컬 우선)
     const handleViewFile = async (file) => {
         const localData = await getPDF(file.id);
 
         if (localData) {
-            // 로컬에 있으면 즉시 실행
-            // localData might have structure { blob: ... } based on db.js saveFile implementation
-            // db.js saveFile: { id, meta, blob, savedAt }
-            // So localData.blob is the blob
-            const blob = localData.blob || localData.data; // Handle both structures just in case
+            const blob = localData.blob || localData.data;
             const fileURL = URL.createObjectURL(blob);
             window.open(fileURL, '_blank');
         } else if (isOnline) {
-            // 로컬에 없고 온라인이면 드라이브에서 열기
             window.open(`https://drive.google.com/file/d/${file.id}/view`, '_blank');
         } else {
             alert("오프라인 상태이며 로컬에 저장되지 않은 파일입니다.");
@@ -151,6 +131,23 @@ function Reference({ subject, isAuthenticated, handleLogin, isOnline, onDataToss
                 )}
             </div>
 
+            {/* [구글 연동 복구] 로그인 권장 UI */}
+            {isOnline && !isAuthenticated && (
+                <div className="bg-blue-600/10 border border-blue-500/30 rounded-xl p-8 text-center mb-6">
+                    <div className="flex justify-center mb-4 text-blue-400">
+                        <LogIn size={48} />
+                    </div>
+                    <h3 className="text-lg font-bold text-white mb-2">Google Drive 연동 필요</h3>
+                    <p className="text-slate-400 mb-6 text-sm">구글 드라이브에 저장된 화재안전기준(NFTC)과 기출문제 목록을 가져오려면 로그인이 필요합니다.</p>
+                    <button
+                        onClick={handleLogin}
+                        className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-500/20"
+                    >
+                        구글 계정으로 연결하기
+                    </button>
+                </div>
+            )}
+
             {/* 파일 리스트 테이블 */}
             <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
                 <table className="w-full text-left text-sm text-slate-300">
@@ -162,13 +159,8 @@ function Reference({ subject, isAuthenticated, handleLogin, isOnline, onDataToss
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800">
-                        {(isOnline ? driveFiles : savedFiles).map((file) => {
-                            // Ensure we check savedFiles correctly. savedFiles stores full objects.
+                        {(isOnline && isAuthenticated ? driveFiles : savedFiles).map((file) => {
                             const isSaved = savedFiles.some(f => f.id === file.id);
-                            // If offline, we are iterating savedFiles, so they are all saved.
-                            // If online, we iterate driveFiles.
-
-                            // Normalize Name: Saved files might store it in meta
                             const fileName = file.name || file.meta?.name || 'Untitled';
 
                             return (
@@ -223,22 +215,12 @@ function Reference({ subject, isAuthenticated, handleLogin, isOnline, onDataToss
                                 </tr>
                             );
                         })}
-                        {(isOnline ? driveFiles : savedFiles).length === 0 && (
-                            <tr>
-                                <td colSpan="3" className="px-4 py-8 text-center text-slate-500">
-                                    {isLoading ? (
-                                        <div className="flex justify-center items-center gap-2">
-                                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-slate-500 border-t-transparent"></div>
-                                            Loading...
-                                        </div>
-                                    ) : (
-                                        "표시할 자료가 없습니다."
-                                    )}
-                                </td>
-                            </tr>
-                        )}
                     </tbody>
                 </table>
+                {/* 데이터가 없을 때의 처리 */}
+                {(isOnline && isAuthenticated ? driveFiles : savedFiles).length === 0 && !isLoading && (
+                    <div className="p-12 text-center text-slate-500">표시할 자료가 없습니다.</div>
+                )}
             </div>
         </div>
     );
