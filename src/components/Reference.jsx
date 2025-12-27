@@ -86,20 +86,39 @@ function Reference({ subject, isAuthenticated, handleLogin, isOnline, onDataToss
         if (!isOnline) return alert("오프라인 상태에서는 다운로드할 수 없습니다.");
 
         try {
-            const response = await window.gapi.client.drive.files.get({
-                fileId: file.id,
-                alt: 'media',
-            });
+            setIsLoading(true); // 로딩 상태 시작
 
-            const blob = new Blob([response.body], { type: 'application/pdf' });
+            // 1. 구글 인증 토큰 가져오기
+            const token = window.gapi.client.getToken().access_token;
+
+            // 2. fetch API를 사용하여 파일의 실제 데이터(media)를 직접 호출
+            const response = await fetch(
+                `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            if (!response.ok) throw new Error('파일 데이터를 가져오지 못했습니다.');
+
+            // 3. 응답 데이터를 Blob으로 변환
+            const blob = await response.blob();
+
+            // 4. IndexedDB 저장 (매개변수 구조를 db.js와 일치시킴)
             await savePDF(file.id, { name: file.name }, blob);
 
+            // 5. 로컬 상태 업데이트 및 알림
             const updatedLocal = await getAllSavedFiles();
             setSavedFiles(updatedLocal);
-            alert(`${file.name} 저장 완료!`);
+            alert(`[${file.name}] 오프라인 저장이 완료되었습니다!`);
+
         } catch (error) {
-            console.error("저장 실패:", error);
-            alert("다운로드 중 오류가 발생했습니다.");
+            console.error("저장 실패 상세:", error);
+            alert(`다운로드 실패: ${error.message || "권한 또는 네트워크 오류"}`);
+        } finally {
+            setIsLoading(false); // 로딩 상태 해제
         }
     };
 
