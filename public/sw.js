@@ -17,6 +17,9 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+    // [NEW] Ignore non-http requests (e.g. chrome-extension://)
+    if (!event.request.url.startsWith('http')) return;
+
     // Navigation requests (HTML) -> Network First
     if (event.request.mode === 'navigate') {
         event.respondWith(

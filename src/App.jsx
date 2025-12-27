@@ -34,7 +34,7 @@ const APP_VERSION = 'v2.2';
 */
 const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-const SCOPES = 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.install';
+const SCOPES = 'https://www.googleapis.com/auth/drive';
 
 console.log("[App Debug] API_KEY Loaded:", !!API_KEY);
 console.log("[App Debug] CLIENT_ID Loaded:", !!CLIENT_ID);
