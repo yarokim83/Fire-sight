@@ -26,59 +26,24 @@ function Reference({ subject, isAuthenticated, handleLogin, isOnline, onDataToss
     const fetchDriveFiles = async () => {
         if (!window.gapi || !window.gapi.client) return;
 
-        const cached = localStorage.getItem('fireSight_driveCache');
-        if (cached) {
-            const parsed = JSON.parse(cached);
-            const now = new Date().getTime();
-            if (now - parsed.timestamp < 3600 * 1000) {
-                setDriveFiles(parsed.files);
-                return;
-            }
-        }
-
         try {
-            let targetFolderId = FOLDER_ID;
-            // Handle Folder ID extraction if it's a URL
-            if (FOLDER_ID && FOLDER_ID.includes('drive.google.com')) {
-                const match = FOLDER_ID.match(/folders\/([-a-zA-Z0-9_]+)/);
-                if (match && match[1]) targetFolderId = match[1];
-            }
-
-            // Try to find folder by name if ID looks like a name
-            if (targetFolderId && targetFolderId.length < 25) {
-                try {
-                    const folderResponse = await window.gapi.client.drive.files.list({
-                        q: `mimeType = 'application/vnd.google-apps.folder' and name = '${targetFolderId}' and trashed = false`,
-                        fields: 'files(id, name)',
-                        pageSize: 1
-                    });
-                    if (folderResponse.result.files && folderResponse.result.files.length > 0) {
-                        targetFolderId = folderResponse.result.files[0].id;
-                    }
-                } catch (e) { }
-            }
-
-            const query = (targetFolderId && targetFolderId.length > 20)
-                ? `'${targetFolderId}' in parents and trashed = false`
-                : "trashed = false";
-
+            // 복잡한 ID 추출 로직 대신 직접 사용
+            const targetFolderId = import.meta.env.VITE_GOOGLE_DRIVE_FOLDER_ID;
+            
             const response = await window.gapi.client.drive.files.list({
                 'pageSize': 100,
                 'fields': "files(id, name, mimeType, webViewLink, iconLink)",
-                'q': query,
+                // 'trashed = false'를 유지하되 폴더 ID 쿼리를 단순화
+                'q': `'${targetFolderId}' in parents and trashed = false`,
             });
 
             const files = response.result.files || [];
-            console.log("Fetched Files:", files.length);
-
-            localStorage.setItem('fireSight_driveCache', JSON.stringify({
-                timestamp: new Date().getTime(),
-                files: files
-            }));
             setDriveFiles(files);
+            
+            // 캐시도 일단 초기화
+            localStorage.removeItem('fireSight_driveCache'); 
         } catch (err) {
             console.error("Drive Fetch Error:", err);
-            if (cached) setDriveFiles(JSON.parse(cached).files);
         }
     };
 
