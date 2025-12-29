@@ -103,13 +103,6 @@ function App() {
     }
   }, [isUnlocked]);
 
-  useEffect(() => {
-    // .env 값이 제대로 들어오는지 화면에 강제로 띄워봅니다.
-    if (isUnlocked) {
-        alert("폴더ID: " + import.meta.env.VITE_GOOGLE_DRIVE_FOLDER_ID);
-    }
-  }, [isUnlocked]);
-
   // Auto-Focus Mode Effect
   useEffect(() => {
     if (isExamMode) {
