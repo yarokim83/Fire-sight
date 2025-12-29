@@ -2,8 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
     Calculator, Activity, Settings, Gauge, Droplets, ArrowRight,
     CheckCircle2, AlertTriangle, Info, ChevronRight, Zap,
-    Ruler, Target, HelpCircle, BookOpen, RotateCcw, Play, Cable, Radio,
-    LayoutGrid, Wind, Bell, PenTool, Trash2
+    Target, HelpCircle, BookOpen, RotateCcw, Play, Cable, Radio,
+    LayoutGrid, Bell, PenTool, Trash2
 } from 'lucide-react';
 import ProblemSolver from './ProblemSolver';
 import { sprinklerProblems } from '../data/sprinklerData';
@@ -60,7 +60,7 @@ const TOPICS = [
         label: '가스/제연 설비',
         labelEn: 'Gas & Smoke Control',
         desc: '소화약제량 산정 및 제연 풍량 계산 등 특수 설비 계산을 실습합니다.',
-        icon: Wind,
+        icon: Settings, // Wind -> Settings
         color: 'slate',
         solved: 5,
         total: 15,
@@ -82,7 +82,7 @@ const TOPICS = [
         label: '기계/전기 기초',
         labelEn: 'Basic Engineering',
         desc: '단위 변환, 기초 유체역학, 옴의 법칙 등 공학 기초 문제를 다룹니다.',
-        icon: Ruler,
+        icon: Activity, // Ruler -> Activity
         color: 'emerald',
         solved: 3,
         total: 10,

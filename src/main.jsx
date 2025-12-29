@@ -1,9 +1,7 @@
-import { StrictMode, Component, lazy, Suspense } from 'react'
+import { StrictMode, Component } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-
-// Lazy load App to ensure main.jsx executes even if App fails to import
-const App = lazy(() => import('./App.jsx'));
+import App from './App.jsx'
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -38,19 +36,10 @@ class ErrorBoundary extends Component {
   }
 }
 
-// Add a simple loading spinner for Suspense
-const LoadingScreen = () => (
-  <div style={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0f172a', color: '#94a3b8' }}>
-    Loading System...
-  </div>
-);
-
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>
-      <Suspense fallback={<LoadingScreen />}>
-        <App />
-      </Suspense>
+      <App />
     </ErrorBoundary>
   </StrictMode>,
 )
