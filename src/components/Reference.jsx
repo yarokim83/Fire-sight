@@ -1,194 +1,316 @@
-import React, { useState, useEffect } from 'react';
-import { Download, CheckCircle, Trash2, FileText, WifiOff, ExternalLink, LogIn } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { FileText, WifiOff, ExternalLink, LogIn, Upload, RefreshCw, Trash2, BrainCircuit, Image as ImageIcon, CheckCircle, Search, X } from 'lucide-react';
 import { saveFile as savePDF, getAllSavedFiles, deleteFile as deletePDF, getFile as getPDF } from '../utils/db';
 
-const FOLDER_ID = import.meta.env.VITE_GOOGLE_DRIVE_FOLDER_ID;
-
-function Reference({ subject, isAuthenticated, handleLogin, isOnline, onDataToss }) {
+function Reference({ isAuthenticated, handleLogin, isOnline, onDataToss }) {
     const [driveFiles, setDriveFiles] = useState([]);
     const [savedFiles, setSavedFiles] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
+    
+    const [searchTerm, setSearchTerm] = useState('');
+    
+    // [추가] 디바운싱 타이머 (사용자가 타자를 칠 때마다 API 요청하지 않도록)
+    const searchTimeoutRef = useRef(null);
+    const fileInputRef = useRef(null);
 
     useEffect(() => {
-        const syncFiles = async () => {
-            setIsLoading(true);
-            const localFiles = await getAllSavedFiles();
-            setSavedFiles(localFiles);
-
-            if (isOnline && isAuthenticated) {
-                fetchDriveFiles();
-            }
-            setIsLoading(false);
-        };
         syncFiles();
     }, [isOnline, isAuthenticated]);
 
-    const fetchDriveFiles = async () => {
-        if (!window.gapi || !window.gapi.client) return;
+    // [변경] 검색어가 바뀌면 API를 다시 호출하여 '본문 검색' 수행
+    useEffect(() => {
+        if (!isOnline || !isAuthenticated) return;
 
+        // 타자 칠 때마다 요청 보내면 비효율적이므로 0.5초 딜레이
+        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+
+        searchTimeoutRef.current = setTimeout(() => {
+            fetchDriveFiles(searchTerm);
+        }, 500);
+
+    }, [searchTerm]);
+
+    const syncFiles = async () => {
+        setIsLoading(true);
+        const localFiles = await getAllSavedFiles();
+        setSavedFiles(localFiles);
+
+        if (isOnline && isAuthenticated) {
+            await fetchDriveFiles(); // 초기엔 전체 목록
+        }
+        setIsLoading(false);
+    };
+
+    // [핵심 기능] 본문 검색(fullText)이 적용된 구글 드라이브 요청 함수
+    const fetchDriveFiles = async (queryText = '') => {
+        if (!window.gapi || !window.gapi.client) return;
+        
         try {
-            // 복잡한 ID 추출 로직 대신 직접 사용
+            setIsLoading(true);
             const targetFolderId = import.meta.env.VITE_GOOGLE_DRIVE_FOLDER_ID;
             
+            // 1. 기본 쿼리: 해당 폴더 안에 있고 + 삭제되지 않은 파일
+            let query = `'${targetFolderId}' in parents and trashed = false`;
+
+            // 2. [검색 기능] 검색어가 있으면 'fullText' 조건 추가
+            // fullText contains '단어': 파일 이름, 설명, 그리고 **파일 내용**까지 검색함
+            if (queryText.trim()) {
+                // 구글 쿼리 문법에 맞춰서 특수문자 이스케이프 처리
+                const safeQuery = queryText.replace(/'/g, "\\'");
+                query += ` and fullText contains '${safeQuery}'`;
+            }
+
             const response = await window.gapi.client.drive.files.list({
                 'pageSize': 100,
                 'fields': "files(id, name, mimeType, webViewLink, iconLink)",
-                // 'trashed = false'를 유지하되 폴더 ID 쿼리를 단순화
-                'q': `'${targetFolderId}' in parents and trashed = false`,
+                'q': query,
             });
-
-            const files = response.result.files || [];
-            setDriveFiles(files);
             
-            // 캐시도 일단 초기화
-            localStorage.removeItem('fireSight_driveCache'); 
+            setDriveFiles(response.result.files || []);
         } catch (err) {
-            console.error("Drive Fetch Error:", err);
-        }
-    };
-
-    const handleDownload = async (file) => {
-        if (!isOnline) return alert("오프라인 상태에서는 다운로드할 수 없습니다.");
-
-        try {
-            setIsLoading(true); // 로딩 상태 시작
-
-            // 1. 구글 인증 토큰 가져오기
-            const token = window.gapi.client.getToken().access_token;
-
-            // 2. fetch API를 사용하여 파일의 실제 데이터(media)를 직접 호출
-            const response = await fetch(
-                `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`,
-                {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                }
-            );
-
-            if (!response.ok) throw new Error('파일 데이터를 가져오지 못했습니다.');
-
-            // 3. 응답 데이터를 Blob으로 변환
-            const blob = await response.blob();
-
-            // 4. IndexedDB 저장 (매개변수 구조를 db.js와 일치시킴)
-            await savePDF(file.id, { name: file.name }, blob);
-
-            // 5. 로컬 상태 업데이트 및 알림
-            const updatedLocal = await getAllSavedFiles();
-            setSavedFiles(updatedLocal);
-            alert(`[${file.name}] 오프라인 저장이 완료되었습니다!`);
-
-        } catch (error) {
-            console.error("저장 실패 상세:", error);
-            alert(`다운로드 실패: ${error.message || "권한 또는 네트워크 오류"}`);
+            console.error("본문 검색 실패:", err);
+            // 에러 시 기존 목록 유지하거나 빈 배열 처리
         } finally {
-            setIsLoading(false); // 로딩 상태 해제
+            setIsLoading(false);
         }
     };
 
+    // ... (handleFileUpload, handleViewFile 등 나머지 함수는 기존과 동일) ...
+    // ... (handleCreateQuiz, handleCreateVisual, handleDeleteFile 등 기존과 동일) ...
+
+    const handleFileUpload = async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        setIsLoading(true);
+        try {
+            const fileId = `local_${Date.now()}`;
+            await savePDF(fileId, { id: fileId, name: file.name }, file);
+            
+            // 저장 후 목록 갱신 (로컬 파일 다시 불러오기)
+            const localFiles = await getAllSavedFiles();
+            setSavedFiles(localFiles);
+            
+            alert(`[${file.name}] 저장 완료!`);
+        } catch (error) {
+            console.error("File upload failed:", error);
+            alert("저장 중 오류가 발생했습니다.");
+        } finally {
+            setIsLoading(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+    
     const handleViewFile = async (file) => {
-        const localData = await getPDF(file.id);
+        const isSaved = savedFiles.some(f => f.id === file.id);
 
-        if (localData) {
-            const blob = localData.blob || localData.data;
-            const fileURL = URL.createObjectURL(blob);
-            window.open(fileURL, '_blank');
-        } else if (isOnline) {
-            window.open(`https://drive.google.com/file/d/${file.id}/view`, '_blank');
+        if (isSaved) {
+            try {
+                const localData = await getPDF(file.id);
+                if (localData) {
+                    const blob = localData.blob || localData.data;
+                    const url = URL.createObjectURL(blob);
+                    window.open(url, '_blank');
+                    setTimeout(() => URL.revokeObjectURL(url), 60000);
+                } else {
+                    alert("파일 데이터를 찾을 수 없습니다.");
+                }
+            } catch (e) {
+                console.error("Error opening local file:", e);
+                alert("파일 열기 실패");
+            }
         } else {
-            alert("오프라인 상태이며 로컬에 저장되지 않은 파일입니다.");
+            if (file.webViewLink) {
+                window.open(file.webViewLink, '_blank');
+            } else {
+                alert("구글 드라이브 링크가 없습니다.");
+            }
         }
     };
+
+    const handleCreateQuiz = (file) => {
+        if (onDataToss) {
+            onDataToss({
+                type: 'quiz_generation',
+                source: 'reference',
+                title: file.name,
+                fileId: file.id
+            });
+            alert(`[${file.name}] 문제 생성을 시작합니다.`);
+        }
+    };
+
+    const handleCreateVisual = (file) => {
+        if (onDataToss) {
+            onDataToss({
+                type: 'visual_generation',
+                source: 'reference',
+                title: file.name,
+                fileId: file.id
+            });
+            alert(`[${file.name}] Visual 생성을 시작합니다.`);
+        }
+    };
+    
+    const handleDeleteFile = async (fileId) => {
+        if (window.confirm('기기에서 삭제하시겠습니까?')) {
+            await deletePDF(fileId);
+            // 삭제 후 목록 갱신
+            const localFiles = await getAllSavedFiles();
+            setSavedFiles(localFiles);
+        }
+    };
+
+    // [렌더링 로직 수정] 
+    // 로컬 파일은 '제목'으로만 필터링 (IndexedDB는 본문 검색 불가)
+    // 드라이브 파일은 API가 이미 필터링해서 줌
+    const filteredLocalFiles = savedFiles.filter(file => 
+        file.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    // 최종 표시 목록: (검색된 로컬 파일) + (본문 검색된 드라이브 파일) - (중복 제거)
+    const displayFiles = [
+        ...filteredLocalFiles, 
+        ...driveFiles.filter(d => !filteredLocalFiles.some(s => s.id === d.id))
+    ];
 
     return (
-        <div className="p-6 max-w-5xl mx-auto animate-in fade-in duration-300">
-            <div className="flex justify-between items-center mb-6">
+        <div className="p-4 md:p-6 max-w-6xl mx-auto animate-in fade-in duration-300">
+            {/* 헤더 영역 */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                 <h2 className="text-2xl font-bold flex items-center gap-2 text-white">
                     <FileText className="text-blue-500" />
-                    법령 및 기출 자료실
+                    Reference & Past Papers
                 </h2>
-                {!isOnline && (
-                    <span className="flex items-center gap-1 text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded-full border border-red-500/30 animate-pulse">
-                        <WifiOff size={12} /> 오프라인 모드
-                    </span>
-                )}
+
+                <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+                    {/* 검색창 */}
+                    <div className="relative group w-full md:w-64">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Search className="h-4 w-4 text-slate-500 group-focus-within:text-blue-500 transition-colors" />
+                        </div>
+                        <input
+                            type="text"
+                            placeholder="내용/제목 검색..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 p-2.5 transition-all outline-none"
+                        />
+                        {searchTerm && (
+                            <button 
+                                onClick={() => setSearchTerm('')}
+                                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-white"
+                            >
+                                <X size={14} />
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="flex gap-2 w-full md:w-auto">
+                        <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="application/pdf" className="hidden" />
+                        <button onClick={() => fileInputRef.current.click()} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-bold transition-all shadow-lg whitespace-nowrap">
+                            <Upload size={16} />
+                            <span>PDF 등록</span>
+                        </button>
+                    </div>
+                </div>
             </div>
 
-            {/* [구글 연동 복구] 로그인 권장 UI */}
+            {!isOnline && (
+                 <div className="flex items-center justify-end mb-4">
+                    <span className="flex items-center gap-1 text-xs bg-red-500/20 text-red-400 px-3 py-1 rounded-full border border-red-500/30 animate-pulse">
+                        <WifiOff size={12} /> Offline Mode
+                    </span>
+                </div>
+            )}
+
             {isOnline && !isAuthenticated && (
-                <div className="bg-blue-600/10 border border-blue-500/30 rounded-xl p-8 text-center mb-6">
-                    <div className="flex justify-center mb-4 text-blue-400">
-                        <LogIn size={48} />
-                    </div>
-                    <h3 className="text-lg font-bold text-white mb-2">Google Drive 연동 필요</h3>
-                    <p className="text-slate-400 mb-6 text-sm">구글 드라이브에 저장된 화재안전기준(NFTC)과 기출문제 목록을 가져오려면 로그인이 필요합니다.</p>
-                    <button
-                        onClick={handleLogin}
-                        className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-500/20"
-                    >
-                        구글 계정으로 연결하기
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 flex flex-col items-center justify-center text-center mb-6">
+                    <LogIn size={32} className="text-slate-500 mb-3" />
+                    <p className="text-slate-400 text-sm mb-4">구글 드라이브 파일을 보려면 연결하세요.</p>
+                    <button onClick={handleLogin} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
+                        계정 연결
                     </button>
                 </div>
             )}
 
-            {/* 파일 리스트 테이블 */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+            {/* 파일 목록 테이블 */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-xl min-h-[300px] max-h-[calc(100vh-220px)] overflow-y-auto relative">
+                {isLoading && (
+                    <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-20">
+                        <RefreshCw className="animate-spin text-blue-500" />
+                    </div>
+                )}
+                
                 <table className="w-full text-left text-sm text-slate-300">
-                    <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
+                    <thead className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur-sm text-slate-400 border-b border-slate-800 shadow-sm">
                         <tr>
-                            <th className="px-4 py-3">파일명</th>
-                            <th className="px-4 py-3">상태</th>
-                            <th className="px-4 py-3 text-right">관리</th>
+                            <th className="px-4 py-3 w-1/2">자료명</th>
+                            <th className="px-4 py-3 text-center">상태</th>
+                            <th className="px-4 py-3 text-right">기능</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800">
-                        {(isOnline && isAuthenticated ? driveFiles : savedFiles).map((file) => {
+                        {displayFiles.map((file) => {
+                            // Saved 여부 확인 (id 기준)
                             const isSaved = savedFiles.some(f => f.id === file.id);
-                            const fileName = file.name || file.meta?.name || 'Untitled';
-
+                            
                             return (
-                                <tr key={file.id} className="hover:bg-slate-800/50 transition-colors">
-                                    <td className="px-4 py-4 font-medium flex items-center gap-2">
-                                        <span className="truncate max-w-[300px] text-white">{fileName}</span>
+                                <tr key={file.id} className="hover:bg-slate-800/50 transition-colors group">
+                                    <td className="px-4 py-4 font-medium">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`p-2 rounded-lg ${isSaved ? 'bg-emerald-500/10 text-emerald-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                                                <FileText size={18} />
+                                            </div>
+                                            <span className="text-slate-200 group-hover:text-white transition-colors cursor-pointer" onClick={() => handleViewFile(file)}>
+                                                {file.name}
+                                            </span>
+                                        </div>
                                     </td>
-                                    <td className="px-4 py-4">
-                                        {isSaved ? (
-                                            <span className="flex items-center gap-1 text-emerald-400 text-xs font-bold bg-emerald-500/10 px-2 py-1 rounded-full w-fit">
-                                                <CheckCircle size={14} /> Offline Ready
+                                    <td className="px-4 py-4 text-center">
+                                         {isSaved ? (
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-full border border-emerald-500/20">
+                                                <CheckCircle size={10} /> Saved
                                             </span>
                                         ) : (
-                                            <span className="text-slate-500 text-xs bg-slate-800 px-2 py-1 rounded-full w-fit border border-slate-700">Cloud Only</span>
+                                            <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-800 px-2 py-1 rounded-full border border-slate-700">
+                                                Cloud
+                                            </span>
                                         )}
                                     </td>
                                     <td className="px-4 py-4 text-right">
-                                        <div className="flex justify-end gap-2">
-                                            <button
-                                                onClick={() => handleViewFile(file)}
-                                                className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors border border-slate-700"
-                                                title="보기"
+                                        <div className="flex justify-end gap-1">
+                                            <button 
+                                                onClick={() => handleViewFile(file)} 
+                                                className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors border border-slate-700" 
+                                                title={isSaved ? "열기" : "구글 드라이브 열기"}
                                             >
                                                 <ExternalLink size={16} />
                                             </button>
-                                            {isOnline && !isSaved && (
-                                                <button
-                                                    onClick={() => handleDownload(file)}
-                                                    className="p-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded-lg transition-colors border border-blue-500/30"
-                                                    title="오프라인 저장"
-                                                >
-                                                    <Download size={16} />
-                                                </button>
+                                            
+                                            {(isSaved || isOnline) && (
+                                                <>
+                                                    <button 
+                                                        onClick={() => handleCreateQuiz(file)} 
+                                                        className="p-2 bg-purple-900/20 hover:bg-purple-900/50 text-purple-400 rounded-lg transition-colors border border-purple-500/20" 
+                                                        title="문제 생성"
+                                                    >
+                                                        <BrainCircuit size={16} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleCreateVisual(file)} 
+                                                        className="p-2 bg-sky-900/20 hover:bg-sky-900/50 text-sky-400 rounded-lg transition-colors border border-sky-500/20" 
+                                                        title="Visual 생성"
+                                                    >
+                                                        <ImageIcon size={16} />
+                                                    </button>
+                                                </>
                                             )}
+
                                             {isSaved && (
-                                                <button
-                                                    onClick={async () => {
-                                                        if (window.confirm('정말 삭제하시겠습니까?')) {
-                                                            await deletePDF(file.id);
-                                                            const updatedLocal = await getAllSavedFiles();
-                                                            setSavedFiles(updatedLocal);
-                                                        }
-                                                    }}
-                                                    className="p-2 bg-red-600/10 hover:bg-red-600/20 text-red-500 rounded-lg transition-colors border border-red-500/30"
+                                                <button 
+                                                    onClick={() => handleDeleteFile(file.id)} 
+                                                    className="p-2 bg-red-900/20 hover:bg-red-900/40 text-red-400 rounded-lg transition-colors border border-red-500/20" 
                                                     title="삭제"
                                                 >
                                                     <Trash2 size={16} />
@@ -201,9 +323,21 @@ function Reference({ subject, isAuthenticated, handleLogin, isOnline, onDataToss
                         })}
                     </tbody>
                 </table>
-                {/* 데이터가 없을 때의 처리 */}
-                {(isOnline && isAuthenticated ? driveFiles : savedFiles).length === 0 && !isLoading && (
-                    <div className="p-12 text-center text-slate-500">표시할 자료가 없습니다.</div>
+
+                {!isLoading && displayFiles.length === 0 && (
+                    <div className="text-center py-16 text-slate-500">
+                        {searchTerm ? (
+                            <>
+                                <p className="text-lg">"{searchTerm}" 관련 자료를 찾지 못했습니다.</p>
+                                <p className="text-sm mt-2">구글 드라이브 파일의 내용은 검색될 수 있지만, 로컬 파일은 제목만 검색됩니다.</p>
+                            </>
+                        ) : (
+                            <>
+                                <p>표시할 파일이 없습니다.</p>
+                                <p className="text-sm mt-2">PDF를 직접 등록하거나 계정을 연결해 주세요.</p>
+                            </>
+                        )}
+                    </div>
                 )}
             </div>
         </div>

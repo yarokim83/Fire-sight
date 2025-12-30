@@ -34,6 +34,7 @@ const APP_VERSION = 'v2.2';
 */
 const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+// SCOPES를 하나로 명확히 하고 오타를 제거합니다.
 const SCOPES = 'https://www.googleapis.com/auth/drive';
 
 console.log("[App Debug] API_KEY Loaded:", !!API_KEY);
@@ -179,18 +180,27 @@ function App() {
       alert("API 설정 오류: .env 파일에 VITE_GOOGLE_API_KEY와 VITE_GOOGLE_CLIENT_ID가 설정되어 있는지 확인하세요.");
       return;
     }
-    if (tokenClient) tokenClient.requestAccessToken({ prompt: 'consent' });
+    if (tokenClient) tokenClient.requestAccessToken({ prompt: 'consent' }); // 'consent'를 써야 체크박스 창이 강제로 뜹니다.
   };
 
   const handleLogout = () => {
-    const token = window.gapi?.client?.getToken();
-    if (token) {
-      window.google.accounts.oauth2.revoke(token.access_token, () => {
+    try {
+      // 1. 구글 API 토큰 초기화
+      if (window.gapi?.client) {
         window.gapi.client.setToken('');
-        setIsAuthenticated(false);
-      });
-    } else {
+      }
+  
+      // 2. 앱 상태 초기화
       setIsAuthenticated(false);
+  
+      // 3. [핵심] 브라우저에 저장된 구글 세션 힌트 제거를 위해 페이지 강제 새로고침
+      // 이렇게 하면 다음 로그인 시 구글이 "어떤 계정으로 로그인할까요?"를 다시 묻습니다.
+      window.location.reload(); 
+    } catch (err) {
+      console.error("Logout Error:", err);
+      // 에러 발생 시에도 상태는 강제로 풉니다.
+      setIsAuthenticated(false);
+      window.location.reload();
     }
   };
 
@@ -328,7 +338,20 @@ function App() {
               {isExamMode ? <EyeOff size={14} /> : <Eye size={14} />}
               {isExamMode ? '집중 모드 ON' : '학습 모드'}
             </button>
-            <div className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-700'}`} title={isAuthenticated ? "Connected" : "Disconnected"}></div>
+            {/* 연결 상태 표시 점과 로그아웃 버튼 */}
+            <div className="flex items-center gap-3">
+              <div 
+                className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-700'}`} 
+                title={isAuthenticated ? "Connected" : "Disconnected"}
+              ></div>
+              
+              <button
+                onClick={handleLogout}
+                className="text-[10px] px-2 py-1 bg-red-600 hover:bg-red-500 text-white border border-red-400 rounded transition-all z-50"
+              >
+                강제 로그아웃(권한초기화)
+              </button>
+            </div>
           </div>
         </header>
       )}
@@ -344,7 +367,7 @@ function App() {
         </button>
       )}
       <div className="flex-1 flex overflow-hidden">
-        {!isExamMode && <Sidebar currentMode={mode} setMode={setMode} subject={subject} isCollapsed={isSidebarCollapsed} setIsCollapsed={setIsSidebarCollapsed} />}
+        {!isExamMode && <Sidebar currentMode={mode} setMode={setMode} subject={subject} isCollapsed={isSidebarCollapsed} setIsCollapsed={setIsSidebarCollapsed} isAuthenticated={isAuthenticated} handleLogout={handleLogout}/>}
         <main className={`flex-1 relative overflow-hidden ${theme.bg} transition-colors duration-500 ${isExamMode ? 'text-lg tracking-wide' : 'text-base'}`}>
           {renderContent()}
         </main>

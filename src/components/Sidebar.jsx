@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { BookOpen, PenTool, Book, ChevronLeft, ChevronRight, LayoutDashboard, Camera, RefreshCw, Zap, TableProperties } from 'lucide-react';
 
-export default function Sidebar({ currentMode, setMode, subject, isCollapsed, setIsCollapsed }) {
+export default function Sidebar({ currentMode, setMode, subject, isCollapsed, setIsCollapsed, isAuthenticated, handleLogout }) {
     // const [isCollapsed, setIsCollapsed] = useState(false); // Controlled by App.jsx now
 
     // Dynamic styles based on Subject Theme
@@ -75,9 +75,21 @@ export default function Sidebar({ currentMode, setMode, subject, isCollapsed, se
             </button>
 
             {/* Footer */}
-            <div className={`mt-auto pt-4 border-t border-slate-800 transition-opacity duration-200 ${isCollapsed ? 'opacity-0' : 'opacity-100'}`}>
-                <div className="text-[10px] text-slate-600 text-center font-mono">
-                    Fire-Sight Lite v2.0
+            <div className="mt-auto pt-4 border-t border-slate-800">
+                <div className={`flex items-center gap-3 ${isCollapsed ? 'justify-center' : 'px-3'}`}>
+                    <div 
+                        className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-700'}`} 
+                        title={isAuthenticated ? "Connected" : "Disconnected"}
+                    ></div>
+                    
+                    {!isCollapsed && isAuthenticated && (
+                        <button
+                            onClick={handleLogout}
+                            className="text-[10px] px-2 py-1 bg-slate-800 hover:bg-red-900/40 text-slate-400 hover:text-red-400 border border-slate-700 rounded transition-all"
+                        >
+                            로그아웃
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
