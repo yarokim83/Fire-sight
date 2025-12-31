@@ -32,11 +32,12 @@ export async function analyzeImage(file, mode) {
             ? '/api/gemini' 
             : 'https://generativelanguage.googleapis.com';
 
-        // [핵심 수정] 별명 대신 '정식 버전 번호(001)'를 사용합니다.
-        // 1.5-flash는 별명이라 가끔 404가 뜨지만, 001은 고정된 버전이라 무조건 인식합니다.
+        // [최종 성공 모델] Gemini 2.5 Flash 적용
+        // 2.5 모델은 멀티모달(이미지+텍스트) 분석 능력이 2.0보다 더욱 향상되었습니다.
         const url = `${baseUrl}/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
 
-        console.log(`🚀 요청 모델: gemini-1.5-flash-001 (Stable Version)`);
+        // [수정] 로그 메시지를 실제 사용하는 모델명(2.5)으로 맞춤
+        console.log(`🚀 요청 모델: gemini-2.5-flash (Latest Stable Version)`);
 
         const response = await fetch(url, {
             method: 'POST',

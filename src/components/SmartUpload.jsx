@@ -1,14 +1,16 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Upload, Camera, ScanLine, Save, X, Image as ImageIcon, CheckCircle2 } from 'lucide-react';
 import { analyzeImage } from '../utils/gemini';
-import { saveCustomProblem } from '../utils/db';
+import { db } from '../firebase'; // firebase 설정 파일 경로 확인
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function SmartUpload({ onSaveComplete, initialData }) {
     const [step, setStep] = useState(1);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [previewUrl, setPreviewUrl] = useState('');
     const [selectedFile, setSelectedFile] = useState(null);
+    // analyzedData는 AI 원본 보관용으로만 둡니다.
+    const [analyzedData, setAnalyzedData] = useState(null);
 
     const [formData, setFormData] = useState({
         type: 'workbook',
@@ -55,13 +57,16 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
 
         try {
             const result = await analyzeImage(file, formData.type);
+            setAnalyzedData(result); 
             
+            // AI 분석 결과를 formData(입력창)에 채워넣습니다.
             setFormData(prev => ({
                 ...prev,
                 title: result.title || '',
                 description: result.content || '',
                 modelAnswer: result.answer || '',
-                keywords: Array.isArray(result.tags) ? result.tags.join(', ') : '',
+                // 태그 배열을 문자열(#태그1, #태그2)로 변환해서 보여줌
+                keywords: Array.isArray(result.tags) ? result.tags.map(t => t.startsWith('#') ? t : `#${t}`).join(', ') : '',
                 ...(formData.type === 'workbook' && { answer: result.answer })
             }));
             setStep(3);
@@ -75,29 +80,52 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
         }
     };
 
+    // ✅ [핵심 수정] 저장 버튼 기능 수리
     const handleSave = async () => {
-        if (!formData.title) {
-            alert("제목을 입력해주세요.");
-            return;
-        }
-        
-        const newItem = {
-            id: `custom-${Date.now()}`,
-            ...formData,
-            imageUrl: previewUrl,
-            isCustom: true,
-            createdAt: new Date().toISOString()
+    if (!db) {
+        alert("🚨 긴급: firebase.js에서 db를 가져오지 못했습니다! 파일 연결을 확인하세요.");
+        return;
+    }
+      console.log("🖱️ 저장 버튼 클릭됨!"); 
+
+      // 1. 유효성 검사 (제목이나 내용이 비어있는지 formData 기준으로 확인)
+      if (!formData.title && !formData.description) {
+        alert("❌ 저장할 내용이 없습니다. 제목이나 내용을 입력해주세요.");
+        return;
+      }
+
+      try {
+        // 2. 태그 문자열을 다시 배열로 변환 (예: "#태그1, #태그2" -> ["태그1", "태그2"])
+        const tagArray = formData.keywords
+            .split(',')
+            .map(tag => tag.trim().replace(/^#/, '')) // # 제거 및 공백 제거
+            .filter(tag => tag.length > 0);
+
+        // 3. 서버로 보낼 데이터 포장 (화면에 입력된 formData 값을 사용해야 함!)
+        const saveData = {
+          title: formData.title || "제목 없음",
+          content: formData.description || "", // 화면의 '문제 지문'/'도면 설명'
+          answer: formData.modelAnswer || "",  // 화면의 '정답 및 해설'/'핵심 요약'
+          category: formData.category,         // 화면의 카테고리 선택값
+          tags: tagArray,
+          createdAt: serverTimestamp(),
+          type: 'workbook' // 컬렉션 필터링용
         };
 
-        try {
-            await saveCustomProblem(newItem);
-            alert('보관함에 저장되었습니다!');
-            if (onSaveComplete) onSaveComplete();
-            resetState();
-        } catch (error) {
-            console.error("Storage Error:", error);
-            alert("저장 중 오류가 발생했습니다.");
-        }
+        console.log("📦 서버로 전송할 데이터:", saveData);
+
+        // 4. Firebase 저장
+        await addDoc(collection(db, "workbook"), saveData);
+
+        // 5. 성공 처리
+        alert("✅ 보관함에 저장되었습니다!");
+        
+        if(onSaveComplete) onSaveComplete(); 
+
+      } catch (error) {
+        console.error("🔥 저장 실패:", error);
+        alert(`🚨 저장 실패 원인:\n${error.message}`);
+      }
     };
     
     const resetState = () => {
@@ -105,6 +133,7 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
         setPreviewUrl('');
         setSelectedFile(null);
         setIsAnalyzing(false);
+        setAnalyzedData(null);
         setFormData({
             type: 'workbook', category: 'water', title: '', description: '',
             modelAnswer: '', keywords: '', problemType: 'descriptive',
