@@ -38,7 +38,6 @@ const DashboardWidget = ({ problems, onReview }) => {
                 subjectCounts[subj] = (subjectCounts[subj] || 0) + 1;
             }
         });
-        // [과목명, 개수] 배열로 변환 후 정렬
         const sortedWeakSubjects = Object.entries(subjectCounts).sort((a,b) => b[1] - a[1]);
         const weakSubject = sortedWeakSubjects.length > 0 ? sortedWeakSubjects[0] : null;
 
@@ -107,7 +106,6 @@ const DashboardWidget = ({ problems, onReview }) => {
                         <p className="text-sm text-slate-400">
                             오답/복습 문제 <span className="text-amber-400 font-bold">{stats.weakSubject[1]}개</span>가 쌓여있습니다.
                         </p>
-                        {/* [수정] onClick 이벤트 연결 */}
                         <button 
                             onClick={() => onReview(stats.weakSubject[0])}
                             className="mt-3 text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-3 py-1.5 rounded-lg hover:bg-amber-500/20 transition-colors"
@@ -226,6 +224,10 @@ const Workbook = () => {
         return {
           id: doc.id,
           memo: data.memo || "", 
+          
+          // [수정] 이미지 데이터 추가 (ProblemSolver로 전달용)
+          imageUrl: data.imageUrl || null,
+
           title: String(data.title || "제목 없음"),
           question: String(data.content || data.description || "내용 없음"),
           modelAnswer: String(data.answer || data.modelAnswer || "해설 없음"),
@@ -282,7 +284,7 @@ const Workbook = () => {
   
   const subjects = Object.keys(processedProblems.grouped).sort();
 
-  // 문제 선택 핸들러 (일반 목록 클릭)
+  // 문제 선택 핸들러
   const handleSelectProblem = (item) => {
     const fullList = processedProblems.sortedList;
     const startIndex = fullList.findIndex(p => p.id === item.id);
@@ -294,9 +296,8 @@ const Workbook = () => {
     }
   };
 
-  // [신규] 취약 과목 바로 복습 핸들러
+  // 취약 과목 바로 복습 핸들러
   const handleQuickReview = (subject) => {
-    // 해당 과목이면서 복습이 필요한 문제만 필터링
     const reviewList = problems.filter(p => 
         (p.subject === subject) && 
         (p.studyCount > 0 && p.lastScore < 100)
@@ -304,7 +305,6 @@ const Workbook = () => {
 
     if (reviewList.length > 0) {
         alert(`${subject} 과목의 복습 문제 ${reviewList.length}개를 시작합니다!`);
-        // 정렬은 오답 많은 순으로
         reviewList.sort((a, b) => b.wrongCount - a.wrongCount);
         setSolveSession({ list: reviewList, startIndex: 0 });
     } else {
@@ -349,7 +349,6 @@ const Workbook = () => {
           <BookCopy size={24} /> 단권화 문제집
         </h2>
         
-        {/* 대시보드 위젯 (Review 핸들러 전달) */}
         <DashboardWidget problems={problems} onReview={handleQuickReview} />
       </header>
 

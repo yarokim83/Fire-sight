@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
     Check, AlertTriangle, PenLine, ArrowRight, RefreshCcw,
-    BookOpen, CheckCircle2, Trophy, StickyNote, Edit3, Save, X
+    BookOpen, CheckCircle2, Trophy, StickyNote, Edit3, Save, X, Image as ImageIcon, Trash2
 } from 'lucide-react';
-import { updateProblemResult, updateProblemInfo } from '../utils/db'; // [수정] updateProblemInfo 추가
+import { updateProblemResult, updateProblemInfo } from '../utils/db'; 
 
 export default function ProblemSolver({ topicId, onBack, onComplete, problems: initialProblems, startIndex = 0 }) {
     const problems = initialProblems || [];
@@ -12,20 +12,19 @@ export default function ProblemSolver({ topicId, onBack, onComplete, problems: i
     const [userAnswer, setUserAnswer] = useState('');
     const [showResult, setShowResult] = useState(false);
     
-    // [신규] UI 모드 상태
-    const [showMemo, setShowMemo] = useState(false); // 메모장 표시 여부
-    const [isEditMode, setIsEditMode] = useState(false); // 문제 수정 모드 여부
+    // UI 모드 상태
+    const [showMemo, setShowMemo] = useState(false); 
+    const [isEditMode, setIsEditMode] = useState(false); 
 
-    // 현재 문제 데이터 상태 (수정 가능하도록 state로 관리)
+    // 현재 문제 데이터 상태
     const [currentProblem, setCurrentProblem] = useState(null);
     const [memoText, setMemoText] = useState('');
 
-    // 문제 변경 시 데이터 동기화
     useEffect(() => {
         const p = problems[currentIndex];
         if (p) {
             setCurrentProblem(p);
-            setMemoText(p.memo || ''); // 기존 메모 불러오기
+            setMemoText(p.memo || ''); 
             setUserAnswer('');
             setShowResult(false);
             setShowMemo(false);
@@ -33,7 +32,6 @@ export default function ProblemSolver({ topicId, onBack, onComplete, problems: i
         }
     }, [currentIndex, problems]);
 
-    // 채점 로직
     const analyzeAnswer = () => {
         if (!currentProblem) return null;
 
@@ -53,7 +51,6 @@ export default function ProblemSolver({ topicId, onBack, onComplete, problems: i
 
     const result = showResult ? analyzeAnswer() : null;
 
-    // 제출 핸들러
     const handleSubmit = async () => {
         if (!userAnswer.trim()) {
             alert("답안을 입력해주세요!");
@@ -71,7 +68,6 @@ export default function ProblemSolver({ topicId, onBack, onComplete, problems: i
         }
     };
 
-    // 다음 문제 핸들러
     const handleNext = () => {
         if (currentIndex < problems.length - 1) {
             setCurrentIndex(prev => prev + 1);
@@ -81,11 +77,9 @@ export default function ProblemSolver({ topicId, onBack, onComplete, problems: i
         }
     };
 
-    // [신규] 메모 저장 핸들러
     const handleSaveMemo = async () => {
         try {
             await updateProblemInfo(currentProblem.id, { memo: memoText });
-            // 로컬 상태 업데이트 (리스트에 즉시 반영은 안 되지만 현재 화면엔 반영)
             problems[currentIndex].memo = memoText; 
             alert("메모가 저장되었습니다 📝");
         } catch (e) {
@@ -93,19 +87,18 @@ export default function ProblemSolver({ topicId, onBack, onComplete, problems: i
         }
     };
 
-    // [신규] 문제 내용 수정 저장 핸들러
     const handleSaveEdit = async () => {
         try {
-            // 키워드는 쉼표로 구분하여 배열로 변환
             const keywordArray = Array.isArray(currentProblem.keywords) 
                 ? currentProblem.keywords 
                 : String(currentProblem.keywords).split(',').map(k => k.trim());
 
             await updateProblemInfo(currentProblem.id, {
                 title: currentProblem.title,
-                content: currentProblem.question, // DB 필드명 주의 (content vs question)
+                content: currentProblem.question, 
                 answer: currentProblem.modelAnswer,
-                keywords: keywordArray
+                keywords: keywordArray,
+                imageUrl: currentProblem.imageUrl || null // 이미지 URL 저장
             });
             setIsEditMode(false);
             alert("문제가 수정되었습니다 ✅");
@@ -114,9 +107,26 @@ export default function ProblemSolver({ topicId, onBack, onComplete, problems: i
         }
     };
 
+    // [신규] 이미지 업로드 핸들러 (Base64 변환)
+    const handleImageUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // 용량 제한 (약 1MB)
+        if (file.size > 1024 * 1024) {
+            alert("이미지 크기는 1MB 이하여야 합니다.");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setCurrentProblem({ ...currentProblem, imageUrl: reader.result });
+        };
+        reader.readAsDataURL(file);
+    };
+
     if (!currentProblem) return <div className="p-10 text-center">문제를 불러올 수 없습니다.</div>;
 
-    // 하이라이팅 컴포넌트
     const HighlightedUserAnswer = () => {
         if (!result) return null;
         if (result.matched.length === 0) return <p className="text-slate-700 whitespace-pre-wrap">{userAnswer}</p>;
@@ -154,10 +164,10 @@ export default function ProblemSolver({ topicId, onBack, onComplete, problems: i
                 {/* 메인 컨텐츠 */}
                 <div className="w-full max-w-4xl mx-auto space-y-6 pb-20"> 
                     
-                    {/* 문제 카드 (수정 모드 지원) */}
+                    {/* 문제 카드 */}
                     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl relative overflow-hidden group">
                         
-                        {/* 우측 상단 툴바 */}
+                        {/* 툴바 */}
                         <div className="absolute top-4 right-4 flex gap-2 z-20">
                             <button 
                                 onClick={() => setShowMemo(!showMemo)} 
@@ -190,6 +200,17 @@ export default function ProblemSolver({ topicId, onBack, onComplete, problems: i
                                 </span>
                             </div>
 
+                            {/* [신규] 문제 이미지 표시 영역 */}
+                            {currentProblem.imageUrl && !isEditMode && (
+                                <div className="mb-6 rounded-xl overflow-hidden border border-slate-700 bg-black/50">
+                                    <img 
+                                        src={currentProblem.imageUrl} 
+                                        alt="Problem Reference" 
+                                        className="w-full max-h-80 object-contain mx-auto"
+                                    />
+                                </div>
+                            )}
+
                             {/* 문제 본문 (뷰어 vs 에디터) */}
                             {isEditMode ? (
                                 <div className="space-y-3 animate-in fade-in">
@@ -199,6 +220,30 @@ export default function ProblemSolver({ topicId, onBack, onComplete, problems: i
                                         className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white font-bold"
                                         placeholder="문제 제목"
                                     />
+                                    
+                                    {/* 이미지 업로더 */}
+                                    <div className="flex items-center gap-2">
+                                        <label className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded cursor-pointer border border-slate-700 text-sm transition-colors">
+                                            <ImageIcon size={16} />
+                                            {currentProblem.imageUrl ? "이미지 변경" : "이미지 추가"}
+                                            <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                                        </label>
+                                        {currentProblem.imageUrl && (
+                                            <button 
+                                                onClick={() => setCurrentProblem({...currentProblem, imageUrl: null})}
+                                                className="p-2 text-red-400 hover:bg-red-500/10 rounded"
+                                                title="이미지 삭제"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        )}
+                                    </div>
+                                    {currentProblem.imageUrl && (
+                                        <div className="w-20 h-20 rounded overflow-hidden border border-slate-700">
+                                            <img src={currentProblem.imageUrl} className="w-full h-full object-cover" alt="Preview" />
+                                        </div>
+                                    )}
+
                                     <textarea 
                                         value={currentProblem.question}
                                         onChange={(e) => setCurrentProblem({...currentProblem, question: e.target.value})}
@@ -220,7 +265,7 @@ export default function ProblemSolver({ topicId, onBack, onComplete, problems: i
                         </div>
                     </div>
 
-                    {/* [신규] 나만의 메모장 (토글형) */}
+                    {/* 나만의 메모장 */}
                     {showMemo && (
                         <div className="bg-amber-100 rounded-xl border-l-4 border-amber-400 p-4 shadow-lg animate-in slide-in-from-top-2 text-slate-800 relative">
                             <h3 className="font-bold text-amber-800 mb-2 flex items-center gap-2">
