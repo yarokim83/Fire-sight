@@ -96,3 +96,48 @@ export const getAllCustomProblems = async () => {
     const db = await initDB();
     return db.getAll(CUSTOM_PROBLEM_STORE);
 };
+/* src/utils/db.js 에 추가 */
+import { doc, updateDoc, increment, serverTimestamp } from "firebase/firestore";
+import { db } from "../firebase"; // firebase 설정 파일 경로 확인
+
+// 문제 풀이 결과 업데이트 함수
+export const updateProblemResult = async (problemId, score) => {
+  try {
+    const problemRef = doc(db, "workbook", problemId);
+    
+    // 100점이면 'MASTERED', 아니면 'REVIEW'로 상태 변경
+    // (이미 MASTERED였던 것도 점수가 떨어지면 다시 REVIEW가 될 수 있음)
+    const newStatus = score >= 100 ? 'MASTERED' : 'REVIEW';
+
+    await updateDoc(problemRef, {
+      studyCount: increment(1),      // 학습 횟수 +1
+      lastScore: score,              // 최근 점수 갱신
+      status: newStatus,             // 상태 갱신
+      wrongCount: score < 100 ? increment(1) : increment(0), // 100점 아니면 오답 횟수 증가
+      lastStudiedAt: serverTimestamp() // 학습 시간 기록
+    });
+    
+    console.log(`✅ 결과 저장 완료: ${score}점, 상태: ${newStatus}`);
+  } catch (error) {
+    console.error("❌ 결과 저장 실패:", error);
+    throw error;
+  }
+};
+/* src/utils/db.js 에 추가 */
+
+// 문제의 메모(암기팁) 및 내용 수정 함수
+export const updateProblemInfo = async (problemId, data) => {
+    try {
+      const problemRef = doc(db, "workbook", problemId);
+      
+      // data 객체에는 { memo: "...", question: "...", keywords: [...] } 등이 포함될 수 있음
+      await updateDoc(problemRef, {
+        ...data,
+        updatedAt: serverTimestamp()
+      });
+      console.log(`✅ 문제 정보 업데이트 완료: ${problemId}`);
+    } catch (error) {
+      console.error("❌ 문제 정보 업데이트 실패:", error);
+      throw error;
+    }
+  };

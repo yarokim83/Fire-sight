@@ -10,12 +10,124 @@ import {
   Search,
   BookCopy,
   Folder,
-  Loader2
+  Loader2,
+  PieChart,
+  AlertCircle
 } from 'lucide-react';
 import ProblemSolver from './ProblemSolver';
 
 // ----------------------------------------------------------------------
-// 1. 헬퍼 컴포넌트: 아코디언 섹션 (SubjectAccordion)
+// 1. 대시보드 위젯 컴포넌트
+// ----------------------------------------------------------------------
+const DashboardWidget = ({ problems, onReview }) => {
+    const stats = useMemo(() => {
+        const total = problems.length;
+        if (total === 0) return null;
+
+        const mastered = problems.filter(p => p.lastScore === 100).length;
+        const review = problems.filter(p => p.studyCount > 0 && p.lastScore < 100).length;
+        const fresh = total - mastered - review;
+        
+        const masteryRate = Math.round((mastered / total) * 100);
+
+        // 취약 과목 분석
+        const subjectCounts = {};
+        problems.forEach(p => {
+            if (p.studyCount > 0 && p.lastScore < 100) {
+                const subj = p.subject || "기타";
+                subjectCounts[subj] = (subjectCounts[subj] || 0) + 1;
+            }
+        });
+        // [과목명, 개수] 배열로 변환 후 정렬
+        const sortedWeakSubjects = Object.entries(subjectCounts).sort((a,b) => b[1] - a[1]);
+        const weakSubject = sortedWeakSubjects.length > 0 ? sortedWeakSubjects[0] : null;
+
+        return { total, mastered, review, fresh, masteryRate, weakSubject };
+    }, [problems]);
+
+    if (!stats) return null;
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {/* 정복률 카드 */}
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 p-5 rounded-2xl flex items-center justify-between relative overflow-hidden group">
+                <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                    <PieChart size={80} />
+                </div>
+                <div>
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Total Mastery</p>
+                    <h3 className="text-3xl font-extrabold text-white">
+                        {stats.masteryRate}<span className="text-sm text-slate-500 ml-1">%</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-2">
+                        {stats.mastered} / {stats.total} 문제 정복 완료
+                    </p>
+                </div>
+                <div className="relative w-16 h-16 flex items-center justify-center">
+                    <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                        <path className="text-slate-700" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
+                        <path className="text-blue-500 transition-all duration-1000 ease-out" strokeDasharray={`${stats.masteryRate}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
+                    </svg>
+                </div>
+            </div>
+
+            {/* 학습 상태 요약 */}
+            <div className="bg-slate-800/50 border border-slate-700 p-5 rounded-2xl flex flex-col justify-center gap-3">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                        <span className="text-sm text-slate-300">완료 (Mastered)</span>
+                    </div>
+                    <span className="text-emerald-400 font-bold">{stats.mastered}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+                        <span className="text-sm text-slate-300">복습 필요 (Review)</span>
+                    </div>
+                    <span className="text-amber-400 font-bold">{stats.review}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-slate-500"></div>
+                        <span className="text-sm text-slate-300">미학습 (New)</span>
+                    </div>
+                    <span className="text-white font-bold">{stats.fresh}</span>
+                </div>
+            </div>
+
+            {/* 집중 공략 포인트 */}
+            <div className="bg-slate-800/50 border border-slate-700 p-5 rounded-2xl relative overflow-hidden">
+                <p className="text-amber-500 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1">
+                    <AlertCircle size={12} /> 집중 공략 필요
+                </p>
+                {stats.weakSubject ? (
+                    <div>
+                        <h4 className="text-lg font-bold text-white line-clamp-1 mb-1">{stats.weakSubject[0]}</h4>
+                        <p className="text-sm text-slate-400">
+                            오답/복습 문제 <span className="text-amber-400 font-bold">{stats.weakSubject[1]}개</span>가 쌓여있습니다.
+                        </p>
+                        {/* [수정] onClick 이벤트 연결 */}
+                        <button 
+                            onClick={() => onReview(stats.weakSubject[0])}
+                            className="mt-3 text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-3 py-1.5 rounded-lg hover:bg-amber-500/20 transition-colors"
+                        >
+                            바로 복습하기 →
+                        </button>
+                    </div>
+                ) : (
+                    <div className="h-full flex flex-col justify-center">
+                        <p className="text-slate-300 font-medium">현재 취약한 과목이 없습니다.</p>
+                        <p className="text-xs text-slate-500">완벽합니다! 새로운 문제에 도전하세요.</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// ----------------------------------------------------------------------
+// 2. 헬퍼 컴포넌트: 아코디언 섹션
 // ----------------------------------------------------------------------
 const SubjectAccordion = ({ subject, problems, onSelectProblem, initialExpanded = false }) => {
   const [isExpanded, setIsExpanded] = useState(initialExpanded);
@@ -31,7 +143,6 @@ const SubjectAccordion = ({ subject, problems, onSelectProblem, initialExpanded 
 
   return (
     <div className="border border-slate-700/50 bg-slate-800/20 rounded-xl overflow-hidden transition-all duration-300">
-      {/* 아코디언 헤더 */}
       <button 
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full flex items-center justify-between p-4 bg-slate-800 hover:bg-slate-700/50 transition-colors"
@@ -53,27 +164,20 @@ const SubjectAccordion = ({ subject, problems, onSelectProblem, initialExpanded 
         </div>
       </button>
 
-      {/* 아코디언 내용 (문제 리스트) */}
       {isExpanded && (
         <div className="p-2 space-y-1 animate-in fade-in duration-300 slide-in-from-top-2">
           {problems.map(item => (
             <div 
               key={item.id}
-              // [디버깅] 클릭 이벤트가 발생하는지 확인
-              onClick={() => {
-                  console.log("클릭됨:", item.title); // 콘솔 확인용
-                  onSelectProblem(item);
-              }}
+              onClick={() => onSelectProblem(item)}
               className="flex items-center gap-4 p-3 rounded-lg cursor-pointer hover:bg-blue-500/10 group transition-colors"
             >
               {getStatusIcon(item)}
-              
               <div className="flex-grow min-w-0">
                 <div className="truncate text-slate-300 group-hover:text-blue-300 text-sm font-medium">
                     {item.title}
                 </div>
               </div>
-              
               <div className="flex items-center gap-4 text-xs text-slate-500 font-mono shrink-0">
                 <span>{item.studyCount}회</span>
                 <span className={item.lastScore === 100 ? 'text-emerald-500' : (item.studyCount > 0 ? 'text-amber-500' : 'text-slate-500')}>
@@ -88,20 +192,19 @@ const SubjectAccordion = ({ subject, problems, onSelectProblem, initialExpanded 
   );
 };
 
-
 // ----------------------------------------------------------------------
-// 2. 메인 컴포넌트: Workbook
+// 3. 메인 컴포넌트: Workbook
 // ----------------------------------------------------------------------
 const Workbook = () => {
   const [problems, setProblems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedProblem, setSelectedProblem] = useState(null);
+  const [solveSession, setSolveSession] = useState(null);
 
-  // UI 상태 관리
   const [activeTab, setActiveTab] = useState('ALL'); 
   const [sortBy, setSortBy] = useState('latest');    
   const [searchTerm, setSearchTerm] = useState('');
 
+  // 데이터 로드
   useEffect(() => {
     const q = query(collection(db, "workbook"));
     console.log("📡 단권화 워크북 구독 시작...");
@@ -109,22 +212,32 @@ const Workbook = () => {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const problemList = snapshot.docs.map(doc => {
         const data = doc.data();
+        let gradingKeywords = [];
+        const answerText = String(data.answer || data.modelAnswer || "");
+        
+        if (data.keywords && Array.isArray(data.keywords) && data.keywords.length > 0) {
+            gradingKeywords = data.keywords;
+        } else if (answerText.length > 0 && answerText !== "해설 없음") {
+            gradingKeywords = answerText.split(/[\s,().]+/).filter(word => word && word.length >= 2).slice(0, 15);
+        } else {
+            gradingKeywords = Array.isArray(data.tags) && data.tags.length > 0 ? data.tags : ["키워드 없음"];
+        }
+
         return {
           id: doc.id,
-          title: String(data.title || "제목 없음"), // [안전장치] 문자열 강제 변환
-          content: String(data.content || data.description || "내용 없음"),
-          answer: String(data.answer || data.modelAnswer || "해설 없음"),
+          memo: data.memo || "", 
+          title: String(data.title || "제목 없음"),
+          question: String(data.content || data.description || "내용 없음"),
+          modelAnswer: String(data.answer || data.modelAnswer || "해설 없음"),
+          keywords: gradingKeywords,
           tags: Array.isArray(data.tags) ? data.tags : [],
           subject: data.subject || (Array.isArray(data.tags) && data.tags.length > 0 ? data.tags[0] : '기타 과목'),
           studyCount: Number(data.studyCount || 0),
           wrongCount: Number(data.wrongCount || 0),
           lastScore: Number(data.lastScore || 0),
-          status: data.status || 'NEW', 
           createdAt: data.createdAt?.toDate() || new Date(0),
         };
       });
-
-      console.log(`📦 단권화 데이터 ${problemList.length}개 로드 완료`);
       setProblems(problemList);
       setLoading(false);
     }, (err) => {
@@ -135,7 +248,7 @@ const Workbook = () => {
     return () => unsubscribe();
   }, []);
 
-  // 데이터 가공
+  // 필터링된 데이터 계산
   const processedProblems = useMemo(() => {
     let filtered = problems;
 
@@ -156,48 +269,46 @@ const Workbook = () => {
     else if (sortBy === 'latest') sorted.sort((a, b) => b.createdAt - a.createdAt);
     else if (sortBy === 'random') sorted.sort(() => Math.random() - 0.5);
     
-    return sorted.reduce((acc, problem) => {
+    const grouped = sorted.reduce((acc, problem) => {
       const subject = problem.subject || '기타 과목';
       if (!acc[subject]) acc[subject] = [];
       acc[subject].push(problem);
       return acc;
     }, {});
 
+    return { grouped, sortedList: sorted };
+
   }, [problems, activeTab, sortBy, searchTerm]);
   
-  const subjects = Object.keys(processedProblems).sort();
+  const subjects = Object.keys(processedProblems.grouped).sort();
 
-  // [핵심 수정] 안전장치가 추가된 문제 선택 핸들러
+  // 문제 선택 핸들러 (일반 목록 클릭)
   const handleSelectProblem = (item) => {
-    console.log("👆 핸들러 진입:", item.title); // 디버깅용
+    const fullList = processedProblems.sortedList;
+    const startIndex = fullList.findIndex(p => p.id === item.id);
 
-    try {
-        let gradingKeywords = [];
-        const answerText = String(item.answer || ""); // 에러 방지용
+    if (startIndex !== -1) {
+        setSolveSession({ list: fullList, startIndex: startIndex });
+    } else {
+        alert("문제 데이터를 찾을 수 없습니다.");
+    }
+  };
 
-        if (item.keywords && Array.isArray(item.keywords) && item.keywords.length > 0) {
-            gradingKeywords = item.keywords;
-        } else if (answerText.length > 0 && answerText !== "해설 없음") {
-            // split 에러 방지를 위해 answerText가 문자열인지 확인 후 실행
-            gradingKeywords = answerText.split(/[\s,().]+/).filter(word => word && word.length >= 2).slice(0, 15);
-        } else {
-            gradingKeywords = item.tags && item.tags.length > 0 ? item.tags : ["키워드 없음"];
-        }
+  // [신규] 취약 과목 바로 복습 핸들러
+  const handleQuickReview = (subject) => {
+    // 해당 과목이면서 복습이 필요한 문제만 필터링
+    const reviewList = problems.filter(p => 
+        (p.subject === subject) && 
+        (p.studyCount > 0 && p.lastScore < 100)
+    );
 
-        const problemData = {
-          id: item.id,
-          question: item.content,
-          modelAnswer: item.answer,
-          keywords: gradingKeywords,
-          title: item.title
-        };
-        
-        console.log("✅ 문제 데이터 세팅 완료:", problemData);
-        setSelectedProblem(problemData); // 화면 전환
-
-    } catch (error) {
-        console.error("❌ 문제 선택 중 에러:", error);
-        alert("문제를 여는 중 오류가 발생했습니다: " + error.message);
+    if (reviewList.length > 0) {
+        alert(`${subject} 과목의 복습 문제 ${reviewList.length}개를 시작합니다!`);
+        // 정렬은 오답 많은 순으로
+        reviewList.sort((a, b) => b.wrongCount - a.wrongCount);
+        setSolveSession({ list: reviewList, startIndex: 0 });
+    } else {
+        alert("복습할 문제가 없습니다.");
     }
   };
 
@@ -208,15 +319,15 @@ const Workbook = () => {
     </div>
   );
 
-  if (selectedProblem) {
+  if (solveSession) {
     return (
       <ProblemSolver 
-        problems={[selectedProblem]}
-        topicId={selectedProblem.id}
-        onBack={() => setSelectedProblem(null)}
+        problems={solveSession.list}       
+        startIndex={solveSession.startIndex} 
+        onBack={() => setSolveSession(null)}
         onComplete={() => {
-            alert("학습이 완료되었습니다.");
-            setSelectedProblem(null);
+            alert("선택한 모든 문제 학습을 완료했습니다! 🎉");
+            setSolveSession(null);
         }}
       />
     );
@@ -237,9 +348,9 @@ const Workbook = () => {
         <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-3">
           <BookCopy size={24} /> 단권화 문제집
         </h2>
-        <p className="text-slate-400 text-sm">
-          전체 {problems.length}개 문제 중, 현재 필터에 {subjects.reduce((acc, key) => acc + processedProblems[key].length, 0)}개가 표시됩니다.
-        </p>
+        
+        {/* 대시보드 위젯 (Review 핸들러 전달) */}
+        <DashboardWidget problems={problems} onReview={handleQuickReview} />
       </header>
 
       <div className="flex bg-slate-800 rounded-t-lg border-b border-slate-700">
@@ -277,7 +388,7 @@ const Workbook = () => {
             <SubjectAccordion
               key={subject}
               subject={subject}
-              problems={processedProblems[subject]}
+              problems={processedProblems.grouped[subject]}
               onSelectProblem={handleSelectProblem}
               initialExpanded={index === 0} 
             />
