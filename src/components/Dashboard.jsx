@@ -1,170 +1,268 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     Clock, PenTool, BarChart, Calendar, ChevronRight,
-    Flame, Target, ArrowRight, Zap, Droplets, BookOpen, AlertCircle
+    Flame, Target, ArrowRight, Zap, Droplets, BookOpen, 
+    AlertCircle, Layers, Wind, DoorOpen, Plus
 } from 'lucide-react';
+import { db } from '../firebase'; 
+import { collection, query, onSnapshot, orderBy, limit } from 'firebase/firestore';
+
+// 과목별 아이콘 및 색상 매핑
+const SUBJECT_CONFIG = {
+    '수계': { color: 'bg-blue-500', icon: Droplets },
+    '가스계': { color: 'bg-emerald-500', icon: Wind },
+    '경보': { color: 'bg-amber-500', icon: Zap },
+    '피난': { color: 'bg-lime-500', icon: DoorOpen },
+    '소화활동': { color: 'bg-red-500', icon: Flame },
+    '공통': { color: 'bg-purple-500', icon: Layers },
+    '기타': { color: 'bg-slate-500', icon: Layers }
+};
 
 export default function Dashboard({ setMode, subject, dDay }) {
-    // Mock Data for Recent Activity
-    const recentActivities = [
-        { id: 1, type: 'pdf', title: '소방시설법 시행령 별표 4', desc: '어제 읽음', icon: BookOpen, color: 'text-blue-400', bg: 'bg-blue-500/10', mode: 'reference' },
-        { id: 2, type: 'workbook', title: '스프링클러 수리계산', desc: '방금 전', icon: Droplets, color: 'text-cyan-400', bg: 'bg-cyan-500/10', mode: 'workbook' },
-    ];
+    const [loading, setLoading] = useState(true);
+    
+    // [Real Data State]
+    const [stats, setStats] = useState({
+        totalProblems: 0,
+        mastered: 0,
+        reviewNeeded: 0,
+        studyTime: "0h 0m" // 학습 시간은 별도 기록이 없으므로 추후 구현 (현재는 placeholder)
+    });
 
-    // Handler for navigation
-    const handleNavigate = (targetMode) => {
-        if (targetMode) setMode(targetMode);
-    };
+    const [subjectProgress, setSubjectProgress] = useState([]);
+    const [recentActivities, setRecentActivities] = useState([]);
+
+    // [Data Fetching]
+    useEffect(() => {
+        // 최근 등록순으로 정렬하여 데이터 구독
+        const q = query(collection(db, "workbook"), orderBy("createdAt", "desc"));
+        
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const problems = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+
+            // 1. 전체 통계 계산
+            const total = problems.length;
+            const mastered = problems.filter(p => p.lastScore === 100).length;
+            const review = problems.filter(p => (p.studyCount || 0) > 0 && p.lastScore < 100).length;
+
+            setStats(prev => ({
+                ...prev,
+                totalProblems: total,
+                mastered: mastered,
+                reviewNeeded: review
+            }));
+
+            // 2. 과목별 숙련도 계산
+            const subjMap = {};
+            // 초기화
+            Object.keys(SUBJECT_CONFIG).forEach(key => {
+                if(key !== '기타') subjMap[key] = { total: 0, mastered: 0 };
+            });
+
+            problems.forEach(p => {
+                // 카테고리 매핑 (DB필드명: category 또는 subject 호환)
+                const cat = p.category || p.subject || '기타';
+                const safeCat = SUBJECT_CONFIG[cat] ? cat : '기타';
+                
+                if (!subjMap[safeCat]) subjMap[safeCat] = { total: 0, mastered: 0 };
+                
+                subjMap[safeCat].total += 1;
+                if (p.lastScore === 100) subjMap[safeCat].mastered += 1;
+            });
+
+            const processedProgress = Object.entries(subjMap)
+                .map(([name, data]) => {
+                    const score = data.total === 0 ? 0 : Math.round((data.mastered / data.total) * 100);
+                    return {
+                        name,
+                        score,
+                        total: data.total, // 표시용
+                        ...SUBJECT_CONFIG[name]
+                    };
+                })
+                .filter(item => item.total > 0) // 데이터가 있는 과목만 표시
+                .sort((a, b) => b.total - a.total); // 문제 많은 순 정렬
+
+            setSubjectProgress(processedProgress);
+
+            // 3. 최근 활동 (상위 3개)
+            const recent = problems.slice(0, 3).map(p => {
+                // 날짜 포맷팅 (방금 전, 1시간 전 등)
+                const date = p.createdAt?.toDate ? p.createdAt.toDate() : new Date();
+                const now = new Date();
+                const diffMin = Math.floor((now - date) / 60000);
+                let timeStr = "";
+                if (diffMin < 1) timeStr = "방금 전";
+                else if (diffMin < 60) timeStr = `${diffMin}분 전`;
+                else if (diffMin < 1440) timeStr = `${Math.floor(diffMin / 60)}시간 전`;
+                else timeStr = `${Math.floor(diffMin / 1440)}일 전`;
+
+                return {
+                    id: p.id,
+                    type: 'workbook',
+                    title: p.title || "제목 없는 문제",
+                    desc: (p.studyCount > 0) ? `최근 점수: ${p.lastScore}점` : "새로 등록된 문제",
+                    date: timeStr,
+                    icon: (p.studyCount > 0) ? PenTool : Plus,
+                    color: (p.studyCount > 0) ? (p.lastScore === 100 ? 'text-emerald-400' : 'text-amber-400') : 'text-blue-400',
+                    bg: (p.studyCount > 0) ? (p.lastScore === 100 ? 'bg-emerald-500/10' : 'bg-amber-500/10') : 'bg-blue-500/10'
+                };
+            });
+            setRecentActivities(recent);
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    // 명언 랜덤 표시
+    const quotes = [
+        "포기하지 않는 한 실패는 없다.",
+        "오늘 걷지 않으면 내일은 뛰어야 한다.",
+        "소방시설관리사, 당신의 이름 뒤에 붙을 자격.",
+        "가장 큰 위험은 위험 없는 삶을 사는 것이다.",
+        "기적은 노력의 또 다른 이름이다."
+    ];
+    const [quote, setQuote] = useState(quotes[0]);
+
+    useEffect(() => {
+        setQuote(quotes[Math.floor(Math.random() * quotes.length)]);
+    }, []);
 
     return (
-        <div className="flex flex-col h-full bg-slate-950 text-white p-6 overflow-y-auto w-full animate-in fade-in duration-500">
-            {/* 1. Hero Section */}
-            <div className="relative rounded-3xl bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 shadow-2xl p-8 mb-8 group">
-                {/* Background Pattern */}
-                <div className="absolute top-0 right-0 w-64 h-64 bg-red-500/10 rounded-full blur-3xl -mr-16 -mt-16 transition-all group-hover:bg-red-500/20 duration-700"></div>
-
-                <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                    <div className="relative z-20">
+        <div className="flex flex-col h-full bg-slate-950 text-white p-4 md:p-6 overflow-y-auto w-full animate-in fade-in duration-500 pb-20">
+            
+            {/* 1. Hero Section & D-Day */}
+            <div className="relative rounded-3xl bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-indigo-500/20 shadow-2xl p-5 md:p-6 mb-6 overflow-hidden group">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -mr-16 -mt-16 group-hover:bg-indigo-500/20 transition-all duration-700"></div>
+                
+                <div className="relative z-10 flex flex-col md:flex-row justify-between items-start gap-4 md:items-center">
+                    <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
-                            <span className="px-3 py-1 rounded-full bg-red-500/20 text-red-400 text-xs font-bold border border-red-500/30 flex items-center gap-1">
-                                <Flame size={12} /> 2027 소방시설관리사
+                            <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-bold border border-indigo-500/30 flex items-center gap-1">
+                                <Target size={10} /> Target 2027
                             </span>
-                            <span className="text-slate-500 text-xs">2027.09.04 (Expected)</span>
+                            <span className="text-slate-500 text-[10px] font-mono">{new Date().toLocaleDateString()}</span>
                         </div>
-                        <h1 className="text-2xl md:text-4xl lg:text-5xl font-black text-white mb-2 leading-tight tracking-tight">
-                            {dDay || "D-Day"}
+                        <h1 className="text-2xl md:text-4xl font-black text-white mb-2 tracking-tight">
+                            {dDay} <span className="text-base md:text-xl font-normal text-slate-400">Left</span>
                         </h1>
-                        <p className="text-slate-400 font-light text-lg">
-                            남은 시간은 충분합니다. <strong className="text-slate-200">오늘도 한 걸음 더.</strong>
+                        <p className="text-slate-300 font-light text-xs md:text-sm max-w-lg italic opacity-80">
+                            "{quote}"
                         </p>
                     </div>
 
-                    <div className="bg-slate-950/50 backdrop-blur-sm p-4 rounded-xl border border-slate-700 flex items-center gap-4 min-w-[300px]">
-                        <div className="p-3 bg-slate-800 rounded-lg">
-                            <Target size={24} className="text-emerald-400" />
+                    {/* Stats Compact View */}
+                    <div className="flex gap-3 w-full md:w-auto">
+                        <div className="flex-1 md:flex-none bg-slate-950/50 backdrop-blur-md p-3 rounded-xl border border-slate-700 text-center min-w-[80px]">
+                            <div className="text-xl font-bold text-white">
+                                {loading ? '-' : stats.mastered}
+                            </div>
+                            <div className="text-[10px] text-slate-400">Mastered</div>
                         </div>
-                        <div>
-                            <p className="text-xs text-slate-500 mb-1">Current Goal</p>
-                            <p className="font-bold text-slate-200">NFTC 화재안전기술기준 완전 정복</p>
+                        <div className="flex-1 md:flex-none bg-red-950/50 backdrop-blur-md p-3 rounded-xl border border-red-900/50 text-center min-w-[80px]">
+                            <div className="text-xl font-bold text-red-400">
+                                {loading ? '-' : stats.reviewNeeded}
+                            </div>
+                            <div className="text-[10px] text-red-300/70">Review</div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* 2. Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                {/* Study Time */}
-                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between hover:bg-slate-800/50 transition-colors group">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-slate-500 text-sm mb-1">Today's Focus</p>
-                            <h3 className="text-2xl font-bold text-white group-hover:text-blue-400 transition-colors">2h 30m</h3>
-                        </div>
-                        <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400">
-                            <Clock size={20} />
-                        </div>
+            {/* 2. Main Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Subject Mastery Chart */}
+                <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-3xl p-6">
+                    <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                            <BarChart size={18} className="text-slate-400" /> 과목별 숙련도
+                        </h3>
+                        <span className="text-xs text-slate-500 cursor-pointer hover:text-white">
+                            Total: {stats.totalProblems} 문제
+                        </span>
                     </div>
-                    <div className="mt-4 overflow-hidden h-1.5 bg-slate-800 rounded-full">
-                        <div className="h-full w-2/3 bg-blue-500"></div>
-                    </div>
-                </div>
-
-                {/* Problems Solved */}
-                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between hover:bg-slate-800/50 transition-colors group">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-slate-500 text-sm mb-1">Problems Solved</p>
-                            <h3 className="text-2xl font-bold text-white group-hover:text-emerald-400 transition-colors">12 <span className="text-sm font-normal text-slate-500">/ 20</span></h3>
-                        </div>
-                        <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-400">
-                            <PenTool size={20} />
-                        </div>
-                    </div>
-                    <div className="mt-4 flex gap-1">
-                        {[...Array(5)].map((_, i) => (
-                            <div key={i} className={`h-1.5 flex-1 rounded-full ${i < 3 ? 'bg-emerald-500' : 'bg-slate-800'}`}></div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Total Progress */}
-                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between hover:bg-slate-800/50 transition-colors group">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-slate-500 text-sm mb-1">Total Progress</p>
-                            <h3 className="text-2xl font-bold text-white group-hover:text-purple-400 transition-colors">34%</h3>
-                        </div>
-                        <div className="p-2 bg-purple-500/10 rounded-lg text-purple-400">
-                            <BarChart size={20} />
-                        </div>
-                    </div>
-                    <div className="mt-4 text-xs text-slate-500 flex justify-between">
-                        <span>Yesterday 32%</span>
-                        <span className="text-purple-400">+2%</span>
-                    </div>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* 3. Recent Activity (2 Cols) */}
-                <div className="lg:col-span-2 space-y-4">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
-                        <Calendar size={18} className="text-slate-400" /> 최근 학습 활동
-                    </h3>
-                    <div className="grid grid-cols-1 gap-4">
-                        {recentActivities.map((activity) => {
-                            const Icon = activity.icon;
-                            return (
-                                <button
-                                    key={activity.id}
-                                    onClick={() => handleNavigate(activity.mode)}
-                                    className="flex items-center gap-4 bg-slate-900 border border-slate-800 p-4 rounded-xl hover:bg-slate-800 transition-all hover:scale-[1.01] group text-left w-full"
-                                >
-                                    <div className={`p-3 rounded-xl ${activity.bg} ${activity.color}`}>
-                                        <Icon size={24} />
+                    
+                    {loading ? (
+                        <div className="text-center py-10 text-slate-600 animate-pulse">데이터 분석 중...</div>
+                    ) : subjectProgress.length > 0 ? (
+                        <div className="space-y-5">
+                            {subjectProgress.map((subj) => (
+                                <div key={subj.name} className="group">
+                                    <div className="flex justify-between text-sm mb-2">
+                                        <span className="text-slate-300 font-bold flex items-center gap-2">
+                                            <subj.icon size={14} className="text-slate-500" /> {subj.name}
+                                        </span>
+                                        <span className="text-slate-400 font-mono text-xs">
+                                            {subj.score}% <span className="text-slate-600">({subj.total}문항)</span>
+                                        </span>
                                     </div>
-                                    <div className="flex-1">
-                                        <h4 className="font-bold text-slate-200 group-hover:text-white transition-colors">{activity.title}</h4>
-                                        <p className="text-sm text-slate-500">{activity.desc}</p>
+                                    <div className="h-2.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                                        <div 
+                                            className={`h-full ${subj.color} rounded-full transition-all duration-1000 ease-out group-hover:brightness-110`} 
+                                            style={{ width: `${subj.score}%` }}
+                                        ></div>
                                     </div>
-                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400">
-                                        <ChevronRight size={20} />
-                                    </div>
-                                </button>
-                            );
-                        })}
-                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-center py-10 text-slate-500 border border-dashed border-slate-800 rounded-xl">
+                            <p className="text-sm">아직 등록된 문제가 없습니다.</p>
+                            <button onClick={()=>setMode('smart-upload')} className="text-blue-400 text-xs mt-2 hover:underline">문제 등록하러 가기</button>
+                        </div>
+                    )}
                 </div>
 
-                {/* 4. Daily Mission (1 Col) */}
-                <div>
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
-                        <Zap size={18} className="text-amber-400" /> 오늘의 추천 퀘스트
-                    </h3>
-                    <div className="bg-gradient-to-b from-amber-500/10 to-slate-900 border border-amber-500/20 rounded-2xl p-6 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-4 opacity-10">
-                            <Target size={100} />
+                {/* Recent & Daily Mission */}
+                <div className="flex flex-col gap-6">
+                    {/* Daily Mission Card */}
+                    <div className="bg-gradient-to-b from-amber-500/10 to-slate-900 border border-amber-500/20 rounded-3xl p-6 relative overflow-hidden group cursor-pointer hover:border-amber-500/40 transition-all" onClick={() => setMode('workbook')}>
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <Zap size={80} />
                         </div>
-
-                        <div className="relative z-10 flex flex-col h-full">
-                            <span className="inline-block px-2 py-1 bg-amber-500/20 text-amber-500 text-[10px] font-bold rounded mb-3 w-fit border border-amber-500/20">
-                                DAILY MISSION
-                            </span>
-                            <h4 className="text-xl font-bold text-white mb-2 leading-tight">
-                                가스계 소화설비<br />
-                                <span className="text-amber-400">약제량 계산</span> 마스터하기
-                            </h4>
-                            <p className="text-sm text-slate-400 mb-6 flex-1">
-                                최근 출제 빈도가 높아진 할론/CO2 약제량 공식을 완벽하게 정리해보세요.
-                            </p>
-
-                            <button
-                                onClick={() => handleNavigate('workbook')}
-                                className="w-full bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold py-3 rounded-xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2"
-                            >
-                                도전하기 <ArrowRight size={18} />
-                            </button>
+                        <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20 mb-2 inline-block">
+                            DAILY QUEST
+                        </span>
+                        <h4 className="text-lg font-bold text-white mb-1">오늘의 학습 시작</h4>
+                        <p className="text-xs text-slate-400 mb-4">랜덤 문제를 통해 실력을 점검하세요.</p>
+                        <div className="flex items-center gap-2 text-xs font-bold text-amber-400 group-hover:translate-x-1 transition-transform">
+                            Start Mission <ArrowRight size={14} />
                         </div>
+                    </div>
+
+                    {/* Recent Activity List */}
+                    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 flex-1">
+                        <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
+                            <Clock size={18} className="text-slate-400" /> 최근 활동
+                        </h3>
+                        {loading ? (
+                            <div className="text-center py-4 text-slate-700 text-xs">Loading...</div>
+                        ) : recentActivities.length > 0 ? (
+                            <div className="space-y-4">
+                                {recentActivities.map((activity) => (
+                                    <div key={activity.id} className="flex items-center gap-3 group cursor-pointer" onClick={() => setMode('workbook')}>
+                                        <div className={`p-2.5 rounded-xl ${activity.bg} ${activity.color} shrink-0`}>
+                                            <activity.icon size={18} />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-bold text-slate-200 truncate group-hover:text-white transition-colors">{activity.title}</p>
+                                            <div className="flex justify-between items-center mt-0.5">
+                                                <p className="text-xs text-slate-500">{activity.desc}</p>
+                                                <p className="text-[10px] text-slate-600 font-mono">{activity.date}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-8 text-slate-600 text-xs">
+                                최근 활동 내역이 없습니다.
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

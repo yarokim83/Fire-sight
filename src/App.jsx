@@ -24,41 +24,38 @@ const THEME_CONFIG = {
   '공통': { bg: 'bg-slate-900', border: 'border-purple-500/30', activeTab: 'bg-purple-600 text-white shadow-purple-500/20', text: 'text-purple-400', icon: Layers }
 };
 
-const APP_VERSION = 'v2.7 (Direct Fetch)';
+const APP_VERSION = 'v2.8';
 const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-const SCOPES = 'https://www.googleapis.com/auth/drive.readonly'; // 읽기 전용 권한으로 충분
+const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
 
 function App() {
-  // [NEW] 액세스 토큰 상태 추가
-  const [accessToken, setAccessToken] = useState(null);
-  
-  // 디버그 로그 상태
-  const [debugLogs, setDebugLogs] = useState([]);
-  const addLog = (msg, data = null) => {
-      const time = new Date().toLocaleTimeString();
-      const logMsg = data ? `${msg} ${JSON.stringify(data, null, 2)}` : msg;
-      setDebugLogs(prev => [`[${time}] ${logMsg}`, ...prev]);
-      console.log(`[DEBUG] ${logMsg}`);
-  };
+  // --- 상태 관리 ---
+  const [accessToken, setAccessToken] = useState(null); // 핵심: 액세스 토큰
 
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const pinInputRef = useRef(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
+  // 네비게이션 & 뷰
   const [mode, setMode] = useState('dashboard');
   const [subject, setSubject] = useState('수계'); 
   const [isExamMode, setIsExamMode] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // 데이터 흐름
   const [activeStrategy, setActiveStrategy] = useState(null);
   const [sharedData, setSharedData] = useState(null);
 
+  // 인증 상태
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [tokenClient, setTokenClient] = useState(null);
 
+  // 테마 적용
   const theme = THEME_CONFIG[subject] || THEME_CONFIG['수계'];
 
+  // D-Day 계산
   const dDay = useMemo(() => {
     const targetDate = new Date('2027-09-04');
     const today = new Date();
@@ -66,6 +63,8 @@ function App() {
     const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
     return days > 0 ? `D-${days}` : 'D-Day';
   }, []);
+
+  // --- Effects ---
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -89,49 +88,45 @@ function App() {
     else setIsSidebarCollapsed(false);
   }, [isExamMode]);
 
-  // Google Auth 초기화 (GIS만 사용, GAPI Load 제거)
+  // Google Auth 초기화 (GIS Only - Clean Version)
   useEffect(() => {
     const loadGis = () => {
       if (window.google?.accounts?.oauth2) {
           initGis();
           return;
       }
-      addLog("GIS 스크립트 로드 중...");
       const script = document.createElement('script');
       script.src = 'https://accounts.google.com/gsi/client';
       script.onload = () => initGis();
-      script.onerror = (e) => addLog("GIS 스크립트 로드 실패", e);
+      script.onerror = (e) => console.error("GIS Load Failed", e);
       document.body.appendChild(script);
     };
 
     const initGis = () => {
-      if (!CLIENT_ID) {
-          addLog("CLIENT_ID가 없습니다.");
-          return;
-      }
+      if (!CLIENT_ID) return;
       try {
         const client = window.google.accounts.oauth2.initTokenClient({
           client_id: CLIENT_ID, scope: SCOPES,
           callback: (resp) => {
             if (resp.error) {
-                addLog("🔴 Token Client Error:", resp);
+                console.error("Token Client Error:", resp);
                 return;
             }
-            // [CRITICAL] 토큰 저장!
             if (resp.access_token) {
-                addLog("로그인 성공! Access Token 획득 완료");
+                console.log("Login Success: Token Acquired");
                 setAccessToken(resp.access_token);
                 setIsAuthenticated(true);
             }
           },
         });
         setTokenClient(client);
-        addLog("GIS 초기화 완료 (로그인 준비됨)");
-      } catch (err) { addLog("GIS Init Error", err); }
+      } catch (err) { console.error("GIS Init Error", err); }
     };
 
     loadGis();
   }, []);
+
+  // --- Handlers ---
 
   const handlePinSubmit = (e) => {
     e.preventDefault();
@@ -148,15 +143,12 @@ function App() {
   };
 
   const handleLogin = () => {
-    addLog("로그인 시도...");
     if (!CLIENT_ID) {
-      alert("API 설정 오류");
+      alert("API 설정 오류: .env 파일을 확인하세요.");
       return;
     }
     if (tokenClient) {
         tokenClient.requestAccessToken({ prompt: 'consent' });
-    } else {
-        addLog("🔴 tokenClient가 아직 준비되지 않음");
     }
   };
 
@@ -165,6 +157,8 @@ function App() {
     setIsAuthenticated(false);
     window.location.reload();
   };
+
+  // --- Render ---
 
   if (!isUnlocked) {
       return (
@@ -176,10 +170,15 @@ function App() {
                     </div>
                 </div>
                 <h2 className="text-2xl font-bold text-center mb-2">Fire-Sight Access</h2>
+                <p className="text-slate-400 text-center text-sm mb-8">보안을 위해 접속 암호를 입력해주세요.</p>
                 <form onSubmit={handlePinSubmit} className="space-y-4">
                     <input type="password" value={pinInput} onChange={e=>setPinInput(e.target.value)} className="w-full text-center text-3xl tracking-[1em] font-bold bg-slate-800 border border-slate-700 rounded-xl py-4 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none" placeholder="PIN" autoFocus />
                     <button type="submit" className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-500/20 active:scale-95">Unlock System</button>
                 </form>
+                <div className="text-center mt-6">
+                    <p className="text-slate-600 text-xs">Fire Safety Manager Prep 2027</p>
+                    <p className="text-slate-500 text-[10px] mt-1 font-mono">{APP_VERSION}</p>
+                </div>
             </div>
         </div>
       );
@@ -194,7 +193,7 @@ function App() {
         return <Reference
           subject={subject}
           isAuthenticated={isAuthenticated}
-          accessToken={accessToken} // [NEW] 토큰 전달
+          accessToken={accessToken}
           handleLogin={handleLogin}
           handleLogout={handleLogout}
           onDataToss={handleDataToss}
@@ -209,54 +208,65 @@ function App() {
 
   return (
     <div className={`flex flex-col h-screen w-screen overflow-hidden ${theme.bg} text-white font-sans transition-all duration-500 ${isExamMode ? 'brightness-90 saturate-50' : ''}`}>
-      {!isExamMode && (
-        <header className={`h-14 border-b ${theme.border} bg-slate-900/80 backdrop-blur-md flex items-center justify-between px-4 z-50 shrink-0`}>
-            <div className="flex-1 flex items-center gap-2" onClick={() => setMode('dashboard')}>
-                <Flame size={18} className="text-orange-500" />
-                <span className="font-bold">{APP_VERSION}</span>
-            </div>
-            
-            {/* NFTC 탭 */}
-            <div className="flex-1 flex justify-center mx-4 overflow-x-auto no-scrollbar">
-                <div className="flex bg-slate-950/50 p-1 rounded-xl border border-slate-800 gap-1 min-w-max">
-                {Object.keys(THEME_CONFIG).map((key) => {
-                    const Conf = THEME_CONFIG[key];
-                    const Icon = Conf.icon;
-                    return (
-                    <button key={key} onClick={() => setSubject(key)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all duration-300 ${subject === key ? Conf.activeTab : 'text-slate-500 hover:text-slate-300'}`}>
-                        <Icon size={14} /> <span className="hidden md:inline">{key}</span>
-                    </button>
-                    );
-                })}
-                </div>
-            </div>
+      {!isOnline && (
+        <div className="bg-red-600 text-white text-center py-1 text-xs animate-pulse">
+          오프라인 모드: 로컬에 저장된 데이터만 열람 가능합니다.
+        </div>
+      )}
 
-            <div className="flex-1 flex justify-end items-center gap-3">
-                 <button onClick={() => setIsExamMode(!isExamMode)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">
-                    {isExamMode ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-                <div className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-emerald-500' : 'bg-slate-700'}`} />
-                <button onClick={handleLogout} className="text-xs bg-red-600 px-2 py-1 rounded">Logout</button>
+      {!isExamMode && (
+        <header className={`h-14 border-b ${theme.border} bg-slate-900/80 backdrop-blur-md flex items-center justify-between px-4 z-50 shadow-sm shrink-0 transition-colors duration-500`}>
+          <div className="flex-1 flex items-center gap-2 cursor-pointer min-w-max" onClick={() => setMode('dashboard')}>
+            <div className="p-1.5 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg shadow-lg">
+              <Flame size={18} className="text-white fill-white" />
             </div>
+            <h1 className="text-lg font-bold tracking-tight text-white">
+              Fire-Sight <span className="font-light text-slate-400">Lite</span>
+              <span className="ml-2 text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 border border-slate-700 hidden md:inline">{APP_VERSION}</span>
+            </h1>
+          </div>
+
+          <div className="flex-1 flex justify-center mx-4 overflow-x-auto no-scrollbar">
+            <div className="flex bg-slate-950/50 p-1 rounded-xl border border-slate-800 gap-1 min-w-max">
+              {Object.keys(THEME_CONFIG).map((key) => {
+                const Conf = THEME_CONFIG[key];
+                const Icon = Conf.icon;
+                return (
+                  <button key={key} onClick={() => setSubject(key)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all duration-300 ${subject === key ? Conf.activeTab : 'text-slate-500 hover:text-slate-300'}`}>
+                    <Icon size={14} /> <span className="hidden md:inline">{key}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex-1 flex justify-end items-center gap-4 min-w-fit whitespace-nowrap">
+            <div className="hidden lg:flex flex-col items-end group relative cursor-help">
+              <div className="text-xs font-mono text-slate-500">2027 Inspection Practice</div>
+              <div className="text-[10px] font-bold text-blue-400 transition-colors">Target: {dDay}</div>
+            </div>
+            <button onClick={() => setIsExamMode(!isExamMode)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isExamMode ? 'bg-red-500/10 text-red-500 border-red-500/50 animate-pulse' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}`}>
+              {isExamMode ? <EyeOff size={14} /> : <Eye size={14} />}
+              <span className="hidden sm:inline">{isExamMode ? '집중 모드' : '학습 모드'}</span>
+            </button>
+            <div className="flex items-center gap-3">
+              <div className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-700'}`} title={isAuthenticated ? "Connected" : "Disconnected"}></div>
+              <button onClick={handleLogout} className="text-[10px] px-2 py-1 bg-red-600 hover:bg-red-500 text-white border border-red-400 rounded transition-all z-50">LogOut</button>
+            </div>
+          </div>
         </header>
       )}
 
-      <div className="flex-1 flex overflow-hidden relative">
+      {isExamMode && (
+        <button onClick={() => setIsExamMode(false)} className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-full shadow-lg shadow-red-600/30 transition-all active:scale-95 animate-in slide-in-from-top-10 fade-in duration-300">
+          <EyeOff size={18} /> <span>Exit Exam Mode</span>
+        </button>
+      )}
+      <div className="flex-1 flex overflow-hidden">
         {!isExamMode && <Sidebar currentMode={mode} setMode={setMode} subject={subject} isCollapsed={isSidebarCollapsed} setIsCollapsed={setIsSidebarCollapsed} isAuthenticated={isAuthenticated} handleLogout={handleLogout}/>}
-        <main className={`flex-1 relative overflow-hidden ${theme.bg} transition-colors duration-500`}>
+        <main className={`flex-1 relative overflow-hidden ${theme.bg} transition-colors duration-500 ${isExamMode ? 'text-lg tracking-wide' : 'text-base'}`}>
           {renderContent()}
         </main>
-        
-        {/* 디버그 로그 창 유지 */}
-        {!isExamMode && (
-            <div className="absolute bottom-0 left-0 right-0 h-32 bg-black/90 border-t border-slate-700 z-[100] overflow-y-auto p-2 font-mono text-xs text-green-400 opacity-50 hover:opacity-100 transition-opacity">
-                <div className="flex justify-between items-center mb-1">
-                    <span className="font-bold">🖥️ System Logs</span>
-                    <button onClick={() => setDebugLogs([])} className="text-slate-400 hover:text-white">Clear</button>
-                </div>
-                {debugLogs.map((log, i) => <div key={i} className="whitespace-pre-wrap mb-0.5">{log}</div>)}
-            </div>
-        )}
       </div>
     </div>
   );
