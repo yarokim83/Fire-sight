@@ -1,53 +1,108 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { 
+  Flame, Droplets, Zap, Eye, EyeOff, 
+  Wind, DoorOpen, Layers 
+} from 'lucide-react'
+
+// 컴포넌트 임포트
 import SmartUpload from './components/SmartUpload'
 import Sidebar from './components/Sidebar'
 import VisualLearning from './components/VisualLearning'
-import Workbook from './components/Workbook'
+import Workbook from './components/Workbook' // 리팩토링된 폴더(index.jsx)를 자동으로 찾습니다.
 import Reference from './components/Reference'
 import Dashboard from './components/Dashboard'
 import StrategyView from './components/StrategyView'
 import StudyManager from './components/StudyManager'
-import { Flame, Droplets, Zap, Eye, EyeOff, TableProperties, WifiOff } from 'lucide-react'
 
-// [CRITICAL FIX] Define THEME_CONFIG globally
+// [NFTC 6대 분류 테마 설정]
 const THEME_CONFIG = {
-  mechanical: {
-    bg: 'bg-slate-900',
-    border: 'border-blue-500/30',
-    activeTab: 'bg-blue-600 text-white shadow-blue-500/20',
-    text: 'text-blue-400'
+  '수계': { 
+    bg: 'bg-slate-900', 
+    border: 'border-blue-500/30', 
+    activeTab: 'bg-blue-600 text-white shadow-blue-500/20', 
+    text: 'text-blue-400',
+    icon: Droplets 
   },
-  electrical: {
-    bg: 'bg-zinc-900',
-    border: 'border-orange-500/30',
-    activeTab: 'bg-orange-600 text-white shadow-orange-500/20',
-    text: 'text-orange-400'
+  '가스계': { 
+    bg: 'bg-zinc-900', 
+    border: 'border-emerald-500/30', 
+    activeTab: 'bg-emerald-600 text-white shadow-emerald-500/20', 
+    text: 'text-emerald-400',
+    icon: Wind 
+  },
+  '경보': { 
+    bg: 'bg-slate-950', 
+    border: 'border-amber-500/30', 
+    activeTab: 'bg-amber-600 text-white shadow-amber-500/20', 
+    text: 'text-amber-400',
+    icon: Zap 
+  },
+  '피난': { 
+    bg: 'bg-stone-900', 
+    border: 'border-lime-500/30', 
+    activeTab: 'bg-lime-600 text-white shadow-lime-500/20', 
+    text: 'text-lime-400',
+    icon: DoorOpen 
+  },
+  '소화활동': { 
+    bg: 'bg-neutral-900', 
+    border: 'border-red-500/30', 
+    activeTab: 'bg-red-600 text-white shadow-red-500/20', 
+    text: 'text-red-400',
+    icon: Flame 
+  },
+  '공통': { 
+    bg: 'bg-slate-900', 
+    border: 'border-purple-500/30', 
+    activeTab: 'bg-purple-600 text-white shadow-purple-500/20', 
+    text: 'text-purple-400',
+    icon: Layers 
   }
 };
 
-const APP_VERSION = 'v2.2';
-
-/* 
-  [SECURITY NOTE] 
-  실제 배포 시에는 .env 파일 등을 사용하여 환경변수로 관리하세요.
-  .env.example is provided for reference.
-*/
+const APP_VERSION = 'v2.4 (Refactored)';
 const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-// SCOPES를 하나로 명확히 하고 오타를 제거합니다.
 const SCOPES = 'https://www.googleapis.com/auth/drive';
 
-console.log("[App Debug] API_KEY Loaded:", !!API_KEY);
-console.log("[App Debug] CLIENT_ID Loaded:", !!CLIENT_ID);
-
 function App() {
-  // [NEW] Privacy Layer State
+  // --- 상태 관리 ---
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const pinInputRef = useRef(null);
-
-  // [NEW] Offline Detection
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  // 네비게이션 & 뷰
+  const [mode, setMode] = useState('dashboard');
+  const [subject, setSubject] = useState('수계'); // 기본값: 수계
+  const [isExamMode, setIsExamMode] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // 데이터 흐름
+  const [activeStrategy, setActiveStrategy] = useState(null);
+  const [sharedData, setSharedData] = useState(null);
+
+  // 인증 (Google)
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [tokenClient, setTokenClient] = useState(null);
+  const [gapiInited, setGapiInited] = useState(false);
+  const [gisInited, setGisInited] = useState(false);
+
+  // 테마 적용 (Fallback 포함)
+  const theme = THEME_CONFIG[subject] || THEME_CONFIG['수계'];
+
+  // D-Day 계산
+  const dDay = useMemo(() => {
+    const targetDate = new Date('2027-09-04');
+    const today = new Date();
+    const diff = targetDate - today;
+    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+    return days > 0 ? `D-${days}` : 'D-Day';
+  }, []);
+
+  // --- Effects ---
+
+  // 온라인 상태 감지
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -59,77 +114,30 @@ function App() {
     };
   }, []);
 
-  // Navigation & View State
-  const [mode, setMode] = useState('dashboard');
-  const [subject, setSubject] = useState('mechanical');
-  const [isExamMode, setIsExamMode] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-
-  // Strategic Data Flow
-  const [activeStrategy, setActiveStrategy] = useState(null);
-  const [sharedData, setSharedData] = useState(null);
-
-  // Auth States
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [tokenClient, setTokenClient] = useState(null);
-  const [gapiInited, setGapiInited] = useState(false);
-  const [gisInited, setGisInited] = useState(false);
-
-  // Theme Config usage inside component
-  const theme = THEME_CONFIG[subject];
-
-  // D-Day Calculation
-  const dDay = useMemo(() => {
-    const targetDate = new Date('2027-09-04');
-    const today = new Date();
-    const diff = targetDate - today;
-    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-    return days > 0 ? `D-${days}` : 'D-Day';
-  }, []);
-
-  // PIN Verification Handler
-  const handlePinSubmit = (e) => {
-    e.preventDefault();
-    if (pinInput === '2027') {
-      setIsUnlocked(true);
-    } else {
-      alert("암호가 일치하지 않습니다.");
-      setPinInput('');
-    }
-  };
-
+  // PIN 포커스
   useEffect(() => {
     if (!isUnlocked && pinInputRef.current) {
       pinInputRef.current.focus();
     }
   }, [isUnlocked]);
 
-  // Auto-Focus Mode Effect
+  // 시험 모드 시 사이드바 자동 접기
   useEffect(() => {
-    if (isExamMode) {
-      setIsSidebarCollapsed(true);
-    } else {
-      setIsSidebarCollapsed(false);
-    }
+    if (isExamMode) setIsSidebarCollapsed(true);
+    else setIsSidebarCollapsed(false);
   }, [isExamMode]);
 
-  // Data Toss Handler
-  const handleDataToss = (data) => {
-    setSharedData(data);
-    setMode('smart-upload');
-  };
-
-  // Google Auth Init Effects
+  // Google Auth 초기화
   useEffect(() => {
     const loadGapi = () => {
       if (window.gapi || document.querySelector('script[src="https://apis.google.com/js/api.js"]')) {
         if (window.gapi) initGapi();
         return;
       }
-      const gapiScript = document.createElement('script');
-      gapiScript.src = 'https://apis.google.com/js/api.js';
-      gapiScript.onload = () => initGapi();
-      document.body.appendChild(gapiScript);
+      const script = document.createElement('script');
+      script.src = 'https://apis.google.com/js/api.js';
+      script.onload = () => initGapi();
+      document.body.appendChild(script);
     };
 
     const initGapi = () => {
@@ -150,10 +158,10 @@ function App() {
         if (window.google?.accounts?.oauth2) initGis();
         return;
       }
-      const gisScript = document.createElement('script');
-      gisScript.src = 'https://accounts.google.com/gsi/client';
-      gisScript.onload = () => initGis();
-      document.body.appendChild(gisScript);
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.onload = () => initGis();
+      document.body.appendChild(script);
     };
 
     const initGis = () => {
@@ -175,34 +183,42 @@ function App() {
     loadGis();
   }, []);
 
+  // --- Handlers ---
+
+  const handlePinSubmit = (e) => {
+    e.preventDefault();
+    if (pinInput === '2027') setIsUnlocked(true);
+    else {
+      alert("암호가 일치하지 않습니다.");
+      setPinInput('');
+    }
+  };
+
+  const handleDataToss = (data) => {
+    setSharedData(data);
+    setMode('smart-upload');
+  };
+
   const handleLogin = () => {
     if (!API_KEY || !CLIENT_ID) {
-      alert("API 설정 오류: .env 파일에 VITE_GOOGLE_API_KEY와 VITE_GOOGLE_CLIENT_ID가 설정되어 있는지 확인하세요.");
+      alert("API 설정 오류: .env 파일을 확인하세요.");
       return;
     }
-    if (tokenClient) tokenClient.requestAccessToken({ prompt: 'consent' }); // 'consent'를 써야 체크박스 창이 강제로 뜹니다.
+    if (tokenClient) tokenClient.requestAccessToken({ prompt: 'consent' });
   };
 
   const handleLogout = () => {
     try {
-      // 1. 구글 API 토큰 초기화
-      if (window.gapi?.client) {
-        window.gapi.client.setToken('');
-      }
-  
-      // 2. 앱 상태 초기화
+      if (window.gapi?.client) window.gapi.client.setToken('');
       setIsAuthenticated(false);
-  
-      // 3. [핵심] 브라우저에 저장된 구글 세션 힌트 제거를 위해 페이지 강제 새로고침
-      // 이렇게 하면 다음 로그인 시 구글이 "어떤 계정으로 로그인할까요?"를 다시 묻습니다.
       window.location.reload(); 
     } catch (err) {
-      console.error("Logout Error:", err);
-      // 에러 발생 시에도 상태는 강제로 풉니다.
-      setIsAuthenticated(false);
+      console.error(err);
       window.location.reload();
     }
   };
+
+  // --- Render ---
 
   if (!isUnlocked) {
     return (
@@ -215,24 +231,19 @@ function App() {
           </div>
           <h2 className="text-2xl font-bold text-center mb-2">Fire-Sight Access</h2>
           <p className="text-slate-400 text-center text-sm mb-8">보안을 위해 접속 암호를 입력해주세요.</p>
-
           <form onSubmit={handlePinSubmit} className="space-y-4">
             <input
               ref={pinInputRef}
               type="password"
               inputMode="numeric"
-              pattern="[0-9]*"
               maxLength={4}
               value={pinInput}
               onChange={(e) => setPinInput(e.target.value)}
-              className="w-full text-center text-3xl tracking-[1em] font-bold bg-slate-800 border border-slate-700 rounded-xl py-4 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all placeholder:tracking-normal"
+              className="w-full text-center text-3xl tracking-[1em] font-bold bg-slate-800 border border-slate-700 rounded-xl py-4 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
               placeholder="PIN"
               autoFocus
             />
-            <button
-              type="submit"
-              className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-500/20 active:scale-95 touch-target"
-            >
+            <button type="submit" className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-500/20 active:scale-95">
               Unlock System
             </button>
           </form>
@@ -250,8 +261,14 @@ function App() {
       case 'dashboard':
         return <Dashboard setMode={setMode} subject={subject} dDay={dDay} />;
       case 'smart-upload':
-        return <SmartUpload onSaveComplete={() => setMode('dashboard')} initialData={sharedData} />;
+        return <SmartUpload 
+          onSaveComplete={() => setMode('dashboard')} 
+          initialData={sharedData}
+          defaultCategory={subject} // [UX] 현재 선택된 과목 전달
+        />;
       case 'workbook':
+        // [Refactoring] 이제 Workbook은 내부적으로 데이터를 로드하지만, 
+        // 필요한 경우 초기 필터나 주제를 prop으로 받을 수 있도록 유지합니다.
         return <Workbook isExamMode={isExamMode} subject={subject} initialFilter={activeStrategy} />;
       case 'reference':
         return <Reference
@@ -275,47 +292,43 @@ function App() {
   };
 
   return (
-    <div className={`flex flex-col h-screen w-screen overflow-hidden ${theme.bg} text-white font-sans transition-all duration-500
-      ${isExamMode ? 'brightness-90 saturate-50' : ''} 
-    `}>
-      {/* Offline Banner */}
+    <div className={`flex flex-col h-screen w-screen overflow-hidden ${theme.bg} text-white font-sans transition-all duration-500 ${isExamMode ? 'brightness-90 saturate-50' : ''}`}>
       {!isOnline && (
         <div className="bg-red-600 text-white text-center py-1 text-xs animate-pulse">
           오프라인 모드: 로컬에 저장된 데이터만 열람 가능합니다.
         </div>
       )}
 
-      {/* Header: Hide entirely in Exam Mode */}
       {!isExamMode && (
         <header className={`h-14 border-b ${theme.border} bg-slate-900/80 backdrop-blur-md flex items-center justify-between px-4 z-50 shadow-sm shrink-0 transition-colors duration-500`}>
-          <div className="flex-1 flex items-center gap-2 cursor-pointer" onClick={() => setMode('dashboard')}>
+          <div className="flex-1 flex items-center gap-2 cursor-pointer min-w-max" onClick={() => setMode('dashboard')}>
             <div className="p-1.5 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg shadow-lg">
               <Flame size={18} className="text-white fill-white" />
             </div>
             <h1 className="text-lg font-bold tracking-tight text-white">
               Fire-Sight <span className="font-light text-slate-400">Lite</span>
-              <span className="ml-2 text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 border border-slate-700">{APP_VERSION}</span>
+              <span className="ml-2 text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 border border-slate-700 hidden md:inline">{APP_VERSION}</span>
             </h1>
           </div>
 
-          <div className="flex-1 flex justify-center">
-            <div className="flex bg-slate-950/50 p-1 rounded-xl border border-slate-800">
-              <button
-                onClick={() => setSubject('mechanical')}
-                className={`flex items-center space-x-2 px-6 py-1.5 rounded-lg text-sm font-bold transition-all duration-300
-                        ${subject === 'mechanical' ? theme.activeTab : 'text-slate-500 hover:text-slate-300'}`}
-              >
-                <Droplets size={16} />
-                <span>기계분야</span>
-              </button>
-              <button
-                onClick={() => setSubject('electrical')}
-                className={`flex items-center space-x-2 px-6 py-1.5 rounded-lg text-sm font-bold transition-all duration-300
-                        ${subject === 'electrical' ? theme.activeTab : 'text-slate-500 hover:text-slate-300'}`}
-              >
-                <Zap size={16} />
-                <span>전기분야</span>
-              </button>
+          {/* NFTC 6대 분류 탭 (가로 스크롤) */}
+          <div className="flex-1 flex justify-center mx-4 overflow-x-auto no-scrollbar">
+            <div className="flex bg-slate-950/50 p-1 rounded-xl border border-slate-800 gap-1 min-w-max">
+              {Object.keys(THEME_CONFIG).map((key) => {
+                const Conf = THEME_CONFIG[key];
+                const Icon = Conf.icon;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setSubject(key)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all duration-300
+                      ${subject === key ? Conf.activeTab : 'text-slate-500 hover:text-slate-300'}`}
+                  >
+                    <Icon size={14} />
+                    <span className="hidden md:inline">{key}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -323,40 +336,24 @@ function App() {
             <div className="hidden lg:flex flex-col items-end group relative cursor-help">
               <div className="text-xs font-mono text-slate-500">2027 Inspection Practice</div>
               <div className="text-[10px] font-bold text-blue-400 transition-colors">Target: {dDay}</div>
-              <div className="absolute top-full right-0 mt-2 p-3 bg-slate-800 border border-slate-600 rounded-xl shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 w-48 text-center">
-                <p className="text-xs text-slate-300">시험 예상일: 2027.09.04</p>
-                <p className="text-xs font-bold text-white mt-1">남은 시간: {dDay}일</p>
-              </div>
             </div>
             <button
               onClick={() => setIsExamMode(!isExamMode)}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border 
-                ${isExamMode
-                  ? 'bg-red-500/10 text-red-500 border-red-500/50 shadow-lg shadow-red-500/20 animate-pulse'
-                  : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}`}
+                ${isExamMode ? 'bg-red-500/10 text-red-500 border-red-500/50 animate-pulse' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}`}
             >
               {isExamMode ? <EyeOff size={14} /> : <Eye size={14} />}
-              {isExamMode ? '집중 모드 ON' : '학습 모드'}
+              <span className="hidden sm:inline">{isExamMode ? '집중 모드' : '학습 모드'}</span>
             </button>
-            {/* 연결 상태 표시 점과 로그아웃 버튼 */}
+            
             <div className="flex items-center gap-3">
-              <div 
-                className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-700'}`} 
-                title={isAuthenticated ? "Connected" : "Disconnected"}
-              ></div>
-              
-              <button
-                onClick={handleLogout}
-                className="text-[10px] px-2 py-1 bg-red-600 hover:bg-red-500 text-white border border-red-400 rounded transition-all z-50"
-              >
-                강제 로그아웃(권한초기화)
-              </button>
+              <div className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-700'}`} title={isAuthenticated ? "Connected" : "Disconnected"}></div>
+              <button onClick={handleLogout} className="text-[10px] px-2 py-1 bg-red-600 hover:bg-red-500 text-white border border-red-400 rounded transition-all z-50">LogOut</button>
             </div>
           </div>
         </header>
       )}
 
-      {/* Floating Exit Button for Exam Mode */}
       {isExamMode && (
         <button
           onClick={() => setIsExamMode(false)}
@@ -376,4 +373,4 @@ function App() {
   );
 }
 
-export default App
+export default App;

@@ -1,4 +1,6 @@
 import { openDB } from 'idb';
+import { doc, updateDoc, increment, serverTimestamp, deleteDoc } from "firebase/firestore";
+import { db } from "../firebase"; // firebase 설정 파일 경로 확인
 
 const DB_NAME = 'fire-sight-db';
 const DB_VERSION = 2;
@@ -96,9 +98,10 @@ export const getAllCustomProblems = async () => {
     const db = await initDB();
     return db.getAll(CUSTOM_PROBLEM_STORE);
 };
-/* src/utils/db.js 에 추가 */
-import { doc, updateDoc, increment, serverTimestamp } from "firebase/firestore";
-import { db } from "../firebase"; // firebase 설정 파일 경로 확인
+
+// =====================================================================
+// FIRESTORE OPERATIONS (Workbook / ProblemSolver)
+// =====================================================================
 
 // 문제 풀이 결과 업데이트 함수
 export const updateProblemResult = async (problemId, score) => {
@@ -106,7 +109,6 @@ export const updateProblemResult = async (problemId, score) => {
     const problemRef = doc(db, "workbook", problemId);
     
     // 100점이면 'MASTERED', 아니면 'REVIEW'로 상태 변경
-    // (이미 MASTERED였던 것도 점수가 떨어지면 다시 REVIEW가 될 수 있음)
     const newStatus = score >= 100 ? 'MASTERED' : 'REVIEW';
 
     await updateDoc(problemRef, {
@@ -123,7 +125,6 @@ export const updateProblemResult = async (problemId, score) => {
     throw error;
   }
 };
-/* src/utils/db.js 에 추가 */
 
 // 문제의 메모(암기팁) 및 내용 수정 함수
 export const updateProblemInfo = async (problemId, data) => {
@@ -141,3 +142,15 @@ export const updateProblemInfo = async (problemId, data) => {
       throw error;
     }
   };
+
+// [NEW] 문제 삭제 함수 (Firebase) - Workbook에서 사용
+export const deleteProblem = async (problemId) => {
+    try {
+        const problemRef = doc(db, "workbook", problemId);
+        await deleteDoc(problemRef);
+        console.log(`🗑️ 문제 삭제 완료: ${problemId}`);
+    } catch (error) {
+        console.error("❌ 문제 삭제 실패:", error);
+        throw error;
+    }
+};
