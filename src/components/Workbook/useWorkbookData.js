@@ -1,4 +1,3 @@
-// src/components/Workbook/useWorkbookData.js
 import { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase'; // 경로 주의 (../../)
 import { collection, query, onSnapshot } from 'firebase/firestore';
@@ -17,13 +16,30 @@ export const useWorkbookData = () => {
         const unsubscribe = onSnapshot(q, (snapshot) => {
           const problemList = snapshot.docs.map(doc => {
             const data = doc.data();
-            let gradingKeywords = [];
-            const answerText = String(data.answer || data.modelAnswer || "");
             
+            // 1. 기본 텍스트 가져오기
+            let rawQuestion = data.content || data.description || "내용 없음";
+            let rawAnswer = data.answer || data.modelAnswer || "해설 없음";
+            
+            // [CRITICAL FIX] 도면/계산형 문제의 데이터 매핑 수정
+            // 도면형의 경우 'content'에 저장된 '도면 해석'이 문제 지문으로 나오는 것을 방지
+            if (data.problemType === 'drawing' || data.problemType === 'visual') {
+                // 문제 지문 -> 제목(Title)을 사용 (예: "다음 기호를 설명하시오")
+                const originalContent = rawQuestion;
+                rawQuestion = data.title || "도면을 참고하여 물음에 답하시오.";
+                
+                // 도면 해석(원래 content)을 정답/해설 쪽에 병합하여 보여줌
+                if (originalContent && originalContent !== "내용 없음") {
+                    rawAnswer = `[도면 해석/설명]\n${originalContent}\n\n[정답 및 핵심]\n${rawAnswer}`;
+                }
+            }
+
+            // 2. 키워드 추출 로직
+            let gradingKeywords = [];
             if (data.keywords && Array.isArray(data.keywords) && data.keywords.length > 0) {
                 gradingKeywords = data.keywords;
-            } else if (answerText.length > 0 && answerText !== "해설 없음") {
-                gradingKeywords = answerText.split(/[\s,().]+/).filter(word => word && word.length >= 2).slice(0, 15);
+            } else if (rawAnswer.length > 0 && rawAnswer !== "해설 없음") {
+                gradingKeywords = rawAnswer.split(/[\s,().]+/).filter(word => word && word.length >= 2).slice(0, 15);
             } else {
                 gradingKeywords = Array.isArray(data.tags) && data.tags.length > 0 ? data.tags : ["키워드 없음"];
             }
@@ -34,9 +50,13 @@ export const useWorkbookData = () => {
               imageUrl: data.imageUrl || (data.images && data.images.length > 0 ? data.images[0] : null),
               images: data.images || [],
               answerImageUrl: data.answerImageUrl || null,
+              
               title: String(data.title || "제목 없음"),
-              question: String(data.content || data.description || "내용 없음"),
-              modelAnswer: String(data.answer || data.modelAnswer || "해설 없음"),
+              
+              // [수정된 매핑 적용]
+              question: String(rawQuestion),
+              modelAnswer: String(rawAnswer),
+
               keywords: gradingKeywords,
               tags: Array.isArray(data.tags) ? data.tags : [],
               subject: data.category || data.subject || '기타', 
@@ -89,9 +109,9 @@ export const useWorkbookData = () => {
       }, [problems, activeTab, sortBy, searchTerm]);
 
       return {
-        problems, // 원본 데이터
+        problems, 
         loading,
-        processedProblems, // 필터링된 데이터
-        filterState: { activeTab, setActiveTab, sortBy, setSortBy, searchTerm, setSearchTerm } // 필터 상태 제어 함수들
+        processedProblems, 
+        filterState: { activeTab, setActiveTab, sortBy, setSortBy, searchTerm, setSearchTerm } 
       };
 };

@@ -1,8 +1,8 @@
-// src/components/ProblemSolver/useProblemSolver.js
 import { useState, useEffect } from 'react';
-import { updateProblemResult, updateProblemInfo } from '../../utils/db'; // 경로 주의
+import { updateProblemResult, updateProblemInfo, deleteProblem } from '../../utils/db'; // [FIX] deleteProblem 추가
 
-export const useProblemSolver = (initialProblems, startIndex, onComplete) => {
+// [FIX] onBack 인자 추가
+export const useProblemSolver = (initialProblems, startIndex, onComplete, onBack) => {
     const problems = initialProblems || [];
     const [currentIndex, setCurrentIndex] = useState(startIndex);
     const [currentProblem, setCurrentProblem] = useState(null);
@@ -10,12 +10,11 @@ export const useProblemSolver = (initialProblems, startIndex, onComplete) => {
     // 상태 관리
     const [userAnswer, setUserAnswer] = useState('');
     const [showResult, setShowResult] = useState(false);
-    const [inputMode, setInputMode] = useState('text'); // 'text' | 'draw'
+    const [inputMode, setInputMode] = useState('text');
     const [showMemo, setShowMemo] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
     const [memoText, setMemoText] = useState('');
 
-    // 문제 변경 감지 및 초기화
     useEffect(() => {
         const p = problems[currentIndex];
         if (p) {
@@ -34,7 +33,6 @@ export const useProblemSolver = (initialProblems, startIndex, onComplete) => {
         }
     }, [currentIndex, problems]);
 
-    // 채점 로직
     const analyzeAnswer = () => {
         if (!currentProblem) return null;
         const keywords = currentProblem.keywords || [];
@@ -56,7 +54,6 @@ export const useProblemSolver = (initialProblems, startIndex, onComplete) => {
 
     const result = showResult ? analyzeAnswer() : null;
 
-    // 핸들러들
     const handleNext = () => {
         if (currentIndex < problems.length - 1) {
             setCurrentIndex(prev => prev + 1);
@@ -139,6 +136,20 @@ export const useProblemSolver = (initialProblems, startIndex, onComplete) => {
         reader.readAsDataURL(file);
     };
 
+    // [NEW] 문제 삭제 핸들러
+    const handleDelete = async () => {
+        if (window.confirm("이 문제를 정말 삭제하시겠습니까?")) {
+            try {
+                await deleteProblem(currentProblem.id);
+                alert("삭제되었습니다.");
+                if (onBack) onBack(); // 목록으로 돌아가기
+            } catch (error) {
+                console.error("삭제 실패:", error);
+                alert("삭제 중 오류가 발생했습니다.");
+            }
+        }
+    };
+
     return {
         state: {
             problems, currentIndex, currentProblem, userAnswer, showResult,
@@ -146,7 +157,7 @@ export const useProblemSolver = (initialProblems, startIndex, onComplete) => {
         },
         actions: {
             setUserAnswer, setInputMode, setShowMemo, setIsEditMode, setMemoText, setCurrentProblem,
-            handleNext, handleSubmit, handleManualGrade, handleSaveMemo, handleSaveEdit, handleImageUpload
+            handleNext, handleSubmit, handleManualGrade, handleSaveMemo, handleSaveEdit, handleImageUpload, handleDelete
         }
     };
 };

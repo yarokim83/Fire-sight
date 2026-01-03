@@ -1,4 +1,3 @@
-// src/components/Workbook/SubjectAccordion.jsx
 import React, { useState, useMemo } from 'react';
 import { 
     ChevronDown, CheckCircle2, RefreshCcw, Sparkles, Folder, 
@@ -7,7 +6,6 @@ import {
 
 const SubjectAccordion = ({ subject, problems, onSelectProblem, onDeleteProblem, initialExpanded = false }) => {
   const [isExpanded, setIsExpanded] = useState(initialExpanded);
-
   const completedCount = useMemo(() => problems.filter(p => p.lastScore === 100).length, [problems]);
   const totalCount = problems.length;
 
@@ -96,12 +94,13 @@ const SubjectAccordion = ({ subject, problems, onSelectProblem, onDeleteProblem,
                 </span>
               </div>
 
+              {/* [FIX] opacity-0 제거하여 항상 보이게 함 */}
               <button
                   onClick={(e) => {
                       e.stopPropagation();
                       onDeleteProblem(item);
                   }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-600 hover:text-red-500 hover:bg-red-500/10 rounded-full opacity-0 group-hover:opacity-100 transition-all z-10"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-600 hover:text-red-500 hover:bg-red-500/10 rounded-full transition-all z-10"
                   title="문제 삭제"
               >
                   <Trash2 size={16} />

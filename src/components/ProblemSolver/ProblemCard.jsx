@@ -1,10 +1,9 @@
-// src/components/ProblemSolver/ProblemCard.jsx
 import React from 'react';
 import { StickyNote, Edit3, Save, Trash2, Image as ImageIcon } from 'lucide-react';
 
 const ProblemCard = ({ state, actions }) => {
     const { currentProblem, isEditMode, showMemo, memoText } = state;
-    const { setIsEditMode, setShowMemo, setMemoText, handleSaveMemo, setCurrentProblem, handleSaveEdit, handleImageUpload } = actions;
+    const { setIsEditMode, setShowMemo, setMemoText, handleSaveMemo, setCurrentProblem, handleSaveEdit, handleImageUpload, handleDelete } = actions;
 
     return (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl relative overflow-hidden group">
@@ -23,6 +22,14 @@ const ProblemCard = ({ state, actions }) => {
                     title="문제 수정"
                 >
                     <Edit3 size={18} />
+                </button>
+                {/* [NEW] 삭제 버튼 추가 */}
+                <button 
+                    onClick={handleDelete}
+                    className="p-2 rounded-lg transition-colors bg-slate-800 text-red-400 hover:bg-red-500/20 hover:text-red-500 border border-slate-700/50"
+                    title="문제 삭제"
+                >
+                    <Trash2 size={18} />
                 </button>
             </div>
 
@@ -45,7 +52,7 @@ const ProblemCard = ({ state, actions }) => {
                 </div>
             )}
 
-            {/* 문제 본문 (뷰어 vs 에디터) */}
+            {/* 문제 본문 */}
             <div className="relative z-10">
                 {isEditMode ? (
                     <div className="space-y-3 animate-in fade-in">
