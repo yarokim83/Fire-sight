@@ -14,7 +14,7 @@ import Dashboard from './components/Dashboard'
 import StrategyView from './components/StrategyView'
 import StudyManager from './components/StudyManager'
 
-// [NFTC 6대 분류 테마 설정]
+// [NFTC 6대 분류 테마 설정] - 화면엔 안 보이지만 내부 로직용으로 유지
 const THEME_CONFIG = {
   '수계': { bg: 'bg-slate-900', border: 'border-blue-500/30', activeTab: 'bg-blue-600 text-white shadow-blue-500/20', text: 'text-blue-400', icon: Droplets },
   '가스계': { bg: 'bg-zinc-900', border: 'border-emerald-500/30', activeTab: 'bg-emerald-600 text-white shadow-emerald-500/20', text: 'text-emerald-400', icon: Wind },
@@ -24,14 +24,14 @@ const THEME_CONFIG = {
   '공통': { bg: 'bg-slate-900', border: 'border-purple-500/30', activeTab: 'bg-purple-600 text-white shadow-purple-500/20', text: 'text-purple-400', icon: Layers }
 };
 
-const APP_VERSION = 'v2.8';
+const APP_VERSION = 'v2.8'; // 버전 유지
 const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
 
 function App() {
   // --- 상태 관리 ---
-  const [accessToken, setAccessToken] = useState(null); // 핵심: 액세스 토큰
+  const [accessToken, setAccessToken] = useState(null); 
 
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
@@ -88,7 +88,7 @@ function App() {
     else setIsSidebarCollapsed(false);
   }, [isExamMode]);
 
-  // Google Auth 초기화 (GIS Only - Clean Version)
+  // Google Auth 초기화
   useEffect(() => {
     const loadGis = () => {
       if (window.google?.accounts?.oauth2) {
@@ -216,7 +216,8 @@ function App() {
 
       {!isExamMode && (
         <header className={`h-14 border-b ${theme.border} bg-slate-900/80 backdrop-blur-md flex items-center justify-between px-4 z-50 shadow-sm shrink-0 transition-colors duration-500`}>
-          <div className="flex-1 flex items-center gap-2 cursor-pointer min-w-max" onClick={() => setMode('dashboard')}>
+          {/* 로고 및 홈 버튼 */}
+          <div className="flex items-center gap-2 cursor-pointer min-w-max" onClick={() => setMode('dashboard')}>
             <div className="p-1.5 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg shadow-lg">
               <Flame size={18} className="text-white fill-white" />
             </div>
@@ -226,33 +227,25 @@ function App() {
             </h1>
           </div>
 
-          <div className="flex-1 flex justify-center mx-4 overflow-x-auto no-scrollbar">
-            <div className="flex bg-slate-950/50 p-1 rounded-xl border border-slate-800 gap-1 min-w-max">
-              {Object.keys(THEME_CONFIG).map((key) => {
-                const Conf = THEME_CONFIG[key];
-                const Icon = Conf.icon;
-                return (
-                  <button key={key} onClick={() => setSubject(key)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all duration-300 ${subject === key ? Conf.activeTab : 'text-slate-500 hover:text-slate-300'}`}>
-                    <Icon size={14} /> <span className="hidden md:inline">{key}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {/* 중앙 영역 (탭 제거됨 - 빈 공간으로 두거나 필요시 다른 요소 배치 가능) */}
+          <div className="flex-1"></div>
 
-          <div className="flex-1 flex justify-end items-center gap-4 min-w-fit whitespace-nowrap">
-            <div className="hidden lg:flex flex-col items-end group relative cursor-help">
-              <div className="text-xs font-mono text-slate-500">2027 Inspection Practice</div>
-              <div className="text-[10px] font-bold text-blue-400 transition-colors">Target: {dDay}</div>
+          {/* 우측 상단 버튼들 */}
+          <div className="flex items-center gap-3">
+            <div className="hidden lg:flex flex-col items-end group relative cursor-help mr-2">
+              <div className="text-xs font-mono text-slate-500">Target: {dDay}</div>
             </div>
-            <button onClick={() => setIsExamMode(!isExamMode)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isExamMode ? 'bg-red-500/10 text-red-500 border-red-500/50 animate-pulse' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}`}>
+            <button
+              onClick={() => setIsExamMode(!isExamMode)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border 
+                ${isExamMode ? 'bg-red-500/10 text-red-500 border-red-500/50 animate-pulse' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}`}
+            >
               {isExamMode ? <EyeOff size={14} /> : <Eye size={14} />}
               <span className="hidden sm:inline">{isExamMode ? '집중 모드' : '학습 모드'}</span>
             </button>
-            <div className="flex items-center gap-3">
-              <div className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-700'}`} title={isAuthenticated ? "Connected" : "Disconnected"}></div>
-              <button onClick={handleLogout} className="text-[10px] px-2 py-1 bg-red-600 hover:bg-red-500 text-white border border-red-400 rounded transition-all z-50">LogOut</button>
-            </div>
+            
+            <div className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-700'}`} title={isAuthenticated ? "Connected" : "Disconnected"}></div>
+            <button onClick={handleLogout} className="text-[10px] px-2 py-1 bg-red-600 hover:bg-red-500 text-white border border-red-400 rounded transition-all z-50">LogOut</button>
           </div>
         </header>
       )}

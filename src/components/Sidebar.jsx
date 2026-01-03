@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, PenTool, Book, ChevronLeft, ChevronRight, LayoutDashboard, Camera, RefreshCw, Zap, TableProperties } from 'lucide-react';
+import { BookOpen, PenTool, Book, ChevronLeft, ChevronRight, LayoutDashboard, Camera, Zap, TableProperties } from 'lucide-react';
 
 export default function Sidebar({ currentMode, setMode, subject, isCollapsed, setIsCollapsed, isAuthenticated, handleLogout }) {
     // const [isCollapsed, setIsCollapsed] = useState(false); // Controlled by App.jsx now
@@ -43,27 +43,6 @@ export default function Sidebar({ currentMode, setMode, subject, isCollapsed, se
                 <NavItem mode="strategy" icon={Zap} label="Strategy" />
                 <div className="my-2 h-px bg-slate-800 mx-2"></div>
                 <NavItem mode="study-manager" icon={TableProperties} label="Manager" />
-
-                {/* Reset Data Button */}
-                <div className="pt-4 mt-4 border-t border-slate-800">
-                    <button
-                        onClick={() => {
-                            if (window.confirm("모든 [스마트 업로드] 데이터를 초기화하시겠습니까?\n(복구할 수 없습니다)")) {
-                                localStorage.removeItem('fireSight_customData');
-                                window.location.reload();
-                            }
-                        }}
-                        className={`w-full flex items-center space-x-3 px-3 py-3 rounded-xl transition-all duration-200 mb-1 font-medium group relative text-slate-500 hover:text-red-400 hover:bg-red-900/10`}
-                    >
-                        <RefreshCw size={22} className="shrink-0" />
-                        {!isCollapsed && <span className="whitespace-nowrap overflow-hidden transition-all duration-300">Data Reset</span>}
-                        {isCollapsed && (
-                            <div className="absolute left-full ml-4 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-50 pointer-events-none shadow-xl border border-slate-700">
-                                Data Reset
-                            </div>
-                        )}
-                    </button>
-                </div>
             </nav>
 
             {/* Collapse Toggle Button (Bottom) */}
