@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-    Clock, PenTool, BarChart, Calendar, ChevronRight,
+    Clock, PenTool, BarChart, ChevronRight,
     Flame, Target, ArrowRight, Zap, Droplets, BookOpen, 
-    AlertCircle, Layers, Wind, DoorOpen, Plus
+    Layers, Wind, DoorOpen, Plus
 } from 'lucide-react';
 import { db } from '../firebase'; 
-import { collection, query, onSnapshot, orderBy, limit } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 
 // 과목별 아이콘 및 색상 매핑
 const SUBJECT_CONFIG = {
@@ -26,7 +26,7 @@ export default function Dashboard({ setMode, subject, dDay }) {
         totalProblems: 0,
         mastered: 0,
         reviewNeeded: 0,
-        studyTime: "0h 0m" // 학습 시간은 별도 기록이 없으므로 추후 구현 (현재는 placeholder)
+        studyTime: "0h 0m"
     });
 
     const [subjectProgress, setSubjectProgress] = useState([]);
@@ -34,7 +34,6 @@ export default function Dashboard({ setMode, subject, dDay }) {
 
     // [Data Fetching]
     useEffect(() => {
-        // 최근 등록순으로 정렬하여 데이터 구독
         const q = query(collection(db, "workbook"), orderBy("createdAt", "desc"));
         
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -57,13 +56,11 @@ export default function Dashboard({ setMode, subject, dDay }) {
 
             // 2. 과목별 숙련도 계산
             const subjMap = {};
-            // 초기화
             Object.keys(SUBJECT_CONFIG).forEach(key => {
                 if(key !== '기타') subjMap[key] = { total: 0, mastered: 0 };
             });
 
             problems.forEach(p => {
-                // 카테고리 매핑 (DB필드명: category 또는 subject 호환)
                 const cat = p.category || p.subject || '기타';
                 const safeCat = SUBJECT_CONFIG[cat] ? cat : '기타';
                 
@@ -79,18 +76,17 @@ export default function Dashboard({ setMode, subject, dDay }) {
                     return {
                         name,
                         score,
-                        total: data.total, // 표시용
+                        total: data.total,
                         ...SUBJECT_CONFIG[name]
                     };
                 })
-                .filter(item => item.total > 0) // 데이터가 있는 과목만 표시
-                .sort((a, b) => b.total - a.total); // 문제 많은 순 정렬
+                .filter(item => item.total > 0)
+                .sort((a, b) => b.total - a.total);
 
             setSubjectProgress(processedProgress);
 
             // 3. 최근 활동 (상위 3개)
             const recent = problems.slice(0, 3).map(p => {
-                // 날짜 포맷팅 (방금 전, 1시간 전 등)
                 const date = p.createdAt?.toDate ? p.createdAt.toDate() : new Date();
                 const now = new Date();
                 const diffMin = Math.floor((now - date) / 60000);
@@ -118,14 +114,40 @@ export default function Dashboard({ setMode, subject, dDay }) {
         return () => unsubscribe();
     }, []);
 
-    // 명언 랜덤 표시
+    // [업데이트] 명언 30선
     const quotes = [
         "포기하지 않는 한 실패는 없다.",
         "오늘 걷지 않으면 내일은 뛰어야 한다.",
         "소방시설관리사, 당신의 이름 뒤에 붙을 자격.",
         "가장 큰 위험은 위험 없는 삶을 사는 것이다.",
-        "기적은 노력의 또 다른 이름이다."
+        "기적은 노력의 또 다른 이름이다.",
+        "성공은 매일 반복되는 작은 노력들의 합이다.",
+        "지금 흘린 땀은 합격의 눈물이 된다.",
+        "어제보다 나은 오늘, 오늘보다 빛날 2027년.",
+        "고통은 지나가지만, 합격의 영광은 영원하다.",
+        "늦었다고 생각할 때가 가장 빠른 때다.",
+        "실력은 계단식으로 성장한다. 버티면 올라간다.",
+        "나 자신을 믿는 것이 성공의 제1비결이다.",
+        "중요한 것은 꺾이지 않는 마음이다.",
+        "공부는 머리가 아니라 엉덩이로 하는 것이다.",
+        "합격의 기쁨을 상상하며 오늘을 견뎌라.",
+        "오늘의 힘듦은 내일의 스펙이 된다.",
+        "꾸준함이 비범함을 만든다.",
+        "내일의 나는 오늘의 내가 만든다.",
+        "핑계로 성공한 사람은 없다.",
+        "안전을 지키는 전문가, 그 무게를 견뎌라.",
+        "시작이 반이다. 나머지는 끈기다.",
+        "한계는 내 마음속에만 있다.",
+        "꿈을 꾸기에 늦은 나이란 없다.",
+        "1%의 재능과 99%의 노력이 만든 결과.",
+        "인생에서 가장 멋진 일은 남들이 해내지 못할 거라 한 일을 해내는 것이다.",
+        "흔들리지 않고 피는 꽃이 어디 있으랴.",
+        "지금 자면 꿈을 꾸지만, 지금 공부하면 꿈을 이룬다.",
+        "전문가란, 남들이 무시하는 기초를 탄탄히 한 사람이다.",
+        "2027년 합격자 명단에 내 이름이 있다.",
+        "노력은 배신하지 않는다. 다만 시간이 걸릴 뿐이다."
     ];
+    
     const [quote, setQuote] = useState(quotes[0]);
 
     useEffect(() => {
