@@ -13,8 +13,9 @@ import Reference from './components/Reference'
 import Dashboard from './components/Dashboard'
 import StrategyView from './components/StrategyView'
 import StudyManager from './components/StudyManager'
+import CanvasWidget from './components/CanvasWidget' // [NEW] 1. 연습장 위젯 임포트
 
-// [NFTC 6대 분류 테마 설정] - 화면엔 안 보이지만 내부 로직용으로 유지
+// [NFTC 6대 분류 테마 설정]
 const THEME_CONFIG = {
   '수계': { bg: 'bg-slate-900', border: 'border-blue-500/30', activeTab: 'bg-blue-600 text-white shadow-blue-500/20', text: 'text-blue-400', icon: Droplets },
   '가스계': { bg: 'bg-zinc-900', border: 'border-emerald-500/30', activeTab: 'bg-emerald-600 text-white shadow-emerald-500/20', text: 'text-emerald-400', icon: Wind },
@@ -24,7 +25,7 @@ const THEME_CONFIG = {
   '공통': { bg: 'bg-slate-900', border: 'border-purple-500/30', activeTab: 'bg-purple-600 text-white shadow-purple-500/20', text: 'text-purple-400', icon: Layers }
 };
 
-const APP_VERSION = 'v2.8'; // 버전 유지
+const APP_VERSION = 'v2.8';
 const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
@@ -227,7 +228,7 @@ function App() {
             </h1>
           </div>
 
-          {/* 중앙 영역 (탭 제거됨 - 빈 공간으로 두거나 필요시 다른 요소 배치 가능) */}
+          {/* 중앙 영역 */}
           <div className="flex-1"></div>
 
           {/* 우측 상단 버튼들 */}
@@ -261,6 +262,10 @@ function App() {
           {renderContent()}
         </main>
       </div>
+
+      {/* [NEW] 2. 연습장 위젯 (잠금해제 후에만 표시) */}
+      <CanvasWidget />
+      
     </div>
   );
 }
