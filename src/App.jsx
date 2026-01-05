@@ -163,7 +163,8 @@ function App() {
 
   if (!isUnlocked) {
       return (
-        <div className="flex flex-col items-center justify-center h-screen w-screen bg-slate-950 text-white p-4">
+        // [FIX] 잠금 화면도 모바일 높이 대응
+        <div className="flex flex-col items-center justify-center w-screen bg-slate-950 text-white p-4 fixed inset-0" style={{ height: '100dvh' }}>
             <div className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-8 shadow-2xl animate-in zoom-in-95 duration-300">
                 <div className="flex justify-center mb-6">
                     <div className="p-3 bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl shadow-lg">
@@ -208,9 +209,16 @@ function App() {
   };
 
   return (
-    <div className={`flex flex-col h-screen w-screen overflow-hidden ${theme.bg} text-white font-sans transition-all duration-500 ${isExamMode ? 'brightness-90 saturate-50' : ''}`}>
+    // [FIX] 최상위 레이아웃 수정
+    // 1. fixed inset-0: 화면에 앱을 딱 고정
+    // 2. h-[100dvh]: 모바일 브라우저 주소창 제외한 실제 높이 사용
+    // 3. pt-[env(safe-area-inset-top)]: 아이패드 상단바(시간/배터리) 영역만큼 패딩 추가하여 헤더 가림 방지
+    <div 
+        className={`fixed inset-0 flex flex-col w-screen overflow-hidden ${theme.bg} text-white font-sans transition-all duration-500 pt-[env(safe-area-inset-top)] ${isExamMode ? 'brightness-90 saturate-50' : ''}`}
+        style={{ height: '100dvh' }} 
+    >
       {!isOnline && (
-        <div className="bg-red-600 text-white text-center py-1 text-xs animate-pulse">
+        <div className="bg-red-600 text-white text-center py-1 text-xs animate-pulse shrink-0">
           오프라인 모드: 로컬에 저장된 데이터만 열람 가능합니다.
         </div>
       )}
@@ -256,6 +264,7 @@ function App() {
           <EyeOff size={18} /> <span>Exit Exam Mode</span>
         </button>
       )}
+      
       <div className="flex-1 flex overflow-hidden">
         {!isExamMode && <Sidebar currentMode={mode} setMode={setMode} subject={subject} isCollapsed={isSidebarCollapsed} setIsCollapsed={setIsSidebarCollapsed} isAuthenticated={isAuthenticated} handleLogout={handleLogout}/>}
         <main className={`flex-1 relative overflow-hidden ${theme.bg} transition-colors duration-500 ${isExamMode ? 'text-lg tracking-wide' : 'text-base'}`}>
@@ -263,7 +272,7 @@ function App() {
         </main>
       </div>
 
-      {/* [NEW] 2. 연습장 위젯 (잠금해제 후에만 표시) */}
+      {/* 연습장 위젯 (잠금해제 후에만 표시) */}
       <CanvasWidget />
       
     </div>
