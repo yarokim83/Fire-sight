@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { 
     ChevronDown, CheckCircle2, RefreshCcw, Sparkles, Folder, 
-    Trash2, Calculator, PenTool, Image as ImageIcon 
+    Calculator, PenTool, Image as ImageIcon 
 } from 'lucide-react';
 
 const SubjectAccordion = ({ subject, problems, onSelectProblem, onDeleteProblem, initialExpanded = false }) => {
@@ -73,12 +73,14 @@ const SubjectAccordion = ({ subject, problems, onSelectProblem, onDeleteProblem,
               className="relative flex items-center gap-4 p-3 rounded-lg cursor-pointer hover:bg-blue-500/10 group transition-colors"
             >
               {getStatusIcon(item)}
-              <div className="flex-grow min-w-0 pr-8">
+              
+              {/* [FIX] pr-8 제거: 삭제 버튼이 없어졌으므로 텍스트 영역을 최대로 활용 */}
+              <div className="flex-grow min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                     <span className="truncate text-slate-300 group-hover:text-blue-300 text-sm font-medium">
                         {item.title}
                     </span>
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 shrink-0">
                         {getBadges(item)}
                     </div>
                 </div>
@@ -93,18 +95,6 @@ const SubjectAccordion = ({ subject, problems, onSelectProblem, onDeleteProblem,
                     {item.lastScore}점
                 </span>
               </div>
-
-              {/* [FIX] opacity-0 제거하여 항상 보이게 함 */}
-              <button
-                  onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteProblem(item);
-                  }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-600 hover:text-red-500 hover:bg-red-500/10 rounded-full transition-all z-10"
-                  title="문제 삭제"
-              >
-                  <Trash2 size={16} />
-              </button>
             </div>
           ))}
         </div>
