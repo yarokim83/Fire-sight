@@ -1,8 +1,8 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { 
     Upload, ScanLine, Image as ImageIcon, CheckCircle2, 
     ChevronLeft, ChevronRight, FileText, Edit3, Trash2, 
-    Plus, Sparkles, Layers, Terminal, BookOpen
+    Plus, Sparkles, Layers, Terminal, BookOpen, Maximize2, X
 } from 'lucide-react';
 
 // Step 1: 초기 선택 및 업로드 화면
@@ -20,7 +20,7 @@ export const UploadIntro = ({ formData, setFormData, isManualMode, inputFileRef,
             <div 
                 className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-slate-700 rounded-2xl hover:border-emerald-500/50 hover:bg-slate-800/30 transition-all group relative cursor-pointer bg-slate-950/30" 
                 onClick={() => { 
-                    if(inputFileRef.current) inputFileRef.current.value = null; // 같은 파일 재선택 허용
+                    if(inputFileRef.current) inputFileRef.current.value = null; 
                     inputFileRef.current.click(); 
                 }}
             >
@@ -59,19 +59,20 @@ export const AnalysisLoading = ({ previewUrl }) => (
     </div>
 );
 
-// Step 3 (Left): 이미지 뷰어 (썸네일 자동 스크롤 추가됨)
+// [최종 수정] 삭제 버튼 상시 노출 + 줌 기능
 export const ImageViewer = ({ 
     viewMode, setViewMode, activeUrls, currentIndex, setIndex, 
     problemCount, answerCount, onRemove, onAdd, inputAddRef 
 }) => {
+    const [isZoomed, setIsZoomed] = useState(false);
+
     const next = () => setIndex((currentIndex + 1) % activeUrls.length);
     const prev = () => setIndex((currentIndex - 1 + activeUrls.length) % activeUrls.length);
     
-    // [UX] 현재 선택된 썸네일이 보이도록 자동 스크롤
     const scrollRef = useRef(null);
     useEffect(() => {
         if (scrollRef.current) {
-            const activeEl = scrollRef.current.children[currentIndex + 1]; // +1은 추가 버튼 때문
+            const activeEl = scrollRef.current.children[currentIndex + 1]; 
             if (activeEl) activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
         }
     }, [currentIndex]);
@@ -87,16 +88,40 @@ export const ImageViewer = ({
                 </button>
             </div>
 
+            {/* 메인 뷰어 */}
             <div className={`aspect-[3/4] bg-slate-950 rounded-xl border overflow-hidden flex items-center justify-center relative group shadow-inner ${viewMode === 'answer' ? 'border-emerald-500/30' : 'border-slate-800'}`}>
-                {activeUrls.length > 0 ? (
+                {activeUrls && activeUrls.length > 0 ? (
                     <>
-                        <img src={activeUrls[currentIndex]} alt="Preview" className="w-full h-full object-contain" />
-                        <button onClick={onRemove} className="absolute top-3 right-3 bg-red-600/90 hover:bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all z-10 shadow-lg transform hover:scale-105"><Trash2 size={16} /></button>
+                        {/* 확대 버튼 힌트 */}
+                        <div className="absolute top-3 left-3 bg-black/60 backdrop-blur p-1.5 rounded-lg text-white opacity-80 pointer-events-none z-10 flex items-center gap-1 text-xs font-bold shadow-md">
+                            <Maximize2 size={14} /> <span>확대</span>
+                        </div>
+
+                        {/* 실제 이미지 */}
+                        <img 
+                            src={activeUrls[currentIndex]} 
+                            alt="Preview" 
+                            className="w-full h-full object-contain cursor-zoom-in active:scale-[0.98] transition-transform" 
+                            onClick={() => setIsZoomed(true)} 
+                        />
+                        
+                        {/* [삭제 버튼] 항상 보이도록 opacity 제거 및 빨간색 강조 */}
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); onRemove(); }} 
+                            className="absolute top-3 right-3 bg-red-600 text-white p-2.5 rounded-xl z-20 shadow-lg transform active:scale-90 transition-all hover:bg-red-500 border border-red-400/50"
+                            title="현재 이미지 삭제"
+                        >
+                            <Trash2 size={18} />
+                        </button>
+                        
+                        {/* 이전/다음 버튼 */}
                         {activeUrls.length > 1 && (
                             <>
-                                <button onClick={prev} className="absolute left-2 bg-black/40 hover:bg-black/60 backdrop-blur text-white p-1.5 rounded-full transition-colors"><ChevronLeft size={24} /></button>
-                                <button onClick={next} className="absolute right-2 bg-black/40 hover:bg-black/60 backdrop-blur text-white p-1.5 rounded-full transition-colors"><ChevronRight size={24} /></button>
-                                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-white border border-white/10">{currentIndex + 1} / {activeUrls.length}</div>
+                                <button onClick={(e) => { e.stopPropagation(); prev(); }} className="absolute left-2 bg-black/40 hover:bg-black/60 backdrop-blur text-white p-2 rounded-full transition-colors"><ChevronLeft size={24} /></button>
+                                <button onClick={(e) => { e.stopPropagation(); next(); }} className="absolute right-2 bg-black/40 hover:bg-black/60 backdrop-blur text-white p-2 rounded-full transition-colors"><ChevronRight size={24} /></button>
+                                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-white border border-white/10 pointer-events-none">
+                                    {currentIndex + 1} / {activeUrls.length}
+                                </div>
                             </>
                         )}
                     </>
@@ -109,23 +134,40 @@ export const ImageViewer = ({
             </div>
 
             {/* 썸네일 리스트 */}
-            <div ref={scrollRef} className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide snap-x px-1">
+            <div ref={scrollRef} className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide snap-x px-1 min-h-[70px]">
                 <div onClick={() => { if(inputAddRef.current) inputAddRef.current.value=null; inputAddRef.current.click(); }} className={`w-16 h-16 shrink-0 rounded-lg border-2 border-dashed flex flex-col items-center justify-center cursor-pointer hover:bg-slate-800/50 transition-colors ${viewMode === 'answer' ? 'border-emerald-500/30 text-emerald-500' : 'border-slate-700 text-slate-500'}`}>
                     <input type="file" accept="image/*" multiple onChange={onAdd} className="hidden" ref={inputAddRef} />
                     <Plus size={20} />
-                    <span className="text-[10px] font-bold mt-1">추가</span>
                 </div>
-                {activeUrls.map((url, idx) => (
+                {activeUrls && activeUrls.map((url, idx) => (
                     <button key={idx} onClick={() => setIndex(idx)} className={`w-16 h-16 shrink-0 rounded-lg overflow-hidden border-2 transition-all snap-start relative ${idx === currentIndex ? 'border-emerald-500 ring-2 ring-emerald-500/20' : 'border-transparent opacity-50 hover:opacity-80'}`}>
-                        <img src={url} className="w-full h-full object-cover" alt="thumb" />
+                        <img src={url} className="w-full h-full object-cover" alt={`thumb-${idx}`} />
                     </button>
                 ))}
             </div>
+
+            {/* 줌 모달 */}
+            {isZoomed && activeUrls.length > 0 && (
+                <div className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setIsZoomed(false)}>
+                    <button className="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors" onClick={() => setIsZoomed(false)}>
+                        <X size={32} />
+                    </button>
+                    <img 
+                        src={activeUrls[currentIndex]} 
+                        alt="Zoomed" 
+                        className="max-w-full max-h-[90vh] object-contain shadow-2xl animate-in zoom-in-95 duration-200" 
+                        onClick={(e) => e.stopPropagation()} 
+                    />
+                    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white/10 px-4 py-2 rounded-full text-white font-bold backdrop-blur border border-white/10">
+                        {currentIndex + 1} / {activeUrls.length}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
 
-// Step 3 (Right): 입력 폼 (출처 필드 추가됨)
+// Step 3 (Right): 입력 폼
 export const ProblemForm = ({ formData, setFormData, isAnalyzingAnswer }) => (
     <div className="flex-1 space-y-5 h-full overflow-y-auto pr-1">
         <div className="grid grid-cols-2 gap-4">

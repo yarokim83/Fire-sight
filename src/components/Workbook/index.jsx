@@ -1,5 +1,4 @@
-// src/components/Workbook/index.jsx
-import React, { useState, useEffect, useRef } from 'react'; // useRef, useEffect 추가
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   CheckCircle2, RefreshCcw, Sparkles, Book, Search, BookCopy, Loader2,
   Filter, Tag, X, RefreshCw 
@@ -22,23 +21,16 @@ const Workbook = () => {
   
   const [solveSession, setSolveSession] = useState(null);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
-  
-  // [NEW] 스크롤 컨테이너 참조 및 포커스 설정
   const scrollContainerRef = useRef(null);
 
   const subjects = Object.keys(processedProblems.grouped).sort();
 
-  // 컴포넌트 마운트 시 스크롤 영역에 포커스를 주어 키보드 조작이 바로 가능하게 함
   useEffect(() => {
-      if (scrollContainerRef.current) {
-          scrollContainerRef.current.focus();
-      }
-  }, [loading]); // 로딩이 끝나면 포커스
+      if (scrollContainerRef.current) scrollContainerRef.current.focus();
+  }, [loading]);
 
   const toggleTag = (tag) => {
-    setSelectedTags(prev => 
-      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-    );
+    setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
   };
 
   const resetFilters = () => {
@@ -53,8 +45,8 @@ const Workbook = () => {
   };
 
   const handleDeleteProblem = async (item) => {
-      if (window.confirm(`'${item.title}' 삭제?`)) {
-          try { await deleteProblem(item.id); } catch (e) { alert("오류 발생"); }
+      if (window.confirm(`'${item.title}' 삭제하시겠습니까?`)) {
+          try { await deleteProblem(item.id); } catch (e) { alert("오류 발생: " + e.message); }
       }
   };
 
@@ -73,6 +65,7 @@ const Workbook = () => {
     </div>
   );
 
+  // 문제 풀이 화면 전환
   if (solveSession) {
     return (
       <ProblemSolver 
@@ -95,14 +88,13 @@ const Workbook = () => {
   );
 
   return (
-    // [FIX] scroll-smooth 제거 (iOS 충돌 방지), tabIndex 추가 (키보드 스크롤 지원)
     <div 
         ref={scrollContainerRef}
-        className="h-full overflow-y-auto bg-slate-900 text-white outline-none"
+        className="h-full overflow-y-auto bg-slate-900 text-white outline-none scrollbar-thin scrollbar-thumb-slate-700"
         style={{ WebkitOverflowScrolling: 'touch' }}
         tabIndex={0} 
     >
-      <div className="p-4 md:p-6 pb-32 max-w-5xl mx-auto min-h-[101%]"> {/* min-h-[101%]로 항상 스크롤 가능 상태 유지 */}
+      <div className="p-4 md:p-6 pb-32 max-w-5xl mx-auto flex flex-col min-h-full">
         
         <header className="mb-6">
             <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-3">
@@ -156,17 +148,17 @@ const Workbook = () => {
                     </div>
                 </div>
 
-                <div className={`${showFilterPanel ? 'block' : 'hidden'} md:block animate-in fade-in slide-in-from-top-2 border-t border-slate-700/50 pt-3 mt-1`}>
-                    <div className="flex flex-wrap gap-2 items-center">
-                        <div className="text-xs font-bold text-slate-500 flex items-center gap-1 mr-2">
+                {/* 필터 패널 애니메이션 적용 */}
+                <div className={`${showFilterPanel ? 'max-h-40 opacity-100 mt-2 pb-1' : 'max-h-0 opacity-0 overflow-hidden'} transition-all duration-300 ease-in-out md:max-h-none md:opacity-100 md:block`}>
+                    <div className="flex flex-wrap gap-2 items-center pt-2 border-t border-slate-700/30">
+                        <div className="text-xs font-bold text-slate-500 flex items-center gap-1 mr-2 shrink-0">
                             <Tag size={12} /> 태그:
                         </div>
-                        
                         {allTags.length > 0 ? allTags.map(tag => (
                             <button
                                 key={tag}
                                 onClick={() => toggleTag(tag)}
-                                className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-all 
+                                className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-all active:scale-95
                                     ${selectedTags.includes(tag) 
                                         ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20' 
                                         : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200'
@@ -177,11 +169,10 @@ const Workbook = () => {
                         )) : (
                             <span className="text-xs text-slate-600">등록된 태그 없음</span>
                         )}
-
                         {(selectedTags.length > 0 || searchTerm) && (
                             <button 
                                 onClick={resetFilters}
-                                className="ml-auto text-xs text-red-400 hover:text-red-300 flex items-center gap-1 px-2 py-1 bg-red-500/10 rounded-lg border border-red-500/20"
+                                className="ml-auto text-xs text-red-400 hover:text-red-300 flex items-center gap-1 px-2 py-1 bg-red-500/10 rounded-lg border border-red-500/20 transition-colors"
                             >
                                 <RefreshCw size={12} /> 초기화
                             </button>
@@ -191,7 +182,7 @@ const Workbook = () => {
             </div>
         </div>
 
-        <main className="space-y-3 mt-4">
+        <main className="space-y-3 mt-4 flex-grow">
             {subjects.length > 0 ? (
             subjects.map((subject, index) => (
                 <SubjectAccordion
@@ -204,11 +195,13 @@ const Workbook = () => {
                 />
             ))
             ) : (
-            <div className="text-center py-20 border border-dashed border-slate-700 rounded-xl bg-slate-800/30 text-slate-500 mt-10">
-                <Filter size={40} className="mx-auto mb-4 opacity-50" />
-                <p className="font-bold text-lg mb-2">조건에 맞는 문제가 없습니다.</p>
+            <div className="flex flex-col items-center justify-center py-20 border border-dashed border-slate-700 rounded-xl bg-slate-800/30 text-slate-500 mt-10">
+                <Filter size={48} className="mb-4 opacity-30 text-slate-400" />
+                <p className="font-bold text-lg mb-1 text-slate-300">조건에 맞는 문제가 없습니다.</p>
                 <p className="text-sm">검색어나 태그 필터를 변경해 보세요.</p>
-                <button onClick={resetFilters} className="mt-4 text-blue-400 hover:underline text-sm">필터 초기화</button>
+                <button onClick={resetFilters} className="mt-6 px-4 py-2 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 rounded-lg text-sm font-bold transition-all">
+                    필터 초기화
+                </button>
             </div>
             )}
         </main>

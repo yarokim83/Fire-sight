@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
-import { collection, query, onSnapshot } from 'firebase/firestore'; // orderBy 제거
+import { collection, query, onSnapshot } from 'firebase/firestore'; 
 
 export const useWorkbookData = () => {
     const [problems, setProblems] = useState([]);
@@ -12,71 +12,60 @@ export const useWorkbookData = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedTags, setSelectedTags] = useState([]);
 
-    // 1. 데이터 가져오기 (쿼리 조건 단순화)
     useEffect(() => {
-        // [수정] orderBy("createdAt", "desc")를 제거하여 모든 문서를 일단 가져오게 함
-        // 필드가 없는 문서도 누락되지 않도록 하기 위함입니다.
         const q = query(collection(db, "workbook"));
-        console.log("📡 단권화 워크북 전체 데이터 구독 시작...");
+        console.log("📡 워크북 데이터 구독 시작...");
     
         const unsubscribe = onSnapshot(q, (snapshot) => {
           try {
               const problemList = snapshot.docs.map(doc => {
                 const data = doc.data();
                 
-                // 1. 유연한 필드 매핑 (저장 형식이 달라도 최대한 내용을 보여줌)
+                // 1. 기본 필드 매핑
                 let rawQuestion = data.content || data.description || data.problemText || "내용 없음";
                 let rawAnswer = data.answer || data.modelAnswer || "해설 없음";
                 let rawTitle = data.title || "제목 없음";
                 
-                // 도면/계산형 매핑
+                // 도면 문제 처리 (제목에 [도면] 태그 추가)
                 if (data.problemType === 'drawing' || data.problemType === 'visual') {
-                    const originalContent = rawQuestion;
-                    rawQuestion = rawTitle; // 도면 문제는 제목을 질문으로 사용
-                    
-                    if (originalContent && originalContent !== "내용 없음") {
-                        rawAnswer = `[도면 해석/설명]\n${originalContent}\n\n[정답 및 핵심]\n${rawAnswer}`;
-                    }
+                    if (!rawTitle.startsWith('[도면]')) rawTitle = `[도면] ${rawTitle}`; 
                 }
 
-                // 2. 키워드 추출
+                // 2. 키워드 처리
                 let gradingKeywords = [];
-                if (data.keywords && Array.isArray(data.keywords) && data.keywords.length > 0) {
-                    gradingKeywords = data.keywords;
-                } else if (data.keywords && typeof data.keywords === 'string') {
-                    // 키워드가 문자열로 저장된 경우 처리
-                    gradingKeywords = data.keywords.split(',').map(k => k.trim());
-                } else if (rawAnswer.length > 0 && rawAnswer !== "해설 없음") {
-                    gradingKeywords = rawAnswer.split(/[\s,().]+/).filter(word => word && word.length >= 2).slice(0, 15);
-                } else {
-                    gradingKeywords = Array.isArray(data.tags) && data.tags.length > 0 ? data.tags : ["키워드 없음"];
-                }
+                if (Array.isArray(data.keywords)) gradingKeywords = data.keywords;
+                else if (typeof data.keywords === 'string' && data.keywords.trim() !== '') gradingKeywords = data.keywords.split(',').map(k => k.trim());
+                else if (Array.isArray(data.tags)) gradingKeywords = data.tags;
+                else gradingKeywords = ["키워드 없음"];
         
-                // 3. [안전한 날짜 변환] 날짜가 없으면 1970년 1월 1일로 처리 (에러 방지)
+                // 3. 날짜 처리
                 let createdDate = new Date(0);
                 if (data.createdAt) {
-                    if (typeof data.createdAt.toDate === 'function') {
-                        createdDate = data.createdAt.toDate(); // Firestore Timestamp
-                    } else if (typeof data.createdAt === 'string' || typeof data.createdAt === 'number') {
-                        createdDate = new Date(data.createdAt); // 문자열/숫자
-                    }
+                    if (typeof data.createdAt.toDate === 'function') createdDate = data.createdAt.toDate();
+                    else if (typeof data.createdAt === 'string' || typeof data.createdAt === 'number') createdDate = new Date(data.createdAt);
                 }
 
                 return {
                   id: doc.id,
-                  // 이미지 필드 통합 처리
+                  // [중요] 이미지 필드 매핑 (다중 이미지 지원)
                   imageUrl: data.imageUrl || (data.images && data.images.length > 0 ? data.images[0] : null),
-                  images: data.images || [],
-                  answerImageUrl: data.answerImageUrl || null,
+                  images: data.images || [], // 문제 이미지 배열
+                  
+                  // [핵심] 해설 이미지 배열 매핑 (이 부분이 있어야 다중 출력 가능)
+                  answerImages: data.answerImages || [], 
+                  answerImageUrl: data.answerImageUrl || (data.answerImages && data.answerImages.length > 0 ? data.answerImages[0] : null),
                   
                   title: String(rawTitle),
                   question: String(rawQuestion),
                   modelAnswer: String(rawAnswer),
+                  
+                  memo: data.memo || '', 
 
                   keywords: gradingKeywords,
                   tags: Array.isArray(data.tags) ? data.tags : [],
-                  subject: data.category || data.subject || '기타', // category 필드 우선
+                  subject: data.category || data.subject || '기타',
                   problemType: data.problemType || 'descriptive',
+                  
                   studyCount: Number(data.studyCount || 0),
                   wrongCount: Number(data.wrongCount || 0),
                   lastScore: Number(data.lastScore || 0),
@@ -84,39 +73,27 @@ export const useWorkbookData = () => {
                 };
               });
 
-              // [NEW] 클라이언트 사이드 기본 정렬 (최신순)
-              // 가져온 뒤에 정렬하므로 날짜 없는 데이터도 맨 아래에 뜸
+              // 최신순 정렬
               problemList.sort((a, b) => b.createdAt - a.createdAt);
-
               setProblems(problemList);
           
           } catch (error) {
-              console.error("🚨 데이터 매핑 중 치명적 오류:", error);
+              console.error("🚨 데이터 매핑 오류:", error);
               setProblems([]); 
           } finally {
               setLoading(false);
           }
-
-        }, (err) => {
-          console.error("🔥 Firestore 연결 실패 (권한/네트워크):", err);
-          setLoading(false);
         });
     
         return () => unsubscribe();
       }, []);
 
-      // 2. 태그 추출 로직 (그대로 유지)
       const allTags = useMemo(() => {
         const tags = new Set();
-        problems.forEach(p => {
-            if (Array.isArray(p.tags)) {
-                p.tags.forEach(t => tags.add(t));
-            }
-        });
+        problems.forEach(p => { if (Array.isArray(p.tags)) p.tags.forEach(t => tags.add(t)); });
         return Array.from(tags).sort();
       }, [problems]);
 
-      // 3. 필터링 로직 (그대로 유지)
       const processedProblems = useMemo(() => {
         let filtered = problems;
     
@@ -134,9 +111,7 @@ export const useWorkbookData = () => {
         }
 
         if (selectedTags.length > 0) {
-            filtered = filtered.filter(p => 
-                selectedTags.every(tag => p.tags.includes(tag))
-            );
+            filtered = filtered.filter(p => selectedTags.every(tag => p.tags.includes(tag)));
         }
         
         const sorted = [...filtered];
@@ -156,15 +131,7 @@ export const useWorkbookData = () => {
       }, [problems, activeTab, sortBy, searchTerm, selectedTags]);
 
       return {
-        problems, 
-        loading,
-        processedProblems,
-        allTags,
-        filterState: { 
-            activeTab, setActiveTab, 
-            sortBy, setSortBy, 
-            searchTerm, setSearchTerm,
-            selectedTags, setSelectedTags 
-        } 
+        problems, loading, processedProblems, allTags,
+        filterState: { activeTab, setActiveTab, sortBy, setSortBy, searchTerm, setSearchTerm, selectedTags, setSelectedTags } 
       };
 };
