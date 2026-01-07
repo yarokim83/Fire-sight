@@ -7,7 +7,7 @@ import {
     ChevronLeft, ChevronRight, CheckCircle2, XCircle, 
     BookOpen, Maximize2, Trash2, X, ArrowLeft,
     Type, PenTool, Eraser, RotateCcw, StickyNote, Edit3, Save, ImageIcon,
-    Check, Trophy, RefreshCcw, AlertTriangle, Pen
+    Check, Trophy, RefreshCcw, AlertTriangle, Pen, CheckCircle2 as OIcon
 } from 'lucide-react';
 
 export default function ProblemSolver({ problems, startIndex = 0, onBack, onComplete }) {
@@ -17,29 +17,31 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     
     // UI 상태
     const [showAnswer, setShowAnswer] = useState(false);
-    const [inputMode, setInputMode] = useState('text'); 
+    const [inputMode, setInputMode] = useState('text'); // 'text' | 'draw'
     const [userAnswer, setUserAnswer] = useState('');
     const [zoomImage, setZoomImage] = useState(null);
     const [showMemo, setShowMemo] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
     const [memoText, setMemoText] = useState('');
     
-    // 전체 화면 연습장 모드
+    // 채점 결과 상태
+    const [gradingResult, setGradingResult] = useState(null);
+
+    // 전체 화면 연습장 모드 상태
     const [isOverlayMode, setIsOverlayMode] = useState(false);
 
     // 로컬 이미지 상태
     const [localProblemImages, setLocalProblemImages] = useState([]);
     const [localAnswerImages, setLocalAnswerImages] = useState([]);
 
-    // 드로잉 관련
-    const canvasRef = useRef(null); // 하단 인라인 캔버스
-    const overlayCanvasRef = useRef(null); // 전체화면 오버레이
+    // 드로잉 관련 Ref
+    const canvasRef = useRef(null);        // 하단 정답 입력용 캔버스
+    const overlayCanvasRef = useRef(null); // 전체화면 오버레이 캔버스
     const [isDrawing, setIsDrawing] = useState(false);
-    const [penColor, setPenColor] = useState('#ef4444');
+    const [penColor, setPenColor] = useState('#000000');
     const [lineWidth, setLineWidth] = useState(2);
 
-    // 🔴 [핵심 추가] 현재 그리고 있는 펜의 고유 ID를 저장할 Ref
-    // 손바닥과 펜이 동시에 닿았을 때 서로 간섭하지 않도록 ID로 구분합니다.
+    // 멀티터치 간섭 방지용 ID
     const activePointerId = useRef(null);
 
     // --- 초기화 ---
@@ -55,13 +57,12 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             setShowMemo(false);
             setIsEditMode(false);
             setIsOverlayMode(false);
+            setGradingResult(null);
             
-            // 문제 넘길 때 드로잉 상태 초기화
-            activePointerId.current = null;
-            setIsDrawing(false);
-
+            // 문제 유형에 따라 기본 입력 모드 설정
             if (p.problemType === 'drawing' || p.problemType === 'calculation') {
                 setInputMode('draw');
+                setPenColor('#000000'); // 하단 캔버스는 기본 검정
             } else {
                 setInputMode('text');
             }
@@ -69,7 +70,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         }
     }, [currentIndex, problems]);
 
-    // 🔴 [iOS 선택 방지 1] 글로벌 스타일 주입
+    // 🔴 [iOS 선택 방지 1] 글로벌 스타일 (오버레이 모드일 때 강력 차단)
     useEffect(() => {
         if (isOverlayMode) {
             const style = document.createElement('style');
@@ -96,9 +97,9 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         };
     }, [isOverlayMode]);
 
-    // 🔴 [iOS 선택 방지 2] Native Event Listener (스크롤, 줌, 더블탭 방지)
+    // 🔴 [iOS 선택 방지 2] Native Event Listener (두 캔버스 모두 적용)
     useEffect(() => {
-        // 현재 활성화된 캔버스 찾기
+        // 현재 활성화된 캔버스 찾기 (오버레이가 우선, 그 다음 하단 캔버스)
         const activeCanvas = isOverlayMode ? overlayCanvasRef.current : (inputMode === 'draw' ? canvasRef.current : null);
         
         if (!activeCanvas) return;
@@ -109,29 +110,16 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         };
 
         const options = { passive: false };
-
-        activeCanvas.addEventListener('touchstart', preventAll, options);
-        activeCanvas.addEventListener('touchmove', preventAll, options);
-        activeCanvas.addEventListener('touchend', preventAll, options);
-        activeCanvas.addEventListener('touchcancel', preventAll, options);
-        
-        // 클릭, 더블클릭, 선택, 우클릭 모두 차단
-        activeCanvas.addEventListener('click', preventAll);
-        activeCanvas.addEventListener('dblclick', preventAll); 
-        activeCanvas.addEventListener('selectstart', preventAll); 
-        activeCanvas.addEventListener('contextmenu', preventAll); 
+        ['touchstart','touchmove','touchend','touchcancel','click','dblclick','selectstart','contextmenu'].forEach(evt => {
+            activeCanvas.addEventListener(evt, preventAll, options);
+        });
 
         return () => {
-            activeCanvas.removeEventListener('touchstart', preventAll);
-            activeCanvas.removeEventListener('touchmove', preventAll);
-            activeCanvas.removeEventListener('touchend', preventAll);
-            activeCanvas.removeEventListener('touchcancel', preventAll);
-            activeCanvas.removeEventListener('click', preventAll);
-            activeCanvas.removeEventListener('dblclick', preventAll);
-            activeCanvas.removeEventListener('selectstart', preventAll);
-            activeCanvas.removeEventListener('contextmenu', preventAll);
+            ['touchstart','touchmove','touchend','touchcancel','click','dblclick','selectstart','contextmenu'].forEach(evt => {
+                activeCanvas.removeEventListener(evt, preventAll, options);
+            });
         };
-    }, [inputMode, isOverlayMode]);
+    }, [isOverlayMode, inputMode]);
 
     // --- 캔버스 사이즈 조정 ---
     useEffect(() => {
@@ -170,28 +158,19 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         }
     }, [penColor, lineWidth, isOverlayMode, inputMode]);
 
-    // =========================================================
-    // 🔴 [수정됨] 팜 리젝션 & 멀티터치 간섭 방지 로직
-    // =========================================================
-    
+    // --- 드로잉 로직 (공통) ---
     const startDrawing = (e) => {
         e.preventDefault(); 
-        e.stopPropagation();
-
-        // 1. 펜이나 마우스가 아니면 무시 (손가락 터치 원천 차단)
+        // 펜이나 마우스가 아니면 무시 (손가락 터치 차단)
         if (e.nativeEvent.pointerType !== 'pen' && e.nativeEvent.pointerType !== 'mouse') return;
 
-        // 2. [핵심] 현재 그리기 시작한 펜의 ID를 저장 (이 ID만 추적)
         activePointerId.current = e.pointerId;
-
-        // 3. 포인터 캡처 (화면 밖으로 나가도 끊기지 않게 & 텍스트 선택 방지)
         if (e.target.setPointerCapture) {
             try { e.target.setPointerCapture(e.pointerId); } catch(err) {}
         }
 
-        const canvas = e.target;
-        const ctx = canvas.getContext('2d');
-        const rect = canvas.getBoundingClientRect();
+        const ctx = e.target.getContext('2d');
+        const rect = e.target.getBoundingClientRect();
         
         ctx.beginPath();
         ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
@@ -200,18 +179,12 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
     const draw = (e) => {
         e.preventDefault();
-        e.stopPropagation();
-
-        // 1. 그리기 상태가 아니면 리턴
         if (!isDrawing) return;
-
-        // 2. [핵심] 아까 시작한 그 펜(ID)이 아니면 무시! 
-        // (손바닥이 닿아서 이벤트가 발생해도, ID가 다르면 여기서 걸러져서 선이 튀지 않음)
+        // ID가 다르면(손바닥 등) 무시
         if (e.pointerId !== activePointerId.current) return;
 
-        const canvas = e.target;
-        const ctx = canvas.getContext('2d');
-        const rect = canvas.getBoundingClientRect();
+        const ctx = e.target.getContext('2d');
+        const rect = e.target.getBoundingClientRect();
         
         ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
         ctx.stroke();
@@ -219,19 +192,17 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
     const stopDrawing = (e) => {
         e.preventDefault();
-        
-        // 내 펜이 끝난 경우에만 종료 처리
         if (e.pointerId === activePointerId.current) {
             setIsDrawing(false);
-            activePointerId.current = null; // ID 초기화
-            
+            activePointerId.current = null;
             if (e.target.releasePointerCapture) {
                 try { e.target.releasePointerCapture(e.pointerId); } catch(err) {}
             }
         }
     };
     
-    const clearCanvas = () => {
+    // 현재 활성화된 캔버스 지우기
+    const clearCurrentCanvas = () => {
         const activeCanvas = isOverlayMode ? overlayCanvasRef.current : canvasRef.current;
         if (activeCanvas) {
             const ctx = activeCanvas.getContext('2d');
@@ -239,24 +210,35 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         }
     };
 
-    // --- 기존 로직 (채점, 핸들러 등) ---
+    // --- 채점 로직 ---
     const analyzeAnswer = () => {
         if (!currentProblem) return null;
         const keywords = currentProblem.keywords || [];
-        if (inputMode === 'draw' || !userAnswer.trim() || keywords.length === 0) {
-            return { score: 0, percentage: 0, matched: [], missing: keywords, manualGradingRequired: true };
+        
+        // 드로잉 모드거나 답안이 비어있으면 수동 채점
+        if (inputMode === 'draw' || !userAnswer.trim()) {
+            return { percentage: 0, matched: [], missing: keywords, manualGradingRequired: true };
         }
-        const matched = keywords.filter(keyword => userAnswer.includes(keyword) || userAnswer.includes(keyword.replace(/\s+/g, '')));
-        const percentage = Math.round((matched.length / keywords.length) * 100);
-        return { percentage, matched, missing: keywords.filter(k => !matched.includes(k)), manualGradingRequired: false };
+
+        const matched = keywords.filter(keyword => 
+            userAnswer.includes(keyword) || userAnswer.includes(keyword.replace(/\s+/g, ''))
+        );
+        const percentage = keywords.length > 0 ? Math.round((matched.length / keywords.length) * 100) : 0;
+        
+        return { 
+            percentage, 
+            matched, 
+            missing: keywords.filter(k => !matched.includes(k)), 
+            manualGradingRequired: false 
+        };
     };
-    const gradingResult = showAnswer ? analyzeAnswer() : null;
 
     const handleSubmit = async () => {
-        if (inputMode === 'text' && !userAnswer.trim()) return alert("답안을 입력해주세요!");
         setShowAnswer(true);
-        if (inputMode === 'text') {
-            const res = analyzeAnswer();
+        const res = analyzeAnswer();
+        setGradingResult(res); 
+        
+        if (inputMode === 'text' && userAnswer.trim() && !res.manualGradingRequired) {
             await updateProblemResult(currentProblem.id, res.percentage);
         }
     };
@@ -264,15 +246,16 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const handleManualGrade = async (isCorrect) => {
         const score = isCorrect ? 100 : 0;
         await updateProblemResult(currentProblem.id, score);
-        handleNext();
+        if (currentIndex < problems.length - 1) setCurrentIndex(prev => prev + 1);
+        else onComplete();
     };
 
     const handleNext = () => {
         if (currentIndex < problems.length - 1) setCurrentIndex(prev => prev + 1);
         else onComplete();
     };
-    const handlePrev = () => { if (currentIndex > 0) setCurrentIndex(prev => prev - 1); };
 
+    // --- 데이터 관리 (수정/삭제/메모) ---
     const handleSaveMemo = async () => {
         await updateProblemInfo(currentProblem.id, { memo: memoText });
         setCurrentProblem(prev => ({ ...prev, memo: memoText }));
@@ -281,19 +264,33 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
     const handleSaveEdit = async () => {
         try {
+            const newKeywords = Array.isArray(currentProblem.keywords) 
+                ? currentProblem.keywords 
+                : currentProblem.keywords.split(',').map(k => k.trim());
+
             await updateProblemInfo(currentProblem.id, {
                 title: currentProblem.title,
                 content: currentProblem.question,
                 answer: currentProblem.modelAnswer,
-                keywords: Array.isArray(currentProblem.keywords) ? currentProblem.keywords : currentProblem.keywords.split(',').map(k => k.trim())
+                keywords: newKeywords,
+                category: currentProblem.subject, 
+                problemType: currentProblem.problemType
             });
+            
+            // 문제 유형 변경 시 모드 자동 전환
+            if (currentProblem.problemType === 'drawing' || currentProblem.problemType === 'calculation') {
+                setInputMode('draw');
+            } else {
+                setInputMode('text');
+            }
+
             setIsEditMode(false);
-            alert("수정 완료!");
+            alert("수정 완료! ✅");
         } catch (e) { alert("수정 실패"); }
     };
 
     const handleDeleteProblem = async () => {
-        if (window.confirm("문제를 삭제하시겠습니까?")) {
+        if (window.confirm("이 문제를 삭제하시겠습니까?")) {
             await deleteProblem(currentProblem.id);
             alert("삭제되었습니다.");
             onBack();
@@ -301,7 +298,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     };
 
     const handleDeleteImage = async (type, imageUrl) => {
-        if (!window.confirm("이미지를 삭제하시겠습니까?")) return;
+        if (!window.confirm("이 이미지를 삭제하시겠습니까?")) return;
         try {
             const fileRef = ref(storage, imageUrl);
             await deleteObject(fileRef).catch(e => console.warn(e));
@@ -314,7 +311,25 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 setLocalAnswerImages(prev => prev.filter(url => url !== imageUrl));
             }
             alert("삭제되었습니다.");
-        } catch (e) { alert("삭제 실패"); }
+        } catch (e) { alert("삭제 오류"); }
+    };
+
+    // --- 내 답안 분석 컴포넌트 ---
+    const HighlightedUserAnswer = () => {
+        if (!gradingResult || gradingResult.matched.length === 0) return <p className="text-slate-700 whitespace-pre-wrap">{userAnswer}</p>;
+        const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = new RegExp(`(${gradingResult.matched.map(escapeRegExp).join('|')})`, 'g');
+        const parts = userAnswer.split(pattern);
+        return (
+            <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">
+                {parts.map((part, i) => {
+                    if (gradingResult.matched.includes(part)) {
+                        return <span key={i} className="text-emerald-600 font-bold bg-emerald-100 px-1 rounded mx-0.5 border border-emerald-200">{part}</span>;
+                    }
+                    return part;
+                })}
+            </p>
+        );
     };
 
     if (!currentProblem) return <div className="p-10 text-center text-white">로딩 중...</div>;
@@ -327,8 +342,13 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                     <ArrowLeft size={18} /> 목록
                 </button>
                 
+                {/* 상단 오버레이 연습장 버튼 */}
                 <button 
-                    onClick={() => setIsOverlayMode(!isOverlayMode)}
+                    onClick={() => {
+                        setIsOverlayMode(!isOverlayMode);
+                        // 오버레이 켜면 빨간펜으로 변경
+                        if (!isOverlayMode) { setPenColor('#ef4444'); setLineWidth(2); }
+                    }}
                     className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold transition-all border ${isOverlayMode ? 'bg-amber-500 border-amber-500 text-white animate-pulse' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'}`}
                 >
                     <Pen size={14} /> {isOverlayMode ? "연습장 끄기" : "연습장 모드"}
@@ -344,13 +364,18 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             {/* Main Content */}
             <div className="problem-container flex-1 overflow-y-auto p-4 md:p-6 pb-40 animate-in fade-in">
                 <div className="max-w-3xl mx-auto space-y-6">
+                    
                     {/* 문제 카드 */}
                     <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-xl relative">
                         {isEditMode ? (
-                            <div className="space-y-3">
+                            <div className="space-y-4 animate-in fade-in">
+                                <div className="flex gap-2">
+                                    <select value={currentProblem.subject} onChange={(e) => setCurrentProblem({...currentProblem, subject: e.target.value})} className="bg-slate-800 text-white text-sm border border-slate-700 rounded px-2 py-1.5"><option value="수계">수계</option><option value="가스계">가스계</option><option value="제연">제연</option><option value="전기">전기</option><option value="법규">법규</option><option value="기타">기타</option></select>
+                                    <select value={currentProblem.problemType} onChange={(e) => setCurrentProblem({...currentProblem, problemType: e.target.value})} className="bg-slate-800 text-white text-sm border border-slate-700 rounded px-2 py-1.5"><option value="descriptive">서술형</option><option value="selection">단답형</option><option value="drawing">도면</option><option value="calculation">계산</option></select>
+                                </div>
                                 <input value={currentProblem.title} onChange={(e) => setCurrentProblem({...currentProblem, title: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white font-bold" />
                                 <textarea value={currentProblem.question} onChange={(e) => setCurrentProblem({...currentProblem, question: e.target.value})} className="w-full h-32 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-slate-200" />
-                                <button onClick={handleSaveEdit} className="px-3 py-1 bg-blue-600 text-white rounded text-sm flex items-center gap-1"><Save size={14} /> 저장</button>
+                                <button onClick={handleSaveEdit} className="px-3 py-2 bg-blue-600 text-white rounded font-bold w-full flex justify-center items-center gap-1"><Save size={16} /> 저장</button>
                             </div>
                         ) : (
                             <>
@@ -365,56 +390,49 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                         )}
                     </div>
 
-                    {/* 답안 입력 (텍스트 전용) */}
+                    {/* [복구 완료] 답안 입력창 (텍스트/그리기 탭) */}
                     {!showAnswer && !isOverlayMode && (
                         <div className="bg-white rounded-xl shadow-xl overflow-hidden border-2 border-slate-700 focus-within:border-blue-500 transition-colors relative">
+                            {/* 상단 탭 버튼 */}
                             <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
                                 <div className="flex gap-2">
-                                    <button onClick={() => setInputMode('text')} className={`flex items-center gap-1 px-3 py-1 rounded text-sm font-bold ${inputMode === 'text' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-200'}`}><Type size={14} /> 텍스트</button>
-                                    <button onClick={() => setInputMode('draw')} className={`flex items-center gap-1 px-3 py-1 rounded text-sm font-bold ${inputMode === 'draw' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-200'}`}><PenTool size={14} /> 그리기</button>
+                                    <button onClick={() => setInputMode('text')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${inputMode === 'text' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'}`}>
+                                        <Type size={14} /> 텍스트
+                                    </button>
+                                    <button onClick={() => {
+                                        setInputMode('draw');
+                                        setPenColor('#000000'); // 하단 캔버스는 검정 기본
+                                        setLineWidth(2);
+                                    }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${inputMode === 'draw' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'}`}>
+                                        <PenTool size={14} /> 그리기
+                                    </button>
                                 </div>
+                                {/* 하단 그리기 툴바 */}
                                 {inputMode === 'draw' && (
                                     <div className="flex items-center gap-2">
-                                         <button onClick={() => {setPenColor('#000000'); setLineWidth(2)}} className={`w-5 h-5 rounded-full bg-black border ${penColor === '#000000' ? 'ring-2 ring-blue-500' : ''}`} />
-                                         <button onClick={() => {setPenColor('#ef4444'); setLineWidth(2)}} className={`w-5 h-5 rounded-full bg-red-500 border ${penColor === '#ef4444' ? 'ring-2 ring-blue-500' : ''}`} />
-                                         <button onClick={() => {setPenColor('#3b82f6'); setLineWidth(2)}} className={`w-5 h-5 rounded-full bg-blue-500 border ${penColor === '#3b82f6' ? 'ring-2 ring-blue-500' : ''}`} />
+                                         <button onClick={() => {setPenColor('#000000'); setLineWidth(2)}} className={`w-5 h-5 rounded-full bg-black border ${penColor === '#000000' ? 'ring-2 ring-blue-500' : 'border-slate-300'}`} />
+                                         <button onClick={() => {setPenColor('#ef4444'); setLineWidth(2)}} className={`w-5 h-5 rounded-full bg-red-500 border ${penColor === '#ef4444' ? 'ring-2 ring-blue-500' : 'border-slate-300'}`} />
+                                         <button onClick={() => {setPenColor('#3b82f6'); setLineWidth(2)}} className={`w-5 h-5 rounded-full bg-blue-500 border ${penColor === '#3b82f6' ? 'ring-2 ring-blue-500' : 'border-slate-300'}`} />
                                          <div className="w-px h-4 bg-slate-300 mx-1"></div>
-                                         <button onClick={() => {setPenColor('#ffffff'); setLineWidth(20)}} className="p-1 text-slate-500 hover:bg-slate-200 rounded"><Eraser size={16} /></button>
-                                         <button onClick={clearCanvas} className="p-1 text-slate-500 hover:bg-slate-200 rounded"><RotateCcw size={16} /></button>
+                                         <button onClick={() => {setPenColor('#ffffff'); setLineWidth(20)}} className={`p-1.5 rounded hover:bg-slate-200 ${penColor === '#ffffff' ? 'text-blue-600 bg-blue-50' : 'text-slate-500'}`} title="지우개"><Eraser size={16} /></button>
+                                         <button onClick={clearCurrentCanvas} className="p-1.5 rounded hover:bg-slate-200 text-slate-500" title="전체 지우기"><RotateCcw size={16} /></button>
                                     </div>
                                 )}
                             </div>
 
-                            {/* ✋ 하단 인라인 캔버스/텍스트 */}
-                            <div 
-                                className="relative w-full h-[350px] bg-white cursor-text" 
-                                style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
-                                onSelectStart={(e) => e.preventDefault()}
-                            > 
+                            {/* 입력 영역 */}
+                            <div className="relative w-full h-[400px] bg-white cursor-text select-none"> 
                                 {inputMode === 'text' ? (
-                                    <textarea 
-                                        value={userAnswer} 
-                                        onChange={(e) => setUserAnswer(e.target.value)} 
-                                        placeholder="답안을 입력하세요..." 
-                                        className="w-full h-full p-6 text-slate-900 text-lg outline-none resize-none placeholder:text-slate-400 select-text" 
-                                        spellCheck="false"
-                                        style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
-                                    />
+                                    <textarea value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} placeholder="답안을 입력하세요..." className="w-full h-full p-6 text-slate-900 text-lg outline-none resize-none placeholder:text-slate-400 select-text" spellCheck="false" style={{ userSelect: 'text', WebkitUserSelect: 'text' }} />
                                 ) : (
-                                    <canvas 
-                                        ref={canvasRef} 
-                                        onPointerDown={startDrawing} 
-                                        onPointerMove={draw} 
-                                        onPointerUp={stopDrawing} 
-                                        onPointerLeave={stopDrawing}
-                                        className="w-full h-full bg-slate-50" 
-                                        style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', cursor: 'crosshair' }} 
-                                    />
+                                    <canvas ref={canvasRef} onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={stopDrawing} onPointerLeave={stopDrawing} className="w-full h-full bg-slate-50" style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', cursor: 'crosshair' }} />
                                 )}
                             </div>
 
                             <div className="absolute bottom-4 right-4">
-                                <button onClick={handleSubmit} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-xl font-bold shadow-lg transition-transform active:scale-95"><Check size={18} /> 제출</button>
+                                <button onClick={handleSubmit} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-xl font-bold shadow-lg transition-transform active:scale-95">
+                                    <Check size={18} /> {inputMode === 'draw' ? '정답 확인' : '제출'}
+                                </button>
                             </div>
                         </div>
                     )}
@@ -422,21 +440,71 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                     {/* 채점 결과 */}
                     {showAnswer && (
                         <div className="space-y-6 animate-in slide-in-from-bottom-4">
-                            <div className="bg-emerald-950/20 rounded-2xl p-6 border border-emerald-900/50">
-                                <h3 className="text-emerald-400 font-bold text-lg mb-4 flex items-center gap-2"><BookOpen size={20} /> 모범 답안</h3>
-                                {localAnswerImages.length > 0 && (
-                                    <div className="grid grid-cols-2 gap-3 mb-6">
-                                        {localAnswerImages.map((url, idx) => (
-                                            <div key={idx} className="relative aspect-[4/3] group rounded-xl overflow-hidden border border-emerald-500/20 bg-black/40">
-                                                <img src={url} alt="Answer" className="w-full h-full object-contain cursor-zoom-in transition-transform group-hover:scale-105" onClick={() => setZoomImage(url)} />
-                                            </div>
-                                        ))}
+                            {gradingResult?.manualGradingRequired ? (
+                                <div className="bg-slate-800 p-6 rounded-2xl text-center space-y-4 border border-slate-700">
+                                    <h3 className="text-xl font-bold text-white">자가 채점 (Self-Evaluation)</h3>
+                                    <div className="flex justify-center gap-4">
+                                        <button onClick={() => handleManualGrade(true)} className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-500 shadow-lg"><OIcon size={20} /> 정답 (O)</button>
+                                        <button onClick={() => handleManualGrade(false)} className="px-6 py-3 bg-red-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-red-500 shadow-lg"><XCircle size={20} /> 오답 (X)</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex items-center justify-between bg-slate-800 p-6 rounded-2xl border border-slate-700">
+                                    <div className="flex items-center gap-4">
+                                        <div className={`p-3 rounded-full ${gradingResult?.percentage >= 70 ? 'bg-emerald-500/20 text-emerald-500' : 'bg-amber-500/20 text-amber-500'}`}>
+                                            {gradingResult?.percentage >= 70 ? <Trophy size={32} /> : <RefreshCcw size={32} />}
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-slate-400">키워드 일치율</p>
+                                            <p className={`text-2xl font-bold ${gradingResult?.percentage >= 70 ? 'text-emerald-400' : 'text-amber-400'}`}>{gradingResult?.percentage}%</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={handleNext} className="bg-slate-700 hover:bg-slate-600 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2">다음 <ChevronRight size={18} /></button>
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {inputMode === 'text' && userAnswer.trim() && (
+                                    <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xl">
+                                        <h3 className="text-slate-900 font-bold mb-4 flex items-center gap-2"><CheckCircle2 size={20} className="text-blue-600" /> 나의 답안 분석</h3>
+                                        <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 h-64 overflow-y-auto">
+                                            <HighlightedUserAnswer />
+                                        </div>
                                     </div>
                                 )}
-                                <div className="prose prose-invert max-w-none text-emerald-100/90 whitespace-pre-line leading-8 text-lg font-medium select-text">{currentProblem.modelAnswer}</div>
-                            </div>
-                            <div className="flex justify-end">
-                                <button onClick={handleNext} className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">다음 문제 <ChevronRight size={18} /></button>
+
+                                <div className={`space-y-4 ${inputMode === 'draw' || !userAnswer.trim() ? 'col-span-2' : ''}`}>
+                                    <div className="bg-emerald-950/20 rounded-2xl p-6 border border-emerald-900/50 relative">
+                                        <h3 className="text-emerald-400 font-bold text-lg mb-4 flex items-center gap-2"><BookOpen size={20} /> 모범 답안</h3>
+                                        {localAnswerImages.length > 0 && (
+                                            <div className="grid grid-cols-2 gap-3 mb-6">
+                                                {localAnswerImages.map((url, idx) => (
+                                                    <div key={idx} className="relative aspect-[4/3] group rounded-xl overflow-hidden border border-emerald-500/20 bg-black/40">
+                                                        <img src={url} alt="Answer" className="w-full h-full object-contain cursor-zoom-in transition-transform group-hover:scale-105" onClick={() => setZoomImage(url)} />
+                                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteImage('answer', url); }} className="absolute top-2 right-2 bg-red-600 hover:bg-red-500 text-white p-1.5 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10"><Trash2 size={14} /></button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {isEditMode ? (
+                                            <div className="space-y-2">
+                                                <textarea value={currentProblem.modelAnswer} onChange={(e) => setCurrentProblem({...currentProblem, modelAnswer: e.target.value})} className="w-full h-32 bg-slate-800/80 border border-emerald-500/50 rounded p-2 text-emerald-100 text-sm" />
+                                                <input value={Array.isArray(currentProblem.keywords) ? currentProblem.keywords.join(', ') : currentProblem.keywords} onChange={(e) => setCurrentProblem({...currentProblem, keywords: e.target.value.split(',').map(k => k.trim())})} className="w-full bg-slate-800/80 border border-emerald-500/50 rounded p-2 text-emerald-100 text-sm" placeholder="키워드 (쉼표 구분)" />
+                                                <button onClick={handleSaveEdit} className="w-full py-2 bg-emerald-600 text-white rounded text-sm font-bold">저장</button>
+                                            </div>
+                                        ) : (
+                                            <div className="prose prose-invert max-w-none text-emerald-100/90 whitespace-pre-line leading-8 text-lg font-medium select-text">{currentProblem.modelAnswer}</div>
+                                        )}
+                                    </div>
+                                    {inputMode === 'text' && gradingResult?.missing?.length > 0 && (
+                                        <div className="bg-red-900/20 rounded-2xl p-6 border border-red-500/30">
+                                            <h3 className="text-red-400 font-bold mb-4 flex items-center gap-2"><AlertTriangle size={20} /> 누락된 키워드</h3>
+                                            <div className="flex flex-wrap gap-2">
+                                                {gradingResult.missing.map((kw, i) => <span key={i} className="px-3 py-1 bg-red-500/20 text-red-300 rounded-lg text-sm border border-red-500/30">{kw}</span>)}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}
@@ -446,28 +514,19 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             {/* 오버레이 연습장 */}
             {isOverlayMode && (
                 <div className="fixed inset-0 z-[99] cursor-crosshair touch-none select-none">
-                    {/* 툴바 */}
                     <div className="absolute top-24 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur border border-slate-700 rounded-full px-5 py-2.5 flex items-center gap-4 shadow-2xl animate-in slide-in-from-top-4 z-[100] pointer-events-auto">
                         <div className="flex gap-3">
-                            <button onClick={() => {setPenColor('#000000'); setLineWidth(2)}} className={`w-6 h-6 rounded-full bg-black border-2 ${penColor === '#000000' ? 'border-white scale-110' : 'border-slate-600'}`} />
-                            <button onClick={() => {setPenColor('#ef4444'); setLineWidth(2)}} className={`w-6 h-6 rounded-full bg-red-500 border-2 ${penColor === '#ef4444' ? 'border-white scale-110' : 'border-slate-600'}`} />
-                            <button onClick={() => {setPenColor('#3b82f6'); setLineWidth(2)}} className={`w-6 h-6 rounded-full bg-blue-500 border-2 ${penColor === '#3b82f6' ? 'border-white scale-110' : 'border-slate-600'}`} />
-                            <button onClick={() => {setPenColor('#f59e0b'); setLineWidth(4)}} className={`w-6 h-6 rounded-full bg-amber-500 border-2 ${penColor === '#f59e0b' ? 'border-white scale-110' : 'border-slate-600'}`} />
+                            <button onClick={() => {setPenColor('#000000'); setLineWidth(2)}} className={`w-6 h-6 rounded-full bg-black border-2 ${penColor === '#000000' && lineWidth === 2 ? 'border-white scale-110' : 'border-slate-600'}`} />
+                            <button onClick={() => {setPenColor('#ef4444'); setLineWidth(2)}} className={`w-6 h-6 rounded-full bg-red-500 border-2 ${penColor === '#ef4444' && lineWidth === 2 ? 'border-white scale-110' : 'border-slate-600'}`} />
+                            <button onClick={() => {setPenColor('#3b82f6'); setLineWidth(2)}} className={`w-6 h-6 rounded-full bg-blue-500 border-2 ${penColor === '#3b82f6' && lineWidth === 2 ? 'border-white scale-110' : 'border-slate-600'}`} />
+                            <button onClick={() => {setPenColor('#f59e0b40'); setLineWidth(15)}} className={`w-6 h-6 rounded-full bg-amber-500/50 border-2 ${lineWidth === 15 ? 'border-white scale-110' : 'border-slate-600'}`} title="형광펜" />
                         </div>
                         <div className="w-px h-5 bg-slate-700"></div>
-                        <button onClick={clearCanvas} className="text-slate-400 hover:text-white p-1" title="지우기"><RotateCcw size={20} /></button>
+                        <button onClick={() => {setPenColor('#ffffff'); setLineWidth(20)}} className={`text-slate-400 hover:text-white p-1 ${penColor === '#ffffff' ? 'text-white scale-110' : ''}`} title="지우개"><Eraser size={20} /></button>
+                        <button onClick={clearCurrentCanvas} className="text-slate-400 hover:text-white p-1" title="전체 지우기"><RotateCcw size={20} /></button>
                         <button onClick={() => setIsOverlayMode(false)} className="text-slate-400 hover:text-red-400 p-1 ml-1" title="닫기"><X size={24} /></button>
                     </div>
-
-                    <canvas 
-                        ref={overlayCanvasRef}
-                        onPointerDown={startDrawing}
-                        onPointerMove={draw}
-                        onPointerUp={stopDrawing}
-                        onPointerLeave={stopDrawing}
-                        className="w-full h-full"
-                        style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
-                    />
+                    <canvas ref={overlayCanvasRef} onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={stopDrawing} onPointerLeave={stopDrawing} className="w-full h-full" style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }} />
                 </div>
             )}
 
@@ -499,7 +558,7 @@ function ImageCarousel({ images, onZoom, onDelete }) {
         <div className="relative w-full max-w-xl mx-auto aspect-video bg-black/50 rounded-xl overflow-hidden border border-slate-700 group mb-6 select-none">
             <img src={images[index]} alt="Problem" className="w-full h-full object-contain cursor-zoom-in" onClick={() => onZoom(images[index])} />
             <div className="absolute top-3 left-3 bg-black/60 backdrop-blur px-2 py-1 rounded-lg text-white text-xs font-bold flex items-center gap-1 pointer-events-none"><Maximize2 size={12} /> 확대</div>
-            <button onClick={(e) => { e.stopPropagation(); onDelete(images[index]); }} className="absolute top-3 right-3 bg-red-600 hover:bg-red-500 text-white p-2 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={18} /></button>
+            <button onClick={(e) => { e.stopPropagation(); onDelete(images[index]); }} className="absolute top-3 right-3 bg-red-600 hover:bg-red-500 text-white p-2 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity" title="문제 이미지 삭제"><Trash2 size={18} /></button>
             {images.length > 1 && (
                 <>
                     <button onClick={(e) => { e.stopPropagation(); prev(); }} className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full"><ChevronLeft size={20} /></button>
