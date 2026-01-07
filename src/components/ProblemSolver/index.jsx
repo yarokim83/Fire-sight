@@ -17,7 +17,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     
     // UI 상태
     const [showAnswer, setShowAnswer] = useState(false);
-    const [inputMode, setInputMode] = useState('text'); // 'text' | 'draw'
+    const [inputMode, setInputMode] = useState('text'); 
     const [userAnswer, setUserAnswer] = useState('');
     const [zoomImage, setZoomImage] = useState(null);
     const [showMemo, setShowMemo] = useState(false);
@@ -35,8 +35,8 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const [localAnswerImages, setLocalAnswerImages] = useState([]);
 
     // 드로잉 관련 Ref
-    const canvasRef = useRef(null);        // 하단 정답 입력용 캔버스
-    const overlayCanvasRef = useRef(null); // 전체화면 오버레이 캔버스
+    const canvasRef = useRef(null);        // 하단 인라인 캔버스
+    const overlayCanvasRef = useRef(null); // 전체화면 오버레이
     const [isDrawing, setIsDrawing] = useState(false);
     const [penColor, setPenColor] = useState('#000000');
     const [lineWidth, setLineWidth] = useState(2);
@@ -59,10 +59,9 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             setIsOverlayMode(false);
             setGradingResult(null);
             
-            // 문제 유형에 따라 기본 입력 모드 설정
+            // 문제 유형에 따라 기본 모드 설정
             if (p.problemType === 'drawing' || p.problemType === 'calculation') {
                 setInputMode('draw');
-                setPenColor('#000000'); // 하단 캔버스는 기본 검정
             } else {
                 setInputMode('text');
             }
@@ -70,7 +69,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         }
     }, [currentIndex, problems]);
 
-    // 🔴 [iOS 선택 방지 1] 글로벌 스타일 (오버레이 모드일 때 강력 차단)
+    // 🔴 [iOS 선택 방지 1] 글로벌 스타일
     useEffect(() => {
         if (isOverlayMode) {
             const style = document.createElement('style');
@@ -97,11 +96,9 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         };
     }, [isOverlayMode]);
 
-    // 🔴 [iOS 선택 방지 2] Native Event Listener (두 캔버스 모두 적용)
+    // 🔴 [iOS 선택 방지 2] Native Event Listener
     useEffect(() => {
-        // 현재 활성화된 캔버스 찾기 (오버레이가 우선, 그 다음 하단 캔버스)
         const activeCanvas = isOverlayMode ? overlayCanvasRef.current : (inputMode === 'draw' ? canvasRef.current : null);
-        
         if (!activeCanvas) return;
 
         const preventAll = (e) => {
@@ -123,7 +120,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
     // --- 캔버스 사이즈 조정 ---
     useEffect(() => {
-        // 1. 하단 인라인 캔버스
         if (inputMode === 'draw' && canvasRef.current && !isOverlayMode) {
             const canvas = canvasRef.current;
             const parent = canvas.parentElement;
@@ -135,7 +131,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             ctx.strokeStyle = penColor;
             ctx.lineWidth = lineWidth;
         }
-        // 2. 오버레이 캔버스
         if (isOverlayMode && overlayCanvasRef.current) {
             const canvas = overlayCanvasRef.current;
             canvas.width = window.innerWidth;
@@ -158,10 +153,9 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         }
     }, [penColor, lineWidth, isOverlayMode, inputMode]);
 
-    // --- 드로잉 로직 (공통) ---
+    // --- 드로잉 로직 ---
     const startDrawing = (e) => {
         e.preventDefault(); 
-        // 펜이나 마우스가 아니면 무시 (손가락 터치 차단)
         if (e.nativeEvent.pointerType !== 'pen' && e.nativeEvent.pointerType !== 'mouse') return;
 
         activePointerId.current = e.pointerId;
@@ -171,7 +165,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
         const ctx = e.target.getContext('2d');
         const rect = e.target.getBoundingClientRect();
-        
         ctx.beginPath();
         ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
         setIsDrawing(true);
@@ -180,12 +173,10 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const draw = (e) => {
         e.preventDefault();
         if (!isDrawing) return;
-        // ID가 다르면(손바닥 등) 무시
         if (e.pointerId !== activePointerId.current) return;
 
         const ctx = e.target.getContext('2d');
         const rect = e.target.getBoundingClientRect();
-        
         ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
         ctx.stroke();
     };
@@ -201,7 +192,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         }
     };
     
-    // 현재 활성화된 캔버스 지우기
     const clearCurrentCanvas = () => {
         const activeCanvas = isOverlayMode ? overlayCanvasRef.current : canvasRef.current;
         if (activeCanvas) {
@@ -215,7 +205,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         if (!currentProblem) return null;
         const keywords = currentProblem.keywords || [];
         
-        // 드로잉 모드거나 답안이 비어있으면 수동 채점
         if (inputMode === 'draw' || !userAnswer.trim()) {
             return { percentage: 0, matched: [], missing: keywords, manualGradingRequired: true };
         }
@@ -255,7 +244,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         else onComplete();
     };
 
-    // --- 데이터 관리 (수정/삭제/메모) ---
+    // --- 데이터 관리 ---
     const handleSaveMemo = async () => {
         await updateProblemInfo(currentProblem.id, { memo: memoText });
         setCurrentProblem(prev => ({ ...prev, memo: memoText }));
@@ -277,7 +266,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 problemType: currentProblem.problemType
             });
             
-            // 문제 유형 변경 시 모드 자동 전환
             if (currentProblem.problemType === 'drawing' || currentProblem.problemType === 'calculation') {
                 setInputMode('draw');
             } else {
@@ -314,7 +302,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         } catch (e) { alert("삭제 오류"); }
     };
 
-    // --- 내 답안 분석 컴포넌트 ---
     const HighlightedUserAnswer = () => {
         if (!gradingResult || gradingResult.matched.length === 0) return <p className="text-slate-700 whitespace-pre-wrap">{userAnswer}</p>;
         const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -341,19 +328,12 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 <button onClick={onBack} className="text-slate-400 hover:text-white flex items-center gap-2 text-sm font-bold">
                     <ArrowLeft size={18} /> 목록
                 </button>
-                
-                {/* 상단 오버레이 연습장 버튼 */}
                 <button 
-                    onClick={() => {
-                        setIsOverlayMode(!isOverlayMode);
-                        // 오버레이 켜면 빨간펜으로 변경
-                        if (!isOverlayMode) { setPenColor('#ef4444'); setLineWidth(2); }
-                    }}
+                    onClick={() => setIsOverlayMode(!isOverlayMode)}
                     className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold transition-all border ${isOverlayMode ? 'bg-amber-500 border-amber-500 text-white animate-pulse' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'}`}
                 >
                     <Pen size={14} /> {isOverlayMode ? "연습장 끄기" : "연습장 모드"}
                 </button>
-
                 <div className="flex gap-2">
                     <button onClick={() => setShowMemo(!showMemo)} className={`p-2 rounded-lg ${showMemo ? 'bg-amber-500 text-white' : 'text-slate-400 hover:bg-slate-800'}`}><StickyNote size={18} /></button>
                     <button onClick={() => setIsEditMode(!isEditMode)} className={`p-2 rounded-lg ${isEditMode ? 'bg-blue-600' : 'text-slate-400 hover:bg-slate-800'}`}><Edit3 size={18} /></button>
@@ -390,32 +370,27 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                         )}
                     </div>
 
-                    {/* [복구 완료] 답안 입력창 (텍스트/그리기 탭) */}
+                    {/* 답안 입력 */}
                     {!showAnswer && !isOverlayMode && (
                         <div className="bg-white rounded-xl shadow-xl overflow-hidden border-2 border-slate-700 focus-within:border-blue-500 transition-colors relative">
-                            {/* 상단 탭 버튼 */}
+                            {/* 탭 */}
                             <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
                                 <div className="flex gap-2">
                                     <button onClick={() => setInputMode('text')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${inputMode === 'text' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'}`}>
                                         <Type size={14} /> 텍스트
                                     </button>
-                                    <button onClick={() => {
-                                        setInputMode('draw');
-                                        setPenColor('#000000'); // 하단 캔버스는 검정 기본
-                                        setLineWidth(2);
-                                    }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${inputMode === 'draw' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'}`}>
+                                    <button onClick={() => setInputMode('draw')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${inputMode === 'draw' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'}`}>
                                         <PenTool size={14} /> 그리기
                                     </button>
                                 </div>
-                                {/* 하단 그리기 툴바 */}
                                 {inputMode === 'draw' && (
                                     <div className="flex items-center gap-2">
                                          <button onClick={() => {setPenColor('#000000'); setLineWidth(2)}} className={`w-5 h-5 rounded-full bg-black border ${penColor === '#000000' ? 'ring-2 ring-blue-500' : 'border-slate-300'}`} />
                                          <button onClick={() => {setPenColor('#ef4444'); setLineWidth(2)}} className={`w-5 h-5 rounded-full bg-red-500 border ${penColor === '#ef4444' ? 'ring-2 ring-blue-500' : 'border-slate-300'}`} />
                                          <button onClick={() => {setPenColor('#3b82f6'); setLineWidth(2)}} className={`w-5 h-5 rounded-full bg-blue-500 border ${penColor === '#3b82f6' ? 'ring-2 ring-blue-500' : 'border-slate-300'}`} />
                                          <div className="w-px h-4 bg-slate-300 mx-1"></div>
-                                         <button onClick={() => {setPenColor('#ffffff'); setLineWidth(20)}} className={`p-1.5 rounded hover:bg-slate-200 ${penColor === '#ffffff' ? 'text-blue-600 bg-blue-50' : 'text-slate-500'}`} title="지우개"><Eraser size={16} /></button>
-                                         <button onClick={clearCurrentCanvas} className="p-1.5 rounded hover:bg-slate-200 text-slate-500" title="전체 지우기"><RotateCcw size={16} /></button>
+                                         <button onClick={() => {setPenColor('#ffffff'); setLineWidth(20)}} className="p-1 text-slate-500 hover:bg-slate-200 rounded"><Eraser size={16} /></button>
+                                         <button onClick={clearCurrentCanvas} className="p-1 text-slate-500 hover:bg-slate-200 rounded"><RotateCcw size={16} /></button>
                                     </div>
                                 )}
                             </div>
@@ -423,13 +398,13 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                             {/* 입력 영역 */}
                             <div className="relative w-full h-[400px] bg-white cursor-text select-none"> 
                                 {inputMode === 'text' ? (
-                                    <textarea value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} placeholder="답안을 입력하세요..." className="w-full h-full p-6 text-slate-900 text-lg outline-none resize-none placeholder:text-slate-400 select-text" spellCheck="false" style={{ userSelect: 'text', WebkitUserSelect: 'text' }} />
+                                    <textarea value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} placeholder="답안을 입력하세요..." className="w-full h-full p-6 pb-20 text-slate-900 text-lg outline-none resize-none placeholder:text-slate-400 select-text" spellCheck="false" style={{ userSelect: 'text', WebkitUserSelect: 'text' }} />
                                 ) : (
                                     <canvas ref={canvasRef} onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={stopDrawing} onPointerLeave={stopDrawing} className="w-full h-full bg-slate-50" style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', cursor: 'crosshair' }} />
                                 )}
                             </div>
 
-                            <div className="absolute bottom-4 right-4">
+                            <div className="absolute bottom-4 right-4 z-20">
                                 <button onClick={handleSubmit} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-xl font-bold shadow-lg transition-transform active:scale-95">
                                     <Check size={18} /> {inputMode === 'draw' ? '정답 확인' : '제출'}
                                 </button>
@@ -442,10 +417,10 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                         <div className="space-y-6 animate-in slide-in-from-bottom-4">
                             {gradingResult?.manualGradingRequired ? (
                                 <div className="bg-slate-800 p-6 rounded-2xl text-center space-y-4 border border-slate-700">
-                                    <h3 className="text-xl font-bold text-white">자가 채점 (Self-Evaluation)</h3>
+                                    <h3 className="text-xl font-bold text-white">자가 채점</h3>
                                     <div className="flex justify-center gap-4">
-                                        <button onClick={() => handleManualGrade(true)} className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-500 shadow-lg"><OIcon size={20} /> 정답 (O)</button>
-                                        <button onClick={() => handleManualGrade(false)} className="px-6 py-3 bg-red-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-red-500 shadow-lg"><XCircle size={20} /> 오답 (X)</button>
+                                        <button onClick={() => handleManualGrade(true)} className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-500"><OIcon size={20} /> 정답 (O)</button>
+                                        <button onClick={() => handleManualGrade(false)} className="px-6 py-3 bg-red-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-red-500"><XCircle size={20} /> 오답 (X)</button>
                                     </div>
                                 </div>
                             ) : (
@@ -455,7 +430,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                             {gradingResult?.percentage >= 70 ? <Trophy size={32} /> : <RefreshCcw size={32} />}
                                         </div>
                                         <div>
-                                            <p className="text-sm text-slate-400">키워드 일치율</p>
+                                            <p className="text-sm text-slate-400">일치율</p>
                                             <p className={`text-2xl font-bold ${gradingResult?.percentage >= 70 ? 'text-emerald-400' : 'text-amber-400'}`}>{gradingResult?.percentage}%</p>
                                         </div>
                                     </div>
@@ -466,7 +441,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 {inputMode === 'text' && userAnswer.trim() && (
                                     <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xl">
-                                        <h3 className="text-slate-900 font-bold mb-4 flex items-center gap-2"><CheckCircle2 size={20} className="text-blue-600" /> 나의 답안 분석</h3>
+                                        <h3 className="text-slate-900 font-bold mb-4 flex items-center gap-2"><CheckCircle2 size={20} className="text-blue-600" /> 나의 답안</h3>
                                         <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 h-64 overflow-y-auto">
                                             <HighlightedUserAnswer />
                                         </div>
@@ -475,7 +450,12 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
                                 <div className={`space-y-4 ${inputMode === 'draw' || !userAnswer.trim() ? 'col-span-2' : ''}`}>
                                     <div className="bg-emerald-950/20 rounded-2xl p-6 border border-emerald-900/50 relative">
-                                        <h3 className="text-emerald-400 font-bold text-lg mb-4 flex items-center gap-2"><BookOpen size={20} /> 모범 답안</h3>
+                                        <h3 className="text-emerald-400 font-bold text-lg mb-4 flex items-center gap-2">
+                                            <BookOpen size={20} /> 모범 답안
+                                            {isEditMode && <span className="text-xs bg-emerald-500 text-white px-2 py-0.5 rounded ml-2">수정 중</span>}
+                                        </h3>
+                                        
+                                        {/* 해설 이미지 및 삭제 버튼 */}
                                         {localAnswerImages.length > 0 && (
                                             <div className="grid grid-cols-2 gap-3 mb-6">
                                                 {localAnswerImages.map((url, idx) => (
@@ -486,21 +466,37 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                                 ))}
                                             </div>
                                         )}
+
+                                        {/* 🔴 [기능 추가] 모범 답안 수정 기능 */}
                                         {isEditMode ? (
-                                            <div className="space-y-2">
-                                                <textarea value={currentProblem.modelAnswer} onChange={(e) => setCurrentProblem({...currentProblem, modelAnswer: e.target.value})} className="w-full h-32 bg-slate-800/80 border border-emerald-500/50 rounded p-2 text-emerald-100 text-sm" />
-                                                <input value={Array.isArray(currentProblem.keywords) ? currentProblem.keywords.join(', ') : currentProblem.keywords} onChange={(e) => setCurrentProblem({...currentProblem, keywords: e.target.value.split(',').map(k => k.trim())})} className="w-full bg-slate-800/80 border border-emerald-500/50 rounded p-2 text-emerald-100 text-sm" placeholder="키워드 (쉼표 구분)" />
-                                                <button onClick={handleSaveEdit} className="w-full py-2 bg-emerald-600 text-white rounded text-sm font-bold">저장</button>
+                                            <div className="space-y-3 mt-4 animate-in fade-in">
+                                                <label className="text-xs font-bold text-emerald-400">모범 답안 텍스트</label>
+                                                <textarea 
+                                                    value={currentProblem.modelAnswer} 
+                                                    onChange={(e) => setCurrentProblem({...currentProblem, modelAnswer: e.target.value})} 
+                                                    className="w-full h-48 bg-emerald-900/40 border border-emerald-500/50 rounded p-3 text-emerald-100 text-base focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                                                />
+                                                <label className="text-xs font-bold text-emerald-400">채점 키워드 (쉼표로 구분)</label>
+                                                <input 
+                                                    value={Array.isArray(currentProblem.keywords) ? currentProblem.keywords.join(', ') : currentProblem.keywords} 
+                                                    onChange={(e) => setCurrentProblem({...currentProblem, keywords: e.target.value.split(',').map(k => k.trim())})} 
+                                                    className="w-full bg-emerald-900/40 border border-emerald-500/50 rounded p-3 text-emerald-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all" 
+                                                />
+                                                <button onClick={handleSaveEdit} className="w-full py-2.5 mt-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all"><Save size={16} /> 답안 및 키워드 저장</button>
                                             </div>
                                         ) : (
                                             <div className="prose prose-invert max-w-none text-emerald-100/90 whitespace-pre-line leading-8 text-lg font-medium select-text">{currentProblem.modelAnswer}</div>
                                         )}
                                     </div>
+
+                                    {/* 누락 키워드 */}
                                     {inputMode === 'text' && gradingResult?.missing?.length > 0 && (
                                         <div className="bg-red-900/20 rounded-2xl p-6 border border-red-500/30">
                                             <h3 className="text-red-400 font-bold mb-4 flex items-center gap-2"><AlertTriangle size={20} /> 누락된 키워드</h3>
                                             <div className="flex flex-wrap gap-2">
-                                                {gradingResult.missing.map((kw, i) => <span key={i} className="px-3 py-1 bg-red-500/20 text-red-300 rounded-lg text-sm border border-red-500/30">{kw}</span>)}
+                                                {gradingResult.missing.map((kw, i) => (
+                                                    <span key={i} className="px-3 py-1 bg-red-500/20 text-red-300 rounded-lg text-sm border border-red-500/30">{kw}</span>
+                                                ))}
                                             </div>
                                         </div>
                                     )}
