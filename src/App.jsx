@@ -272,8 +272,8 @@ function App() {
         </main>
       </div>
 
-      {/* 연습장 위젯 (잠금해제 후에만 표시) */}
-      <CanvasWidget />
+      {/* 연습장 위젯 (Workbook 모드에서만 표시) */}
+      {mode === 'workbook' && <CanvasWidget />}
       
     </div>
   );
