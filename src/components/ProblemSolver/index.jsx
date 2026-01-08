@@ -7,7 +7,8 @@ import {
     ChevronLeft, ChevronRight, CheckCircle2, XCircle, 
     BookOpen, Maximize2, Trash2, X, ArrowLeft,
     Type, PenTool, Eraser, RotateCcw, StickyNote, Edit3, Save, ImageIcon,
-    Check, Trophy, RefreshCcw, AlertTriangle, Pen, CheckCircle2 as OIcon
+    Check, Trophy, RefreshCcw, AlertTriangle, Pen, CheckCircle2 as OIcon,
+    RefreshCw 
 } from 'lucide-react';
 
 export default function ProblemSolver({ problems, startIndex = 0, onBack, onComplete }) {
@@ -24,6 +25,9 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const [isEditMode, setIsEditMode] = useState(false);
     const [memoText, setMemoText] = useState('');
     
+    // 답안 수정(다시 쓰기) 모드 상태
+    const [isRetrying, setIsRetrying] = useState(false);
+
     // 채점 결과 상태
     const [gradingResult, setGradingResult] = useState(null);
 
@@ -35,8 +39,8 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const [localAnswerImages, setLocalAnswerImages] = useState([]);
 
     // 드로잉 관련 Ref
-    const canvasRef = useRef(null);        // 하단 인라인 캔버스
-    const overlayCanvasRef = useRef(null); // 전체화면 오버레이
+    const canvasRef = useRef(null);        
+    const overlayCanvasRef = useRef(null); 
     const [isDrawing, setIsDrawing] = useState(false);
     const [penColor, setPenColor] = useState('#000000');
     const [lineWidth, setLineWidth] = useState(2);
@@ -58,8 +62,8 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             setIsEditMode(false);
             setIsOverlayMode(false);
             setGradingResult(null);
+            setIsRetrying(false); 
             
-            // 문제 유형에 따라 기본 모드 설정
             if (p.problemType === 'drawing' || p.problemType === 'calculation') {
                 setInputMode('draw');
             } else {
@@ -234,6 +238,16 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         }
     };
 
+    const handleRetrySubmit = async () => {
+        const res = analyzeAnswer();
+        setGradingResult(res); 
+        setIsRetrying(false);  
+        
+        if (!res.manualGradingRequired) {
+            await updateProblemResult(currentProblem.id, res.percentage);
+        }
+    };
+
     const handleManualGrade = async (isCorrect) => {
         const score = isCorrect ? 100 : 0;
         await updateProblemResult(currentProblem.id, score);
@@ -304,7 +318,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         } catch (e) { alert("삭제 오류"); }
     };
 
-    // --- 내 답안 분석 컴포넌트 ---
     const HighlightedUserAnswer = () => {
         if (!gradingResult || gradingResult.matched.length === 0) return <p className="text-slate-700 whitespace-pre-wrap break-words">{userAnswer}</p>;
         const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -375,7 +388,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
                     {/* 답안 입력 */}
                     {!showAnswer && !isOverlayMode && (
-                        <div className="bg-white rounded-xl shadow-xl overflow-hidden border-2 border-slate-700 focus-within:border-blue-500 transition-colors relative isolate">
+                        <div className="bg-white rounded-xl shadow-xl overflow-hidden border-2 border-slate-700 focus-within:border-blue-500 transition-colors relative">
                             {/* 탭 */}
                             <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
                                 <div className="flex gap-2">
@@ -395,28 +408,16 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                             </div>
 
                             {/* 입력 영역 */}
-                            <div className="relative w-full h-[400px] bg-white cursor-text select-none z-0"> 
+                            <div className="relative w-full h-[400px] bg-white cursor-text select-none"> 
                                 {inputMode === 'text' ? (
-                                    <textarea 
-                                        value={userAnswer} 
-                                        onChange={(e) => setUserAnswer(e.target.value)} 
-                                        placeholder="답안을 입력하세요..." 
-                                        className="w-full h-full p-6 pb-20 text-slate-900 text-lg outline-none resize-none placeholder:text-slate-400 select-text break-words whitespace-pre-wrap" 
-                                        spellCheck="false" 
-                                        style={{ userSelect: 'text', WebkitUserSelect: 'text' }} 
-                                    />
+                                    <textarea value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} placeholder="답안을 입력하세요..." className="w-full h-full p-6 pb-20 text-slate-900 text-lg outline-none resize-none placeholder:text-slate-400 select-text break-words whitespace-pre-wrap" spellCheck="false" style={{ userSelect: 'text', WebkitUserSelect: 'text' }} />
                                 ) : (
                                     <canvas ref={canvasRef} onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={stopDrawing} onPointerLeave={stopDrawing} className="w-full h-full bg-slate-50" style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', cursor: 'crosshair' }} />
                                 )}
                             </div>
 
-                            {/* 🔴 [수정됨] z-index: 50 + stopPropagation으로 클릭 이벤트 확실하게 보장 */}
                             <div className="absolute bottom-4 right-4 z-50 pointer-events-auto">
-                                <button 
-                                    onPointerDown={(e) => e.stopPropagation()} // ✋ 핵심: 부모로의 이벤트 전파 차단
-                                    onClick={handleSubmit} 
-                                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-xl font-bold shadow-lg transition-transform active:scale-95 cursor-pointer"
-                                >
+                                <button onPointerDown={(e) => e.stopPropagation()} onClick={handleSubmit} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-xl font-bold shadow-lg transition-transform active:scale-95 cursor-pointer">
                                     <Check size={18} /> {inputMode === 'draw' ? '정답 확인' : '제출'}
                                 </button>
                             </div>
@@ -450,16 +451,46 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                             )}
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {inputMode === 'text' && userAnswer.trim() && (
+                                {/* 🔴 [수정 완료] 다시 쓰기 조건 수정: (userAnswer.trim() || isRetrying) */}
+                                {inputMode === 'text' && (userAnswer.trim() || isRetrying) && (
                                     <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xl">
-                                        <h3 className="text-slate-900 font-bold mb-4 flex items-center gap-2"><CheckCircle2 size={20} className="text-blue-600" /> 나의 답안</h3>
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h3 className="text-slate-900 font-bold flex items-center gap-2"><CheckCircle2 size={20} className="text-blue-600" /> 나의 답안</h3>
+                                            {!isRetrying && (
+                                                <button 
+                                                    onClick={() => setIsRetrying(true)} 
+                                                    className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-1 font-bold transition-colors"
+                                                >
+                                                    <RefreshCw size={14} /> 다시 쓰기
+                                                </button>
+                                            )}
+                                        </div>
+
                                         <div className="p-6 bg-slate-50 rounded-xl border border-slate-100 min-h-[300px] max-h-[600px] overflow-y-auto">
-                                            <HighlightedUserAnswer />
+                                            {isRetrying ? (
+                                                <div className="h-full flex flex-col gap-4">
+                                                    <textarea 
+                                                        value={userAnswer} 
+                                                        onChange={(e) => setUserAnswer(e.target.value)} 
+                                                        className="w-full h-full bg-white p-4 rounded-lg border border-slate-300 focus:outline-none focus:border-blue-500 resize-none text-slate-900 leading-relaxed"
+                                                        placeholder="답안을 수정해서 다시 외워보세요!"
+                                                        autoFocus
+                                                    />
+                                                    <button 
+                                                        onClick={handleRetrySubmit} 
+                                                        className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg flex items-center justify-center gap-2 shadow-md transition-transform active:scale-95"
+                                                    >
+                                                        <Check size={18} /> 재채점 하기
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <HighlightedUserAnswer />
+                                            )}
                                         </div>
                                     </div>
                                 )}
 
-                                <div className={`space-y-4 ${inputMode === 'draw' || !userAnswer.trim() ? 'col-span-2' : ''}`}>
+                                <div className={`space-y-4 ${inputMode === 'draw' || (!userAnswer.trim() && !isRetrying) ? 'col-span-2' : ''}`}>
                                     <div className="bg-emerald-950/20 rounded-2xl p-6 border border-emerald-900/50 relative">
                                         <h3 className="text-emerald-400 font-bold text-lg mb-4 flex items-center gap-2"><BookOpen size={20} /> 모범 답안</h3>
                                         {localAnswerImages.length > 0 && (
