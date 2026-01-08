@@ -165,6 +165,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
         const ctx = e.target.getContext('2d');
         const rect = e.target.getBoundingClientRect();
+        
         ctx.beginPath();
         ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
         setIsDrawing(true);
@@ -177,6 +178,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
         const ctx = e.target.getContext('2d');
         const rect = e.target.getBoundingClientRect();
+        
         ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
         ctx.stroke();
     };
@@ -302,13 +304,14 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         } catch (e) { alert("삭제 오류"); }
     };
 
+    // --- 내 답안 분석 컴포넌트 ---
     const HighlightedUserAnswer = () => {
-        if (!gradingResult || gradingResult.matched.length === 0) return <p className="text-slate-700 whitespace-pre-wrap">{userAnswer}</p>;
+        if (!gradingResult || gradingResult.matched.length === 0) return <p className="text-slate-700 whitespace-pre-wrap break-words">{userAnswer}</p>;
         const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const pattern = new RegExp(`(${gradingResult.matched.map(escapeRegExp).join('|')})`, 'g');
         const parts = userAnswer.split(pattern);
         return (
-            <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">
+            <p className="text-slate-700 whitespace-pre-wrap leading-relaxed break-words text-lg">
                 {parts.map((part, i) => {
                     if (gradingResult.matched.includes(part)) {
                         return <span key={i} className="text-emerald-600 font-bold bg-emerald-100 px-1 rounded mx-0.5 border border-emerald-200">{part}</span>;
@@ -372,16 +375,12 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
                     {/* 답안 입력 */}
                     {!showAnswer && !isOverlayMode && (
-                        <div className="bg-white rounded-xl shadow-xl overflow-hidden border-2 border-slate-700 focus-within:border-blue-500 transition-colors relative">
+                        <div className="bg-white rounded-xl shadow-xl overflow-hidden border-2 border-slate-700 focus-within:border-blue-500 transition-colors relative isolate">
                             {/* 탭 */}
                             <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
                                 <div className="flex gap-2">
-                                    <button onClick={() => setInputMode('text')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${inputMode === 'text' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'}`}>
-                                        <Type size={14} /> 텍스트
-                                    </button>
-                                    <button onClick={() => setInputMode('draw')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${inputMode === 'draw' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'}`}>
-                                        <PenTool size={14} /> 그리기
-                                    </button>
+                                    <button onClick={() => setInputMode('text')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${inputMode === 'text' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'}`}><Type size={14} /> 텍스트</button>
+                                    <button onClick={() => setInputMode('draw')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${inputMode === 'draw' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'}`}><PenTool size={14} /> 그리기</button>
                                 </div>
                                 {inputMode === 'draw' && (
                                     <div className="flex items-center gap-2">
@@ -396,16 +395,28 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                             </div>
 
                             {/* 입력 영역 */}
-                            <div className="relative w-full h-[400px] bg-white cursor-text select-none"> 
+                            <div className="relative w-full h-[400px] bg-white cursor-text select-none z-0"> 
                                 {inputMode === 'text' ? (
-                                    <textarea value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} placeholder="답안을 입력하세요..." className="w-full h-full p-6 pb-20 text-slate-900 text-lg outline-none resize-none placeholder:text-slate-400 select-text" spellCheck="false" style={{ userSelect: 'text', WebkitUserSelect: 'text' }} />
+                                    <textarea 
+                                        value={userAnswer} 
+                                        onChange={(e) => setUserAnswer(e.target.value)} 
+                                        placeholder="답안을 입력하세요..." 
+                                        className="w-full h-full p-6 pb-20 text-slate-900 text-lg outline-none resize-none placeholder:text-slate-400 select-text break-words whitespace-pre-wrap" 
+                                        spellCheck="false" 
+                                        style={{ userSelect: 'text', WebkitUserSelect: 'text' }} 
+                                    />
                                 ) : (
                                     <canvas ref={canvasRef} onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={stopDrawing} onPointerLeave={stopDrawing} className="w-full h-full bg-slate-50" style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', cursor: 'crosshair' }} />
                                 )}
                             </div>
 
-                            <div className="absolute bottom-4 right-4 z-20">
-                                <button onClick={handleSubmit} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-xl font-bold shadow-lg transition-transform active:scale-95">
+                            {/* 🔴 [수정됨] z-index: 50 + stopPropagation으로 클릭 이벤트 확실하게 보장 */}
+                            <div className="absolute bottom-4 right-4 z-50 pointer-events-auto">
+                                <button 
+                                    onPointerDown={(e) => e.stopPropagation()} // ✋ 핵심: 부모로의 이벤트 전파 차단
+                                    onClick={handleSubmit} 
+                                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-xl font-bold shadow-lg transition-transform active:scale-95 cursor-pointer"
+                                >
                                     <Check size={18} /> {inputMode === 'draw' ? '정답 확인' : '제출'}
                                 </button>
                             </div>
@@ -442,7 +453,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                 {inputMode === 'text' && userAnswer.trim() && (
                                     <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xl">
                                         <h3 className="text-slate-900 font-bold mb-4 flex items-center gap-2"><CheckCircle2 size={20} className="text-blue-600" /> 나의 답안</h3>
-                                        <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 h-64 overflow-y-auto">
+                                        <div className="p-6 bg-slate-50 rounded-xl border border-slate-100 min-h-[300px] max-h-[600px] overflow-y-auto">
                                             <HighlightedUserAnswer />
                                         </div>
                                     </div>
@@ -450,12 +461,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
                                 <div className={`space-y-4 ${inputMode === 'draw' || !userAnswer.trim() ? 'col-span-2' : ''}`}>
                                     <div className="bg-emerald-950/20 rounded-2xl p-6 border border-emerald-900/50 relative">
-                                        <h3 className="text-emerald-400 font-bold text-lg mb-4 flex items-center gap-2">
-                                            <BookOpen size={20} /> 모범 답안
-                                            {isEditMode && <span className="text-xs bg-emerald-500 text-white px-2 py-0.5 rounded ml-2">수정 중</span>}
-                                        </h3>
-                                        
-                                        {/* 해설 이미지 및 삭제 버튼 */}
+                                        <h3 className="text-emerald-400 font-bold text-lg mb-4 flex items-center gap-2"><BookOpen size={20} /> 모범 답안</h3>
                                         {localAnswerImages.length > 0 && (
                                             <div className="grid grid-cols-2 gap-3 mb-6">
                                                 {localAnswerImages.map((url, idx) => (
@@ -466,8 +472,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                                 ))}
                                             </div>
                                         )}
-
-                                        {/* 🔴 [기능 추가] 모범 답안 수정 기능 */}
                                         {isEditMode ? (
                                             <div className="space-y-3 mt-4 animate-in fade-in">
                                                 <label className="text-xs font-bold text-emerald-400">모범 답안 텍스트</label>
@@ -488,15 +492,11 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                             <div className="prose prose-invert max-w-none text-emerald-100/90 whitespace-pre-line leading-8 text-lg font-medium select-text">{currentProblem.modelAnswer}</div>
                                         )}
                                     </div>
-
-                                    {/* 누락 키워드 */}
                                     {inputMode === 'text' && gradingResult?.missing?.length > 0 && (
                                         <div className="bg-red-900/20 rounded-2xl p-6 border border-red-500/30">
                                             <h3 className="text-red-400 font-bold mb-4 flex items-center gap-2"><AlertTriangle size={20} /> 누락된 키워드</h3>
                                             <div className="flex flex-wrap gap-2">
-                                                {gradingResult.missing.map((kw, i) => (
-                                                    <span key={i} className="px-3 py-1 bg-red-500/20 text-red-300 rounded-lg text-sm border border-red-500/30">{kw}</span>
-                                                ))}
+                                                {gradingResult.missing.map((kw, i) => <span key={i} className="px-3 py-1 bg-red-500/20 text-red-300 rounded-lg text-sm border border-red-500/30">{kw}</span>)}
                                             </div>
                                         </div>
                                     )}
@@ -530,7 +530,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             {showMemo && (
                 <div className="fixed bottom-20 right-6 w-64 bg-amber-100/95 text-slate-800 p-4 rounded-xl border-l-4 border-amber-500 shadow-2xl animate-in slide-in-from-bottom-10 z-40">
                     <h3 className="font-bold text-amber-800 mb-2 flex items-center gap-2"><StickyNote size={16} /> 메모</h3>
-                    <textarea value={memoText} onChange={(e) => setMemoText(e.target.value)} className="w-full h-32 bg-white/50 border border-amber-200 rounded p-2 text-sm resize-none" placeholder="암기 팁..." />
+                    <textarea value={memoText} onChange={(e) => setMemoText(e.target.value)} className="w-full h-32 bg-white/50 border border-amber-200 rounded p-2 text-sm resize-none" placeholder="암기 팁을 적어두세요." />
                     <button onClick={handleSaveMemo} className="mt-2 w-full py-1 bg-amber-500 text-white rounded text-sm font-bold">저장</button>
                 </div>
             )}
