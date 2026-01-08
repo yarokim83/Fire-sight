@@ -11,6 +11,17 @@ import {
     RefreshCw 
 } from 'lucide-react';
 
+// 🔴 [설정] 과목 카테고리 리스트 (SmartUpload와 동일하게 맞춰주세요)
+const SUBJECT_LIST = ['수계 소화설비', '가스계/제연설비', '경보/전기 설비', '피난 구조 설비', '소화활동 설비', '소방 공통/기타'];
+
+// 🔴 [설정] 문제 유형 리스트
+const PROBLEM_TYPES = [
+    { value: 'descriptive', label: '서술형' },
+    { value: 'selection', label: '단답형' },
+    { value: 'drawing', label: '도면' },
+    { value: 'calculation', label: '계산' }
+];
+
 export default function ProblemSolver({ problems, startIndex = 0, onBack, onComplete }) {
     // --- 상태 관리 ---
     const [currentIndex, setCurrentIndex] = useState(startIndex);
@@ -45,7 +56,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const [penColor, setPenColor] = useState('#000000');
     const [lineWidth, setLineWidth] = useState(2);
 
-    // 멀티터치 간섭 방지용 ID
     const activePointerId = useRef(null);
 
     // --- 초기화 ---
@@ -78,14 +88,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         if (isOverlayMode) {
             const style = document.createElement('style');
             style.id = 'drawing-mode-lock';
-            style.innerHTML = `
-                * {
-                    -webkit-touch-callout: none !important;
-                    -webkit-user-select: none !important;
-                    user-select: none !important;
-                    touch-action: none !important;
-                }
-            `;
+            style.innerHTML = `*{-webkit-touch-callout:none!important;-webkit-user-select:none!important;user-select:none!important;touch-action:none!important;}`;
             document.head.appendChild(style);
             document.body.style.overflow = 'hidden';
         } else {
@@ -161,15 +164,11 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const startDrawing = (e) => {
         e.preventDefault(); 
         if (e.nativeEvent.pointerType !== 'pen' && e.nativeEvent.pointerType !== 'mouse') return;
-
         activePointerId.current = e.pointerId;
-        if (e.target.setPointerCapture) {
-            try { e.target.setPointerCapture(e.pointerId); } catch(err) {}
-        }
-
+        if (e.target.setPointerCapture) try { e.target.setPointerCapture(e.pointerId); } catch(err) {}
+        
         const ctx = e.target.getContext('2d');
         const rect = e.target.getBoundingClientRect();
-        
         ctx.beginPath();
         ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
         setIsDrawing(true);
@@ -179,10 +178,9 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         e.preventDefault();
         if (!isDrawing) return;
         if (e.pointerId !== activePointerId.current) return;
-
+        
         const ctx = e.target.getContext('2d');
         const rect = e.target.getBoundingClientRect();
-        
         ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
         ctx.stroke();
     };
@@ -192,9 +190,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         if (e.pointerId === activePointerId.current) {
             setIsDrawing(false);
             activePointerId.current = null;
-            if (e.target.releasePointerCapture) {
-                try { e.target.releasePointerCapture(e.pointerId); } catch(err) {}
-            }
+            if (e.target.releasePointerCapture) try { e.target.releasePointerCapture(e.pointerId); } catch(err) {}
         }
     };
     
@@ -366,11 +362,30 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                         {isEditMode ? (
                             <div className="space-y-4 animate-in fade-in">
                                 <div className="flex gap-2">
-                                    <select value={currentProblem.subject} onChange={(e) => setCurrentProblem({...currentProblem, subject: e.target.value})} className="bg-slate-800 text-white text-sm border border-slate-700 rounded px-2 py-1.5"><option value="수계">수계</option><option value="가스계">가스계</option><option value="제연">제연</option><option value="전기">전기</option><option value="법규">법규</option><option value="기타">기타</option></select>
-                                    <select value={currentProblem.problemType} onChange={(e) => setCurrentProblem({...currentProblem, problemType: e.target.value})} className="bg-slate-800 text-white text-sm border border-slate-700 rounded px-2 py-1.5"><option value="descriptive">서술형</option><option value="selection">단답형</option><option value="drawing">도면</option><option value="calculation">계산</option></select>
+                                    {/* 🔴 [수정됨] 상수 리스트(SUBJECT_LIST)를 사용하여 동적으로 옵션 생성 */}
+                                    <select 
+                                        value={currentProblem.subject} 
+                                        onChange={(e) => setCurrentProblem({...currentProblem, subject: e.target.value})} 
+                                        className="bg-slate-800 text-white text-sm border border-slate-700 rounded px-2 py-1.5 focus:outline-none focus:border-blue-500"
+                                    >
+                                        {SUBJECT_LIST.map((subj) => (
+                                            <option key={subj} value={subj}>{subj}</option>
+                                        ))}
+                                    </select>
+                                    
+                                    {/* 🔴 [수정됨] 상수 리스트(PROBLEM_TYPES) 사용 */}
+                                    <select 
+                                        value={currentProblem.problemType} 
+                                        onChange={(e) => setCurrentProblem({...currentProblem, problemType: e.target.value})} 
+                                        className="bg-slate-800 text-white text-sm border border-slate-700 rounded px-2 py-1.5 focus:outline-none focus:border-blue-500"
+                                    >
+                                        {PROBLEM_TYPES.map((type) => (
+                                            <option key={type.value} value={type.value}>{type.label}</option>
+                                        ))}
+                                    </select>
                                 </div>
-                                <input value={currentProblem.title} onChange={(e) => setCurrentProblem({...currentProblem, title: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white font-bold" />
-                                <textarea value={currentProblem.question} onChange={(e) => setCurrentProblem({...currentProblem, question: e.target.value})} className="w-full h-32 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-slate-200" />
+                                <input value={currentProblem.title} onChange={(e) => setCurrentProblem({...currentProblem, title: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white font-bold" placeholder="제목 수정" />
+                                <textarea value={currentProblem.question} onChange={(e) => setCurrentProblem({...currentProblem, question: e.target.value})} className="w-full h-32 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-slate-200" placeholder="문제 내용 수정" />
                                 <button onClick={handleSaveEdit} className="px-3 py-2 bg-blue-600 text-white rounded font-bold w-full flex justify-center items-center gap-1"><Save size={16} /> 저장</button>
                             </div>
                         ) : (
@@ -451,7 +466,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                             )}
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* 🔴 [수정 완료] 다시 쓰기 조건 수정: (userAnswer.trim() || isRetrying) */}
                                 {inputMode === 'text' && (userAnswer.trim() || isRetrying) && (
                                     <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xl">
                                         <div className="flex items-center justify-between mb-4">
