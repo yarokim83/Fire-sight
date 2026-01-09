@@ -3,6 +3,7 @@ import { db, storage } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import imageCompression from 'browser-image-compression';
+// 🔴 [체크] import 경로가 올바른지 확인하세요 (utils 폴더)
 import { analyzeImage } from '../utils/gemini'; 
 
 export const useSmartUpload = (initialData, onSaveComplete) => {
@@ -87,7 +88,6 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         return { newUrls };
     };
 
-    // [v4.0] 순차 업로드 + 진행률 모니터링
     const uploadImagesToStorage = async (files) => {
         const uploadedUrls = [];
         
@@ -173,7 +173,14 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
             try {
                 const result = await analyzeImage(files[0], formData.type, 'problem');
                 if (isMounted.current) {
-                    setFormData(prev => ({ ...prev, title: result.title || '', description: result.content || '' }));
+                    // 🔴 [수정] AI가 분석한 Category와 Keywords도 반영
+                    setFormData(prev => ({ 
+                        ...prev, 
+                        title: result.title || '', 
+                        description: result.content || '',
+                        category: result.category || prev.category, // 카테고리 자동 적용
+                        keywords: result.keywords || ''             // 키워드 자동 적용
+                    }));
                 }
             } catch (e) {
                 addLog(`분석 실패: ${e.message}`);
@@ -191,12 +198,9 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         if (files.length === 0) return;
         const { newUrls } = await processFiles(files);
 
-        // [버그 수정] 이미지 추가 시 인덱스를 정확하게 계산하여 업데이트
         if (viewMode === 'problem') {
             setProblemPreviewUrls(p => {
                 const updated = [...p, ...newUrls];
-                // 상태 업데이트 후 바로 인덱스 설정을 위해 로컬 변수 사용 권장되나
-                // React 상태 배치 업데이트를 고려하여 길이 기반으로 계산
                 setCurrentImageIndex(updated.length - 1); 
                 return updated;
             });
@@ -212,17 +216,28 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
             if (!isManualMode) {
                 setIsAnalyzingAnswer(true);
                 try {
-                    let accAnswer = ""; let accTags = [];
+                    let accAnswer = ""; 
+                    let accKeywords = ""; // 🔴 [수정] 배열 대신 문자열로 처리
+                    
                     for (const file of files) {
                         const res = await analyzeImage(file, formData.type, 'answer');
                         if (res.answer) accAnswer += `\n\n[추가 해설]\n${res.answer}`;
-                        if (res.tags) accTags = [...accTags, ...res.tags];
+                        
+                        // 🔴 [수정] gemini.js는 이제 keywords를 문자열로 반환함
+                        if (res.keywords) {
+                            accKeywords += (accKeywords ? ", " : "") + res.keywords;
+                        }
                     }
+                    
                     if (isMounted.current) {
                         setFormData(prev => ({
                             ...prev,
                             modelAnswer: (prev.modelAnswer + accAnswer).trim(),
-                            keywords: [...new Set([...(prev.keywords?prev.keywords.split(','):[]), ...accTags])].join(', ')
+                            // 기존 키워드에 새 키워드 추가 (중복 제거 로직 포함)
+                            keywords: [...new Set([
+                                ...(prev.keywords ? prev.keywords.split(',').map(s=>s.trim()) : []), 
+                                ...(accKeywords ? accKeywords.split(',').map(s=>s.trim()) : [])
+                            ])].join(', ')
                         }));
                     }
                 } catch(e) { addLog(`해설 분석 오류: ${e.message}`); }
@@ -274,6 +289,7 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
                 title: formData.title || "제목 없음",
                 content: formData.description || "",
                 answer: formData.modelAnswer || "", 
+                // 키워드 문자열을 배열로 변환하여 저장
                 tags: formData.keywords.split(',').map(t => t.trim().replace(/^#/, '')).filter(t => t),
                 createdAt: serverTimestamp(),
                 images: pUrls, imageUrl: pUrls[0] || null,

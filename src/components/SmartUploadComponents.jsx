@@ -5,6 +5,9 @@ import {
     Plus, Sparkles, Layers, Terminal, BookOpen, Maximize2, X
 } from 'lucide-react';
 
+// 🔴 [추가] 공통 상수 import (파일 경로가 다르면 수정 필요)
+import { SUBJECT_LIST, PROBLEM_TYPES } from '/src/utils/constants';
+
 // Step 1: 초기 선택 및 업로드 화면
 export const UploadIntro = ({ formData, setFormData, isManualMode, inputFileRef, onUpload, onViewMode, setStep }) => (
     <div className="animate-in fade-in py-8">
@@ -174,23 +177,30 @@ export const ProblemForm = ({ formData, setFormData, isAnalyzingAnswer }) => (
             <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1"><Layers size={12} /> 과목 분류</label>
                 <div className="relative">
-                    <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl p-3 text-sm appearance-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all outline-none">
-                        <option value="수계">수계 소화설비</option>
-                        <option value="가스계">가스계/제연 설비</option>
-                        <option value="경보">경보/전기 설비</option>
-                        <option value="피난">피난 구조 설비</option>
-                        <option value="소화활동">소화활동 설비</option>
-                        <option value="공통">소방 공통/기타</option>
+                    {/* 🔴 [수정] constants.js의 SUBJECT_LIST 사용 */}
+                    <select 
+                        value={formData.category} 
+                        onChange={(e) => setFormData({ ...formData, category: e.target.value })} 
+                        className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl p-3 text-sm appearance-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all outline-none"
+                    >
+                        {SUBJECT_LIST.map((subject) => (
+                            <option key={subject} value={subject}>{subject}</option>
+                        ))}
                     </select>
                 </div>
             </div>
             <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1"><BookOpen size={12} /> 문제 유형</label>
                 <div className="relative">
-                    <select value={formData.problemType} onChange={(e) => setFormData({ ...formData, problemType: e.target.value })} className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl p-3 text-sm appearance-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all outline-none">
-                        <option value="descriptive">서술형 (일반)</option>
-                        <option value="drawing">도면/도시기호</option>
-                        <option value="calculation">계산 문제</option>
+                    {/* 🔴 [수정] constants.js의 PROBLEM_TYPES 사용 */}
+                    <select 
+                        value={formData.problemType} 
+                        onChange={(e) => setFormData({ ...formData, problemType: e.target.value })} 
+                        className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl p-3 text-sm appearance-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all outline-none"
+                    >
+                        {PROBLEM_TYPES.map((type) => (
+                            <option key={type.value} value={type.value}>{type.label}</option>
+                        ))}
                     </select>
                 </div>
             </div>

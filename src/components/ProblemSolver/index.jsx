@@ -11,16 +11,8 @@ import {
     RefreshCw 
 } from 'lucide-react';
 
-// [설정] 과목 카테고리 리스트
-const SUBJECT_LIST = ['수계', '가스계', '제연', '전기', '법규', '기타', '설계', '점검'];
-
-// [설정] 문제 유형 리스트
-const PROBLEM_TYPES = [
-    { value: 'descriptive', label: '서술형' },
-    { value: 'selection', label: '단답형' },
-    { value: 'drawing', label: '도면' },
-    { value: 'calculation', label: '계산' }
-];
+// 🔴 [수정 완료] 절대 경로 사용으로 빌드 에러 방지
+import { SUBJECT_LIST, PROBLEM_TYPES } from '/src/utils/constants';
 
 export default function ProblemSolver({ problems, startIndex = 0, onBack, onComplete }) {
     // --- 상태 관리 ---
@@ -56,7 +48,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const [penColor, setPenColor] = useState('#000000');
     const [lineWidth, setLineWidth] = useState(2);
 
-    // [추가] 재채점 입력창 자동 높이 조절용 Ref
+    // 재채점 입력창 자동 높이 조절용 Ref
     const textareaRef = useRef(null);
 
     const activePointerId = useRef(null);
@@ -86,11 +78,11 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         }
     }, [currentIndex, problems]);
 
-    // [추가] 재채점 시 텍스트 양에 따라 입력창 높이 자동 조절
+    // 재채점 시 텍스트 양에 따라 입력창 높이 자동 조절
     useEffect(() => {
         if (isRetrying && textareaRef.current) {
-            textareaRef.current.style.height = 'auto'; // 높이 초기화
-            textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`; // 내용에 맞춰 늘리기
+            textareaRef.current.style.height = 'auto'; 
+            textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`; 
         }
     }, [userAnswer, isRetrying]);
 
@@ -146,6 +138,8 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             const ctx = canvas.getContext('2d');
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
+            // 펜 색상 초기화 (지우개 모드 해제)
+            ctx.globalCompositeOperation = 'source-over';
             ctx.strokeStyle = penColor;
             ctx.lineWidth = lineWidth;
         }
@@ -156,17 +150,25 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             const ctx = canvas.getContext('2d');
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
+            // 펜 색상 초기화
+            ctx.globalCompositeOperation = 'source-over';
             ctx.strokeStyle = penColor;
             ctx.lineWidth = lineWidth;
         }
     }, [inputMode, isOverlayMode, window.innerWidth, window.innerHeight]);
 
-    // 펜 스타일 업데이트
+    // 🔴 [수정됨] 펜 스타일 업데이트 (지우개 기능 구현)
     useEffect(() => {
         const activeCanvas = isOverlayMode ? overlayCanvasRef.current : canvasRef.current;
         if (activeCanvas) {
             const ctx = activeCanvas.getContext('2d');
-            ctx.strokeStyle = penColor;
+            // 흰색(#ffffff)이 선택되면 지우개 모드(destination-out)로 전환
+            if (penColor === '#ffffff') {
+                ctx.globalCompositeOperation = 'destination-out';
+            } else {
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.strokeStyle = penColor;
+            }
             ctx.lineWidth = lineWidth;
         }
     }, [penColor, lineWidth, isOverlayMode, inputMode]);
@@ -399,7 +401,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
                     {/* 답안 입력 */}
                     {!showAnswer && !isOverlayMode && (
-                        <div className="bg-white rounded-xl shadow-xl overflow-hidden border-2 border-slate-700 focus-within:border-blue-500 transition-colors relative">
+                        <div className="bg-white rounded-xl shadow-xl overflow-hidden border-2 border-slate-700 focus-within:border-blue-500 transition-colors relative isolate">
                             {/* 탭 */}
                             <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
                                 <div className="flex gap-2">
@@ -412,14 +414,14 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                          <button onClick={() => {setPenColor('#ef4444'); setLineWidth(2)}} className={`w-5 h-5 rounded-full bg-red-500 border ${penColor === '#ef4444' ? 'ring-2 ring-blue-500' : 'border-slate-300'}`} />
                                          <button onClick={() => {setPenColor('#3b82f6'); setLineWidth(2)}} className={`w-5 h-5 rounded-full bg-blue-500 border ${penColor === '#3b82f6' ? 'ring-2 ring-blue-500' : 'border-slate-300'}`} />
                                          <div className="w-px h-4 bg-slate-300 mx-1"></div>
-                                         <button onClick={() => {setPenColor('#ffffff'); setLineWidth(20)}} className="p-1 text-slate-500 hover:bg-slate-200 rounded"><Eraser size={16} /></button>
+                                         <button onClick={() => {setPenColor('#ffffff'); setLineWidth(20)}} className={`p-1 text-slate-500 hover:bg-slate-200 rounded ${penColor === '#ffffff' ? 'bg-slate-200 text-blue-600' : ''}`} title="지우개"><Eraser size={16} /></button>
                                          <button onClick={clearCurrentCanvas} className="p-1 text-slate-500 hover:bg-slate-200 rounded"><RotateCcw size={16} /></button>
                                     </div>
                                 )}
                             </div>
 
                             {/* 입력 영역 */}
-                            <div className="relative w-full h-[400px] bg-white cursor-text select-none"> 
+                            <div className="relative w-full h-[400px] bg-white cursor-text select-none z-0"> 
                                 {inputMode === 'text' ? (
                                     <textarea value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} placeholder="답안을 입력하세요..." className="w-full h-full p-6 pb-20 text-slate-900 text-lg outline-none resize-none placeholder:text-slate-400 select-text break-words whitespace-pre-wrap" spellCheck="false" style={{ userSelect: 'text', WebkitUserSelect: 'text' }} />
                                 ) : (
@@ -476,7 +478,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                             )}
                                         </div>
 
-                                        {/* 🔴 [수정됨] 재채점 시 높이 제한 해제 (max-h 제거, overflow 제거) */}
                                         <div className={`p-6 bg-slate-50 rounded-xl border border-slate-100 min-h-[300px] ${!isRetrying ? 'max-h-[600px] overflow-y-auto' : ''}`}>
                                             {isRetrying ? (
                                                 <div className="flex flex-col gap-4">
