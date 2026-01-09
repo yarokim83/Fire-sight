@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   CheckCircle2, RefreshCcw, Sparkles, Book, Search, BookCopy, Loader2,
-  Filter, Tag, X, RefreshCw 
+  Filter, Tag, X, RefreshCw, ChevronDown, ChevronUp 
 } from 'lucide-react';
 
 import DashboardWidget from './DashboardWidget';
@@ -21,6 +21,10 @@ const Workbook = () => {
   
   const [solveSession, setSolveSession] = useState(null);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
+  
+  // [추가] 태그 섹션 펼침 상태 관리
+  const [isTagsExpanded, setIsTagsExpanded] = useState(false);
+  
   const scrollContainerRef = useRef(null);
 
   const subjects = Object.keys(processedProblems.grouped).sort();
@@ -148,35 +152,48 @@ const Workbook = () => {
                     </div>
                 </div>
 
-                {/* 필터 패널 애니메이션 적용 */}
-                <div className={`${showFilterPanel ? 'max-h-40 opacity-100 mt-2 pb-1' : 'max-h-0 opacity-0 overflow-hidden'} transition-all duration-300 ease-in-out md:max-h-none md:opacity-100 md:block`}>
-                    <div className="flex flex-wrap gap-2 items-center pt-2 border-t border-slate-700/30">
-                        <div className="text-xs font-bold text-slate-500 flex items-center gap-1 mr-2 shrink-0">
-                            <Tag size={12} /> 태그:
-                        </div>
-                        {allTags.length > 0 ? allTags.map(tag => (
-                            <button
-                                key={tag}
-                                onClick={() => toggleTag(tag)}
-                                className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-all active:scale-95
-                                    ${selectedTags.includes(tag) 
-                                        ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20' 
-                                        : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200'
-                                    }`}
-                            >
-                                #{tag}
-                            </button>
-                        )) : (
-                            <span className="text-xs text-slate-600">등록된 태그 없음</span>
-                        )}
-                        {(selectedTags.length > 0 || searchTerm) && (
+                {/* 필터 패널 (태그 섹션 개선됨) */}
+                <div className={`${showFilterPanel ? 'max-h-[500px] opacity-100 mt-2' : 'max-h-0 opacity-0 overflow-hidden'} transition-all duration-300 ease-in-out md:max-h-none md:opacity-100 md:block`}>
+                    <div className="pt-2 border-t border-slate-700/30">
+                        {/* 태그 헤더 & 컨트롤 */}
+                        <div className="flex items-center justify-between mb-2">
                             <button 
-                                onClick={resetFilters}
-                                className="ml-auto text-xs text-red-400 hover:text-red-300 flex items-center gap-1 px-2 py-1 bg-red-500/10 rounded-lg border border-red-500/20 transition-colors"
+                                onClick={() => setIsTagsExpanded(!isTagsExpanded)}
+                                className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-300 transition-colors"
                             >
-                                <RefreshCw size={12} /> 초기화
+                                <Tag size={12} /> 
+                                태그 ({allTags.length}) 
+                                {isTagsExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                             </button>
-                        )}
+
+                            {(selectedTags.length > 0 || searchTerm) && (
+                                <button 
+                                    onClick={resetFilters}
+                                    className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 px-2 py-1 bg-red-500/10 rounded-lg border border-red-500/20 transition-colors"
+                                >
+                                    <RefreshCw size={12} /> 초기화
+                                </button>
+                            )}
+                        </div>
+
+                        {/* 태그 목록 (접기/펼치기 적용) */}
+                        <div className={`flex flex-wrap gap-2 transition-all duration-300 ease-in-out overflow-hidden ${isTagsExpanded ? 'max-h-96 opacity-100 pb-2' : 'max-h-0 opacity-0'}`}>
+                            {allTags.length > 0 ? allTags.map(tag => (
+                                <button
+                                    key={tag}
+                                    onClick={() => toggleTag(tag)}
+                                    className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-all active:scale-95
+                                        ${selectedTags.includes(tag) 
+                                            ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20' 
+                                            : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200'
+                                        }`}
+                                >
+                                    #{tag}
+                                </button>
+                            )) : (
+                                <span className="text-xs text-slate-600">등록된 태그 없음</span>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

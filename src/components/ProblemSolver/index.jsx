@@ -11,10 +11,10 @@ import {
     RefreshCw 
 } from 'lucide-react';
 
-// 🔴 [설정] 과목 카테고리 리스트 (SmartUpload와 동일하게 맞춰주세요)
-const SUBJECT_LIST = ['수계 소화설비', '가스계/제연설비', '경보/전기 설비', '피난 구조 설비', '소화활동 설비', '소방 공통/기타'];
+// [설정] 과목 카테고리 리스트
+const SUBJECT_LIST = ['수계', '가스계', '제연', '전기', '법규', '기타', '설계', '점검'];
 
-// 🔴 [설정] 문제 유형 리스트
+// [설정] 문제 유형 리스트
 const PROBLEM_TYPES = [
     { value: 'descriptive', label: '서술형' },
     { value: 'selection', label: '단답형' },
@@ -56,6 +56,9 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const [penColor, setPenColor] = useState('#000000');
     const [lineWidth, setLineWidth] = useState(2);
 
+    // [추가] 재채점 입력창 자동 높이 조절용 Ref
+    const textareaRef = useRef(null);
+
     const activePointerId = useRef(null);
 
     // --- 초기화 ---
@@ -82,6 +85,14 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             document.querySelector('.problem-container')?.scrollTo(0, 0);
         }
     }, [currentIndex, problems]);
+
+    // [추가] 재채점 시 텍스트 양에 따라 입력창 높이 자동 조절
+    useEffect(() => {
+        if (isRetrying && textareaRef.current) {
+            textareaRef.current.style.height = 'auto'; // 높이 초기화
+            textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`; // 내용에 맞춰 늘리기
+        }
+    }, [userAnswer, isRetrying]);
 
     // 🔴 [iOS 선택 방지 1] 글로벌 스타일
     useEffect(() => {
@@ -362,26 +373,11 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                         {isEditMode ? (
                             <div className="space-y-4 animate-in fade-in">
                                 <div className="flex gap-2">
-                                    {/* 🔴 [수정됨] 상수 리스트(SUBJECT_LIST)를 사용하여 동적으로 옵션 생성 */}
-                                    <select 
-                                        value={currentProblem.subject} 
-                                        onChange={(e) => setCurrentProblem({...currentProblem, subject: e.target.value})} 
-                                        className="bg-slate-800 text-white text-sm border border-slate-700 rounded px-2 py-1.5 focus:outline-none focus:border-blue-500"
-                                    >
-                                        {SUBJECT_LIST.map((subj) => (
-                                            <option key={subj} value={subj}>{subj}</option>
-                                        ))}
+                                    <select value={currentProblem.subject} onChange={(e) => setCurrentProblem({...currentProblem, subject: e.target.value})} className="bg-slate-800 text-white text-sm border border-slate-700 rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">
+                                        {SUBJECT_LIST.map(subj => <option key={subj} value={subj}>{subj}</option>)}
                                     </select>
-                                    
-                                    {/* 🔴 [수정됨] 상수 리스트(PROBLEM_TYPES) 사용 */}
-                                    <select 
-                                        value={currentProblem.problemType} 
-                                        onChange={(e) => setCurrentProblem({...currentProblem, problemType: e.target.value})} 
-                                        className="bg-slate-800 text-white text-sm border border-slate-700 rounded px-2 py-1.5 focus:outline-none focus:border-blue-500"
-                                    >
-                                        {PROBLEM_TYPES.map((type) => (
-                                            <option key={type.value} value={type.value}>{type.label}</option>
-                                        ))}
+                                    <select value={currentProblem.problemType} onChange={(e) => setCurrentProblem({...currentProblem, problemType: e.target.value})} className="bg-slate-800 text-white text-sm border border-slate-700 rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">
+                                        {PROBLEM_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
                                     </select>
                                 </div>
                                 <input value={currentProblem.title} onChange={(e) => setCurrentProblem({...currentProblem, title: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white font-bold" placeholder="제목 수정" />
@@ -480,15 +476,18 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                             )}
                                         </div>
 
-                                        <div className="p-6 bg-slate-50 rounded-xl border border-slate-100 min-h-[300px] max-h-[600px] overflow-y-auto">
+                                        {/* 🔴 [수정됨] 재채점 시 높이 제한 해제 (max-h 제거, overflow 제거) */}
+                                        <div className={`p-6 bg-slate-50 rounded-xl border border-slate-100 min-h-[300px] ${!isRetrying ? 'max-h-[600px] overflow-y-auto' : ''}`}>
                                             {isRetrying ? (
-                                                <div className="h-full flex flex-col gap-4">
+                                                <div className="flex flex-col gap-4">
                                                     <textarea 
+                                                        ref={textareaRef}
                                                         value={userAnswer} 
                                                         onChange={(e) => setUserAnswer(e.target.value)} 
-                                                        className="w-full h-full bg-white p-4 rounded-lg border border-slate-300 focus:outline-none focus:border-blue-500 resize-none text-slate-900 leading-relaxed"
+                                                        className="w-full bg-white p-4 rounded-lg border border-slate-300 focus:outline-none focus:border-blue-500 resize-none text-slate-900 leading-relaxed overflow-hidden min-h-[200px]"
                                                         placeholder="답안을 수정해서 다시 외워보세요!"
                                                         autoFocus
+                                                        rows={1}
                                                     />
                                                     <button 
                                                         onClick={handleRetrySubmit} 
