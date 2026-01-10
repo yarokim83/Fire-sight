@@ -1,65 +1,67 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import { 
   CheckCircle2, RefreshCcw, Sparkles, Book, Search, BookCopy, Loader2,
-  Filter, Tag, X, RefreshCw, ChevronDown, ChevronUp 
+  Filter, Tag, X, RefreshCw, ChevronDown, ChevronUp, LayoutList, AlignJustify 
 } from 'lucide-react';
 
 import DashboardWidget from './DashboardWidget';
 import SubjectAccordion from './SubjectAccordion';
+import ProblemCard from './ProblemCard'; 
 import { useWorkbookData } from './useWorkbookData';
 import ProblemSolver from '../ProblemSolver'; 
 import { deleteProblem } from '../../utils/db'; 
 
 const Workbook = () => {
   const { problems, loading, processedProblems, filterState, allTags } = useWorkbookData();
+  
   const { 
     activeTab, setActiveTab, 
     sortBy, setSortBy, 
     searchTerm, setSearchTerm,
     selectedTags, setSelectedTags
-  } = filterState;
-  
+  } = filterState || {};
+
   const [solveSession, setSolveSession] = useState(null);
-  const [showFilterPanel, setShowFilterPanel] = useState(false);
-  
-  // [추가] 태그 섹션 펼침 상태 관리
   const [isTagsExpanded, setIsTagsExpanded] = useState(false);
-  
+  const [viewType, setViewType] = useState('group'); 
+
+  // 무한 스크롤을 위한 상태
+  const [displayCount, setDisplayCount] = useState(20);
+  const observerRef = useRef(null);
   const scrollContainerRef = useRef(null);
+  
+  const sortedList = processedProblems?.sortedList || [];
+  const subjects = processedProblems?.grouped ? Object.keys(processedProblems.grouped).sort() : [];
 
-  const subjects = Object.keys(processedProblems.grouped).sort();
-
+  // 무한 스크롤 감지 로직
   useEffect(() => {
-      if (scrollContainerRef.current) scrollContainerRef.current.focus();
-  }, [loading]);
+    if (viewType !== 'list') return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && displayCount < sortedList.length) {
+          setDisplayCount(prev => prev + 20);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (observerRef.current) observer.observe(observerRef.current);
+    return () => observer.disconnect();
+  }, [viewType, displayCount, sortedList.length]);
+
+  // 필터 변경 시 리스트 초기화
+  useEffect(() => {
+    setDisplayCount(20);
+  }, [activeTab, searchTerm, selectedTags, sortBy]);
 
   const toggleTag = (tag) => {
-    setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+    if(setSelectedTags) setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
   };
 
   const resetFilters = () => {
-    setSearchTerm('');
-    setSelectedTags([]);
-  };
-
-  const handleSelectProblem = (item) => {
-    const fullList = processedProblems.sortedList;
-    const startIndex = fullList.findIndex(p => p.id === item.id);
-    if (startIndex !== -1) setSolveSession({ list: fullList, startIndex });
-  };
-
-  const handleDeleteProblem = async (item) => {
-      if (window.confirm(`'${item.title}' 삭제하시겠습니까?`)) {
-          try { await deleteProblem(item.id); } catch (e) { alert("오류 발생: " + e.message); }
-      }
-  };
-
-  const handleQuickReview = (subject) => {
-    const reviewList = problems.filter(p => (p.subject === subject) && (p.studyCount > 0 && p.lastScore < 100));
-    if (reviewList.length > 0) {
-        reviewList.sort((a, b) => b.wrongCount - a.wrongCount);
-        setSolveSession({ list: reviewList, startIndex: 0 });
-    } else { alert("복습할 문제가 없습니다."); }
+    if(setSearchTerm) setSearchTerm('');
+    if(setSelectedTags) setSelectedTags([]);
   };
 
   if (loading) return (
@@ -69,7 +71,6 @@ const Workbook = () => {
     </div>
   );
 
-  // 문제 풀이 화면 전환
   if (solveSession) {
     return (
       <ProblemSolver 
@@ -81,150 +82,183 @@ const Workbook = () => {
     );
   }
 
-  const TabButton = ({ id, label, icon: Icon }) => (
-    <button 
-      onClick={() => setActiveTab(id)}
-      className={`flex-1 flex items-center justify-center gap-2 p-3 text-sm font-bold border-b-4 transition-all ${activeTab === id ? 'border-blue-500 text-white' : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-700/50'}`}
-    >
-      <Icon size={16} /> <span className="hidden md:inline">{label}</span>
-      <span className="md:hidden">{id === 'ALL' ? '전체' : ''}</span>
-    </button>
-  );
+  const handleSelectProblem = (item) => {
+    const startIndex = sortedList.findIndex(p => p.id === item.id);
+    if (startIndex !== -1) setSolveSession({ list: sortedList, startIndex });
+  };
 
-  return (
-    <div 
-        ref={scrollContainerRef}
-        className="h-full overflow-y-auto bg-slate-900 text-white outline-none scrollbar-thin scrollbar-thumb-slate-700"
-        style={{ WebkitOverflowScrolling: 'touch' }}
-        tabIndex={0} 
-    >
-      <div className="p-4 md:p-6 pb-32 max-w-5xl mx-auto flex flex-col min-h-full">
+  const handleDeleteProblem = async (item) => {
+      if (window.confirm(`'${item.title}' 삭제하시겠습니까?`)) {
+          try { await deleteProblem(item.id); } catch (e) { alert("오류 발생: " + e.message); }
+      }
+  };
+
+  const handleQuickReview = (subject) => {
+    if(!problems) return;
+    const reviewList = problems.filter(p => (p.subject === subject) && (p.studyCount > 0 && p.lastScore < 100));
+    if (reviewList.length > 0) {
+        reviewList.sort((a, b) => b.wrongCount - a.wrongCount);
+        setSolveSession({ list: reviewList, startIndex: 0 });
+    } else { alert("복습할 문제가 없습니다."); }
+  };
+
+  // 🟢 [핵심] 수직 높이를 극한으로 줄인 울트라 콤팩트 헤더
+  const renderHeader = () => (
+    <div className="flex-shrink-0 z-20 bg-slate-900/95 backdrop-blur-sm border-b border-slate-800 shadow-xl sticky top-0">
+      <div className="py-1.5 px-4 md:px-6 max-w-5xl mx-auto">
         
-        <header className="mb-6">
-            <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-3">
-            <BookCopy size={24} /> 단권화 문제집
+        {/* Row 1: 타이틀 + 콤팩트 대시보드 (한 줄 통합) */}
+        <header className="flex items-center justify-between gap-4 mb-1.5">
+            <h2 className="text-sm font-bold text-white flex items-center gap-1.5 whitespace-nowrap">
+              <BookCopy size={16} className="text-blue-500" /> 단권화 문제집
             </h2>
-            <DashboardWidget problems={problems} onReview={handleQuickReview} />
+            {/* DashboardWidget 내부에 isUltraCompact 속성을 전달하여 내부 디자인도 축소 유도 */}
+            <div className="flex-grow flex justify-end overflow-hidden">
+              <div className="scale-90 origin-right transition-all">
+                <DashboardWidget 
+                  problems={problems || []} 
+                  onReview={handleQuickReview} 
+                  isUltraCompact={true} 
+                />
+              </div>
+            </div>
         </header>
 
-        {/* Sticky Header */}
-        <div className="sticky top-0 z-20 bg-slate-900/95 backdrop-blur-md pb-2 -mx-4 px-4 md:-mx-6 md:px-6 border-b border-slate-800 shadow-xl transition-all">
-            <div className="flex bg-slate-800 rounded-t-lg border-b border-slate-700 mt-2">
-                <TabButton id="ALL" label="전체" icon={Book} />
-                <TabButton id="NEW" label="미학습" icon={Sparkles} />
-                <TabButton id="REVIEW" label="복습 필요" icon={RefreshCcw} />
-                <TabButton id="MASTERED" label="완료" icon={CheckCircle2} />
+        {/* Row 2: 탭 메뉴 (매우 슬림하게) */}
+        <div className="flex bg-slate-800/40 rounded-t-md border-x border-t border-slate-700/50">
+            <TabButton id="ALL" label="전체" icon={Book} activeTab={activeTab} onClick={setActiveTab} />
+            <TabButton id="NEW" label="미학습" icon={Sparkles} activeTab={activeTab} onClick={setActiveTab} />
+            <TabButton id="REVIEW" label="복습" icon={RefreshCcw} activeTab={activeTab} onClick={setActiveTab} />
+            <TabButton id="MASTERED" label="완료" icon={CheckCircle2} activeTab={activeTab} onClick={setActiveTab} />
+        </div>
+
+        {/* Row 3: 검색바 + 도구들 */}
+        <div className="p-1 bg-slate-800/20 rounded-b-md border border-slate-700/50 flex flex-col gap-1">
+            <div className="flex items-center gap-1.5">
+                <div className="relative flex-grow">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" size={13} />
+                    <input 
+                        type="text"
+                        placeholder="제목, 내용 검색..."
+                        value={searchTerm || ''}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full bg-slate-900/40 border border-slate-700/50 rounded px-8 py-1 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
+                    />
+                    {searchTerm && (
+                        <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
+                            <X size={12} />
+                        </button>
+                    )}
+                </div>
+                
+                <div className="flex items-center gap-1">
+                    {/* 태그 토글 버튼 복구 */}
+                    <button 
+                        onClick={() => setIsTagsExpanded(!isTagsExpanded)}
+                        className={`p-1 rounded border transition-all ${isTagsExpanded || selectedTags?.length > 0 ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-900/50 border-slate-700 text-slate-400'}`}
+                    >
+                        <Tag size={13} />
+                    </button>
+
+                    <div className="flex bg-slate-900/50 rounded p-0.5 border border-slate-700">
+                        <button onClick={() => setViewType('group')} className={`p-1 rounded ${viewType === 'group' ? 'bg-slate-700 text-white' : 'text-slate-500'}`}><AlignJustify size={13} /></button>
+                        <button onClick={() => setViewType('list')} className={`p-1 rounded ${viewType === 'list' ? 'bg-slate-700 text-white' : 'text-slate-500'}`}><LayoutList size={13} /></button>
+                    </div>
+
+                    <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-slate-900/50 border border-slate-700 rounded px-1 py-0.5 text-[10px] text-white focus:outline-none">
+                        <option value="latest">최신</option>
+                        <option value="wrong">오답</option>
+                        <option value="random">랜덤</option>
+                    </select>
+                </div>
             </div>
-            
-            <div className="flex flex-col gap-3 p-4 bg-slate-800/50 rounded-b-lg border-x border-b border-slate-700/50">
-                <div className="flex flex-col md:flex-row gap-3">
-                    <div className="relative flex-grow">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                        <input 
-                            type="text"
-                            placeholder="제목, 내용, 키워드 검색..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full bg-slate-900/50 border border-slate-700 rounded-md pl-10 pr-10 py-2 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                        />
-                        {searchTerm && (
-                            <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
-                                <X size={16} />
+
+            {/* [기능 복구] 태그 필터 펼침 영역 */}
+            {(isTagsExpanded || (selectedTags && selectedTags.length > 0)) && (
+                <div className="pt-1 border-t border-slate-700/30 animate-in slide-in-from-top-1">
+                    <div className="flex flex-wrap gap-1 py-0.5">
+                        {allTags?.map(tag => (
+                            <button 
+                                key={tag} 
+                                onClick={() => toggleTag(tag)}
+                                className={`px-2 py-0.5 rounded-full text-[9px] font-bold border transition-all ${selectedTags?.includes(tag) ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-500'}`}
+                            >
+                                #{tag}
+                            </button>
+                        ))}
+                        {(selectedTags?.length > 0 || searchTerm) && (
+                            <button onClick={resetFilters} className="text-[9px] text-red-400 ml-auto flex items-center gap-1 px-1 hover:underline">
+                                <RefreshCw size={10} /> 초기화
                             </button>
                         )}
                     </div>
-                    <div className="flex gap-2">
-                        <select
-                            value={sortBy}
-                            onChange={(e) => setSortBy(e.target.value)}
-                            className="bg-slate-900/50 border border-slate-700 rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="latest">최신순</option>
-                            <option value="wrong">오답순</option>
-                            <option value="random">랜덤</option>
-                        </select>
-                        <button 
-                            onClick={() => setShowFilterPanel(!showFilterPanel)}
-                            className={`md:hidden px-3 py-2 rounded-md border ${selectedTags.length > 0 ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-900/50 border-slate-700 text-slate-400'}`}
-                        >
-                            <Filter size={18} />
-                        </button>
-                    </div>
                 </div>
-
-                {/* 필터 패널 (태그 섹션 개선됨) */}
-                <div className={`${showFilterPanel ? 'max-h-[500px] opacity-100 mt-2' : 'max-h-0 opacity-0 overflow-hidden'} transition-all duration-300 ease-in-out md:max-h-none md:opacity-100 md:block`}>
-                    <div className="pt-2 border-t border-slate-700/30">
-                        {/* 태그 헤더 & 컨트롤 */}
-                        <div className="flex items-center justify-between mb-2">
-                            <button 
-                                onClick={() => setIsTagsExpanded(!isTagsExpanded)}
-                                className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-300 transition-colors"
-                            >
-                                <Tag size={12} /> 
-                                태그 ({allTags.length}) 
-                                {isTagsExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                            </button>
-
-                            {(selectedTags.length > 0 || searchTerm) && (
-                                <button 
-                                    onClick={resetFilters}
-                                    className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 px-2 py-1 bg-red-500/10 rounded-lg border border-red-500/20 transition-colors"
-                                >
-                                    <RefreshCw size={12} /> 초기화
-                                </button>
-                            )}
-                        </div>
-
-                        {/* 태그 목록 (접기/펼치기 적용) */}
-                        <div className={`flex flex-wrap gap-2 transition-all duration-300 ease-in-out overflow-hidden ${isTagsExpanded ? 'max-h-96 opacity-100 pb-2' : 'max-h-0 opacity-0'}`}>
-                            {allTags.length > 0 ? allTags.map(tag => (
-                                <button
-                                    key={tag}
-                                    onClick={() => toggleTag(tag)}
-                                    className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-all active:scale-95
-                                        ${selectedTags.includes(tag) 
-                                            ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20' 
-                                            : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200'
-                                        }`}
-                                >
-                                    #{tag}
-                                </button>
-                            )) : (
-                                <span className="text-xs text-slate-600">등록된 태그 없음</span>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <main className="space-y-3 mt-4 flex-grow">
-            {subjects.length > 0 ? (
-            subjects.map((subject, index) => (
-                <SubjectAccordion
-                    key={subject}
-                    subject={subject}
-                    problems={processedProblems.grouped[subject]}
-                    onSelectProblem={handleSelectProblem}
-                    onDeleteProblem={handleDeleteProblem}
-                    initialExpanded={index === 0} 
-                />
-            ))
-            ) : (
-            <div className="flex flex-col items-center justify-center py-20 border border-dashed border-slate-700 rounded-xl bg-slate-800/30 text-slate-500 mt-10">
-                <Filter size={48} className="mb-4 opacity-30 text-slate-400" />
-                <p className="font-bold text-lg mb-1 text-slate-300">조건에 맞는 문제가 없습니다.</p>
-                <p className="text-sm">검색어나 태그 필터를 변경해 보세요.</p>
-                <button onClick={resetFilters} className="mt-6 px-4 py-2 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 rounded-lg text-sm font-bold transition-all">
-                    필터 초기화
-                </button>
-            </div>
             )}
-        </main>
+        </div>
       </div>
     </div>
   );
+
+  const renderMainContent = () => {
+    if (sortedList.length === 0) {
+      return <div className="text-center py-20 text-slate-500 font-bold">조건에 맞는 문제가 없습니다.</div>;
+    }
+
+    if (viewType === 'list') {
+      return (
+        <div className="space-y-1 pb-20">
+          {sortedList.slice(0, displayCount).map((problem) => (
+            <ProblemCard 
+              key={problem.id}
+              data={problem} 
+              onSelect={() => handleSelectProblem(problem)}
+              onDelete={() => handleDeleteProblem(problem)}
+              showSubjectBadge={true} 
+            />
+          ))}
+          {displayCount < sortedList.length && (
+            <div ref={observerRef} className="h-10 flex items-center justify-center py-4">
+              <Loader2 className="animate-spin text-blue-500" size={20} />
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-2 pb-32">
+        {subjects.map((subject, index) => (
+            <SubjectAccordion
+                key={subject}
+                subject={subject}
+                problems={processedProblems.grouped[subject]}
+                onSelectProblem={handleSelectProblem}
+                onDeleteProblem={handleDeleteProblem}
+                initialExpanded={index === 0} 
+            />
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-[#0f172a] text-white overflow-hidden">
+      {renderHeader()}
+      <main className="flex-grow w-full max-w-5xl mx-auto p-2 md:p-4 pt-1.5 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800">
+        {renderMainContent()}
+      </main>
+    </div>
+  );
 };
+
+// 🟢 [수정] 탭 버튼 높이 대폭 축소
+const TabButton = ({ id, label, icon: Icon, activeTab, onClick }) => (
+    <button 
+      onClick={() => onClick(id)}
+      className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2 text-[11px] font-bold border-b transition-all ${activeTab === id ? 'border-blue-500 text-white bg-blue-500/5' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+    >
+      <Icon size={12} /> <span>{label}</span>
+    </button>
+  );
 
 export default Workbook;
