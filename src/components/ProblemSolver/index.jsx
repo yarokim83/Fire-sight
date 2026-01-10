@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db, storage } from '../../firebase';
-import { doc, updateDoc, arrayRemove } from 'firebase/firestore';
-import { ref, deleteObject } from 'firebase/storage';
+import { doc, updateDoc, arrayRemove, arrayUnion } from 'firebase/firestore'; // arrayUnion 추가
+import { ref, deleteObject, uploadBytes, getDownloadURL } from 'firebase/storage'; // 업로드 관련 추가
 import { updateProblemResult, updateProblemInfo, deleteProblem } from '../../utils/db';
 import { 
     ChevronLeft, ChevronRight, CheckCircle2, XCircle, 
     BookOpen, Maximize2, Trash2, X, ArrowLeft,
     Type, PenTool, Eraser, RotateCcw, StickyNote, Edit3, Save, ImageIcon,
     Check, Trophy, RefreshCcw, AlertTriangle, Pen, CheckCircle2 as OIcon,
-    RefreshCw 
+    RefreshCw, Plus // Plus 아이콘 추가
 } from 'lucide-react';
 
 // 🔴 [수정 완료] 절대 경로 사용으로 빌드 에러 방지
@@ -153,7 +153,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             ctx.strokeStyle = penColor;
             ctx.lineWidth = lineWidth;
         }
-    }, [inputMode, isOverlayMode, window.innerWidth, window.innerHeight]);
+    }, [inputMode, isOverlayMode]);
 
     // 펜 스타일 업데이트
     useEffect(() => {
@@ -324,6 +324,30 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         } catch (e) { alert("삭제 오류"); }
     };
 
+    // 🟢 [추가] 모범답안 이미지 업로드 핸들러
+    const handleAnswerImageUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file || !currentProblem) return;
+
+        try {
+            const storagePath = `workbook_images/${currentProblem.id}/answer_${Date.now()}_${file.name}`;
+            const fileRef = ref(storage, storagePath);
+            await uploadBytes(fileRef, file);
+            const downloadUrl = await getDownloadURL(fileRef);
+
+            const docRef = doc(db, "workbook", currentProblem.id);
+            await updateDoc(docRef, {
+                answerImages: arrayUnion(downloadUrl)
+            });
+
+            setLocalAnswerImages(prev => [...prev, downloadUrl]);
+            alert("이미지가 추가되었습니다. ✅");
+        } catch (error) {
+            console.error(error);
+            alert("이미지 업로드 실패");
+        }
+    };
+
     const HighlightedUserAnswer = () => {
         if (!gradingResult || gradingResult.matched.length === 0) return <p className="text-slate-700 whitespace-pre-wrap break-words">{userAnswer}</p>;
         const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -381,7 +405,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                 </div>
                                 <input value={currentProblem.title} onChange={(e) => setCurrentProblem({...currentProblem, title: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white font-bold" placeholder="제목 수정" />
                                 
-                                {/* 🟢 [수정 사항 추가] 수정 모드에서 문제 이미지 관리 섹션 */}
+                                {/* 🟢 [수정 모드] 문제 지문 이미지 관리 섹션 추가 */}
                                 {localProblemImages.length > 0 && (
                                     <div className="space-y-2 border-t border-b border-slate-800 py-4">
                                         <label className="text-xs font-bold text-slate-400 flex items-center gap-1">
@@ -525,7 +549,18 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
                                 <div className={`space-y-4 ${inputMode === 'draw' || (!userAnswer.trim() && !isRetrying) ? 'col-span-2' : ''}`}>
                                     <div className="bg-emerald-950/20 rounded-2xl p-6 border border-emerald-900/50 relative">
-                                        <h3 className="text-emerald-400 font-bold text-lg mb-4 flex items-center gap-2"><BookOpen size={20} /> 모범 답안</h3>
+                                        <h3 className="text-emerald-400 font-bold text-lg mb-4 flex items-center justify-between">
+                                            <div className="flex items-center gap-2"><BookOpen size={20} /> 모범 답안</div>
+                                            
+                                            {/* 🟢 [수정 모드] 모범답안 이미지 추가 버튼 */}
+                                            {isEditMode && (
+                                                <label className="flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded-lg cursor-pointer transition-colors shadow-lg">
+                                                    <Plus size={14} /> 이미지 추가
+                                                    <input type="file" accept="image/*" className="hidden" onChange={handleAnswerImageUpload} />
+                                                </label>
+                                            )}
+                                        </h3>
+                                        
                                         {localAnswerImages.length > 0 && (
                                             <div className="grid grid-cols-2 gap-3 mb-6">
                                                 {localAnswerImages.map((url, idx) => (
@@ -538,13 +573,13 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                         )}
                                         {isEditMode ? (
                                             <div className="space-y-3 mt-4 animate-in fade-in">
-                                                <label className="text-xs font-bold text-emerald-400">모범 답안 텍스트</label>
+                                                <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider">모델 답안 텍스트</label>
                                                 <textarea 
                                                     value={currentProblem.modelAnswer} 
                                                     onChange={(e) => setCurrentProblem({...currentProblem, modelAnswer: e.target.value})} 
                                                     className="w-full h-48 bg-emerald-900/40 border border-emerald-500/50 rounded p-3 text-emerald-100 text-base focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
                                                 />
-                                                <label className="text-xs font-bold text-emerald-400">채점 키워드 (쉼표로 구분)</label>
+                                                <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider">채점 키워드 (쉼표로 구분)</label>
                                                 <input 
                                                     value={Array.isArray(currentProblem.keywords) ? currentProblem.keywords.join(', ') : currentProblem.keywords} 
                                                     onChange={(e) => setCurrentProblem({...currentProblem, keywords: e.target.value.split(',').map(k => k.trim())})} 
