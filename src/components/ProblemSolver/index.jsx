@@ -138,7 +138,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             const ctx = canvas.getContext('2d');
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
-            // 펜 색상 초기화 (지우개 모드 해제)
             ctx.globalCompositeOperation = 'source-over';
             ctx.strokeStyle = penColor;
             ctx.lineWidth = lineWidth;
@@ -150,19 +149,17 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             const ctx = canvas.getContext('2d');
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
-            // 펜 색상 초기화
             ctx.globalCompositeOperation = 'source-over';
             ctx.strokeStyle = penColor;
             ctx.lineWidth = lineWidth;
         }
     }, [inputMode, isOverlayMode, window.innerWidth, window.innerHeight]);
 
-    // 🔴 [수정됨] 펜 스타일 업데이트 (지우개 기능 구현)
+    // 펜 스타일 업데이트
     useEffect(() => {
         const activeCanvas = isOverlayMode ? overlayCanvasRef.current : canvasRef.current;
         if (activeCanvas) {
             const ctx = activeCanvas.getContext('2d');
-            // 흰색(#ffffff)이 선택되면 지우개 모드(destination-out)로 전환
             if (penColor === '#ffffff') {
                 ctx.globalCompositeOperation = 'destination-out';
             } else {
@@ -383,6 +380,30 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                     </select>
                                 </div>
                                 <input value={currentProblem.title} onChange={(e) => setCurrentProblem({...currentProblem, title: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white font-bold" placeholder="제목 수정" />
+                                
+                                {/* 🟢 [수정 사항 추가] 수정 모드에서 문제 이미지 관리 섹션 */}
+                                {localProblemImages.length > 0 && (
+                                    <div className="space-y-2 border-t border-b border-slate-800 py-4">
+                                        <label className="text-xs font-bold text-slate-400 flex items-center gap-1">
+                                            <ImageIcon size={14} /> 문제 지문 이미지 관리 ({localProblemImages.length})
+                                        </label>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                            {localProblemImages.map((url, idx) => (
+                                                <div key={idx} className="relative aspect-video rounded-lg overflow-hidden border border-slate-700 bg-black group">
+                                                    <img src={url} alt="Problem" className="w-full h-full object-contain" />
+                                                    <button 
+                                                        onClick={() => handleDeleteImage('problem', url)}
+                                                        className="absolute top-1 right-1 bg-red-600 hover:bg-red-500 text-white p-1.5 rounded-md shadow-lg transition-colors"
+                                                        title="이미지 삭제"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
                                 <textarea value={currentProblem.question} onChange={(e) => setCurrentProblem({...currentProblem, question: e.target.value})} className="w-full h-32 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-slate-200" placeholder="문제 내용 수정" />
                                 <button onClick={handleSaveEdit} className="px-3 py-2 bg-blue-600 text-white rounded font-bold w-full flex justify-center items-center gap-1"><Save size={16} /> 저장</button>
                             </div>
@@ -402,7 +423,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                     {/* 답안 입력 */}
                     {!showAnswer && !isOverlayMode && (
                         <div className="bg-white rounded-xl shadow-xl overflow-hidden border-2 border-slate-700 focus-within:border-blue-500 transition-colors relative isolate">
-                            {/* 탭 */}
                             <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
                                 <div className="flex gap-2">
                                     <button onClick={() => setInputMode('text')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${inputMode === 'text' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'}`}><Type size={14} /> 텍스트</button>
@@ -420,7 +440,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                 )}
                             </div>
 
-                            {/* 입력 영역 */}
                             <div className="relative w-full h-[400px] bg-white cursor-text select-none z-0"> 
                                 {inputMode === 'text' ? (
                                     <textarea value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} placeholder="답안을 입력하세요..." className="w-full h-full p-6 pb-20 text-slate-900 text-lg outline-none resize-none placeholder:text-slate-400 select-text break-words whitespace-pre-wrap" spellCheck="false" style={{ userSelect: 'text', WebkitUserSelect: 'text' }} />
