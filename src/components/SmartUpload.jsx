@@ -55,7 +55,7 @@ export default function SmartUpload({ onSaveComplete, initialData, defaultCatego
                     />
                 )}
 
-                {/* Step 2: 분석 중 화면 (AI 모드일 때만) */}
+                {/* Step 2: 분석 중 화면 */}
                 {step === 2 && !isManualMode && (
                     <AnalysisLoading previewUrl={problemPreviewUrls[0]} />
                 )}
@@ -71,7 +71,7 @@ export default function SmartUpload({ onSaveComplete, initialData, defaultCatego
                                 problemCount={problemPreviewUrls.length} answerCount={answerPreviewUrls.length}
                                 onRemove={handleRemoveImage} onAdd={handleAddImages} inputAddRef={inputAddRef}
                             />
-                            {/* 오른쪽: 입력 폼 */}
+                            {/* 오른쪽: 입력 폼 (이곳에서 출처 정보를 입력받습니다) */}
                             <ProblemForm 
                                 formData={formData} setFormData={setFormData}
                                 isAnalyzingAnswer={isAnalyzingAnswer}
@@ -90,7 +90,7 @@ export default function SmartUpload({ onSaveComplete, initialData, defaultCatego
                 )}
             </div>
 
-            {/* --- 디버그 콘솔 (하단 고정) --- */}
+            {/* --- 디버그 콘솔 --- */}
             <DebugConsole logs={debugLogs} show={showDebug} onClose={() => setShowDebug(false)} onClear={() => setDebugLogs([])} />
         </div>
     );

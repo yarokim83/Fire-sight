@@ -2,10 +2,11 @@ import React, { useRef, useEffect, useState } from 'react';
 import { 
     Upload, ScanLine, Image as ImageIcon, CheckCircle2, 
     ChevronLeft, ChevronRight, FileText, Edit3, Trash2, 
-    Plus, Sparkles, Layers, Terminal, BookOpen, Maximize2, X
+    Plus, Sparkles, Layers, Terminal, BookOpen, Maximize2, X,
+    Link // 🟢 Link 아이콘 추가
 } from 'lucide-react';
 
-// 🔴 [추가] 공통 상수 import (파일 경로가 다르면 수정 필요)
+// 🔴 공통 상수 import
 import { SUBJECT_LIST, PROBLEM_TYPES } from '/src/utils/constants';
 
 // Step 1: 초기 선택 및 업로드 화면
@@ -62,7 +63,7 @@ export const AnalysisLoading = ({ previewUrl }) => (
     </div>
 );
 
-// [최종 수정] 삭제 버튼 상시 노출 + 줌 기능
+// Step 3 (Left): 이미지 뷰어
 export const ImageViewer = ({ 
     viewMode, setViewMode, activeUrls, currentIndex, setIndex, 
     problemCount, answerCount, onRemove, onAdd, inputAddRef 
@@ -91,16 +92,13 @@ export const ImageViewer = ({
                 </button>
             </div>
 
-            {/* 메인 뷰어 */}
             <div className={`aspect-[3/4] bg-slate-950 rounded-xl border overflow-hidden flex items-center justify-center relative group shadow-inner ${viewMode === 'answer' ? 'border-emerald-500/30' : 'border-slate-800'}`}>
                 {activeUrls && activeUrls.length > 0 ? (
                     <>
-                        {/* 확대 버튼 힌트 */}
                         <div className="absolute top-3 left-3 bg-black/60 backdrop-blur p-1.5 rounded-lg text-white opacity-80 pointer-events-none z-10 flex items-center gap-1 text-xs font-bold shadow-md">
                             <Maximize2 size={14} /> <span>확대</span>
                         </div>
 
-                        {/* 실제 이미지 */}
                         <img 
                             src={activeUrls[currentIndex]} 
                             alt="Preview" 
@@ -108,7 +106,6 @@ export const ImageViewer = ({
                             onClick={() => setIsZoomed(true)} 
                         />
                         
-                        {/* [삭제 버튼] 항상 보이도록 opacity 제거 및 빨간색 강조 */}
                         <button 
                             onClick={(e) => { e.stopPropagation(); onRemove(); }} 
                             className="absolute top-3 right-3 bg-red-600 text-white p-2.5 rounded-xl z-20 shadow-lg transform active:scale-90 transition-all hover:bg-red-500 border border-red-400/50"
@@ -117,7 +114,6 @@ export const ImageViewer = ({
                             <Trash2 size={18} />
                         </button>
                         
-                        {/* 이전/다음 버튼 */}
                         {activeUrls.length > 1 && (
                             <>
                                 <button onClick={(e) => { e.stopPropagation(); prev(); }} className="absolute left-2 bg-black/40 hover:bg-black/60 backdrop-blur text-white p-2 rounded-full transition-colors"><ChevronLeft size={24} /></button>
@@ -136,7 +132,6 @@ export const ImageViewer = ({
                 )}
             </div>
 
-            {/* 썸네일 리스트 */}
             <div ref={scrollRef} className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide snap-x px-1 min-h-[70px]">
                 <div onClick={() => { if(inputAddRef.current) inputAddRef.current.value=null; inputAddRef.current.click(); }} className={`w-16 h-16 shrink-0 rounded-lg border-2 border-dashed flex flex-col items-center justify-center cursor-pointer hover:bg-slate-800/50 transition-colors ${viewMode === 'answer' ? 'border-emerald-500/30 text-emerald-500' : 'border-slate-700 text-slate-500'}`}>
                     <input type="file" accept="image/*" multiple onChange={onAdd} className="hidden" ref={inputAddRef} />
@@ -149,7 +144,6 @@ export const ImageViewer = ({
                 ))}
             </div>
 
-            {/* 줌 모달 */}
             {isZoomed && activeUrls.length > 0 && (
                 <div className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setIsZoomed(false)}>
                     <button className="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors" onClick={() => setIsZoomed(false)}>
@@ -161,9 +155,6 @@ export const ImageViewer = ({
                         className="max-w-full max-h-[90vh] object-contain shadow-2xl animate-in zoom-in-95 duration-200" 
                         onClick={(e) => e.stopPropagation()} 
                     />
-                    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white/10 px-4 py-2 rounded-full text-white font-bold backdrop-blur border border-white/10">
-                        {currentIndex + 1} / {activeUrls.length}
-                    </div>
                 </div>
             )}
         </div>
@@ -177,7 +168,6 @@ export const ProblemForm = ({ formData, setFormData, isAnalyzingAnswer }) => (
             <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1"><Layers size={12} /> 과목 분류</label>
                 <div className="relative">
-                    {/* 🔴 [수정] constants.js의 SUBJECT_LIST 사용 */}
                     <select 
                         value={formData.category} 
                         onChange={(e) => setFormData({ ...formData, category: e.target.value })} 
@@ -192,7 +182,6 @@ export const ProblemForm = ({ formData, setFormData, isAnalyzingAnswer }) => (
             <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1"><BookOpen size={12} /> 문제 유형</label>
                 <div className="relative">
-                    {/* 🔴 [수정] constants.js의 PROBLEM_TYPES 사용 */}
                     <select 
                         value={formData.problemType} 
                         onChange={(e) => setFormData({ ...formData, problemType: e.target.value })} 
@@ -234,8 +223,17 @@ export const ProblemForm = ({ formData, setFormData, isAnalyzingAnswer }) => (
                 <input type="text" value={formData.keywords} onChange={(e) => setFormData({ ...formData, keywords: e.target.value })} className="w-full bg-slate-950 border border-slate-800 text-emerald-400 rounded-xl p-3 text-sm outline-none focus:border-emerald-500 transition-all placeholder:text-slate-700" placeholder="#화재안전기준, #설치기준" />
             </div>
             <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase">출처 / 참고</label>
-                <input type="text" value={formData.reference || ''} onChange={(e) => setFormData({ ...formData, reference: e.target.value })} className="w-full bg-slate-950 border border-slate-800 text-slate-400 rounded-xl p-3 text-sm outline-none focus:border-emerald-500 transition-all placeholder:text-slate-700" placeholder="예: 2024 기출, NFSC 101" />
+                {/* 🟢 [수정] reference -> source 필드명 변경 및 Link 아이콘 적용 */}
+                <label className="text-xs font-bold text-blue-400 flex items-center gap-1 uppercase tracking-tight">
+                    <Link size={12} /> 출처 / 참고
+                </label>
+                <input 
+                    type="text" 
+                    value={formData.source || ''} 
+                    onChange={(e) => setFormData({ ...formData, source: e.target.value })} 
+                    className="w-full bg-slate-950 border border-slate-800 text-slate-300 rounded-xl p-3 text-sm outline-none focus:border-blue-500 transition-all placeholder:text-slate-700 shadow-inner" 
+                    placeholder="예: 2024 기출, NFSC 101" 
+                />
             </div>
         </div>
     </div>
