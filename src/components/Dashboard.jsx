@@ -7,15 +7,15 @@ import {
 import { db } from '../firebase'; 
 import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 
-// 과목별 아이콘 및 색상 매핑
+// 1. 과목별 설정: 업로드 이미지 명칭과 동일하게 수정 및 매핑 키워드 추가
 const SUBJECT_CONFIG = {
-    '수계': { color: 'bg-blue-500', icon: Droplets },
-    '가스계': { color: 'bg-emerald-500', icon: Wind },
-    '경보': { color: 'bg-amber-500', icon: Zap },
-    '피난': { color: 'bg-lime-500', icon: DoorOpen },
-    '소화활동': { color: 'bg-red-500', icon: Flame },
-    '공통': { color: 'bg-purple-500', icon: Layers },
-    '기타': { color: 'bg-slate-500', icon: Layers }
+    '수계소화설비': { color: 'bg-blue-500', icon: Droplets, keywords: ['수계'] },
+    '가스계소화설비': { color: 'bg-emerald-500', icon: Wind, keywords: ['가스계'] },
+    '경보설비': { color: 'bg-amber-500', icon: Zap, keywords: ['경보'] },
+    '피난구조설비': { color: 'bg-lime-500', icon: DoorOpen, keywords: ['피난'] },
+    '소화활동설비': { color: 'bg-red-500', icon: Flame, keywords: ['소화활동', '소화 활동'] },
+    '소방시설 공통': { color: 'bg-purple-500', icon: Layers, keywords: ['공통'] },
+    '기타': { color: 'bg-slate-500', icon: Layers, keywords: [] }
 };
 
 export default function Dashboard({ setMode, subject, dDay }) {
@@ -32,7 +32,7 @@ export default function Dashboard({ setMode, subject, dDay }) {
     const [subjectProgress, setSubjectProgress] = useState([]);
     const [recentActivities, setRecentActivities] = useState([]);
 
-    // [Data Fetching]
+    // [Data Fetching & Classification Logic]
     useEffect(() => {
         const q = query(collection(db, "workbook"), orderBy("createdAt", "desc"));
         
@@ -54,20 +54,28 @@ export default function Dashboard({ setMode, subject, dDay }) {
                 reviewNeeded: review
             }));
 
-            // 2. 과목별 숙련도 계산
+            // 2. 과목별 숙련도 계산 (키워드 기반 매핑 로직 적용)
             const subjMap = {};
             Object.keys(SUBJECT_CONFIG).forEach(key => {
-                if(key !== '기타') subjMap[key] = { total: 0, mastered: 0 };
+                subjMap[key] = { total: 0, mastered: 0 };
             });
 
             problems.forEach(p => {
-                const cat = p.category || p.subject || '기타';
-                const safeCat = SUBJECT_CONFIG[cat] ? cat : '기타';
+                const rawCategory = (p.category || p.subject || '기타').trim();
                 
-                if (!subjMap[safeCat]) subjMap[safeCat] = { total: 0, mastered: 0 };
+                // 유연한 키워드 매핑 수행
+                let matchedKey = '기타';
+                for (const [key, config] of Object.entries(SUBJECT_CONFIG)) {
+                    if (key === '기타') continue;
+                    // DB 값이 정식명칭과 일치하거나, 특정 키워드를 포함하고 있다면 매칭
+                    if (rawCategory === key || config.keywords.some(kw => rawCategory.includes(kw))) {
+                        matchedKey = key;
+                        break;
+                    }
+                }
                 
-                subjMap[safeCat].total += 1;
-                if (p.lastScore === 100) subjMap[safeCat].mastered += 1;
+                subjMap[matchedKey].total += 1;
+                if (p.lastScore === 100) subjMap[matchedKey].mastered += 1;
             });
 
             const processedProgress = Object.entries(subjMap)
@@ -85,7 +93,7 @@ export default function Dashboard({ setMode, subject, dDay }) {
 
             setSubjectProgress(processedProgress);
 
-            // 3. 최근 활동 (상위 3개)
+            // 3. 최근 활동 (시간 계산 로직 유지)
             const recent = problems.slice(0, 3).map(p => {
                 const date = p.createdAt?.toDate ? p.createdAt.toDate() : new Date();
                 const now = new Date();
@@ -114,7 +122,7 @@ export default function Dashboard({ setMode, subject, dDay }) {
         return () => unsubscribe();
     }, []);
 
-    // [업데이트] 명언 30선
+    // 4. 명언 30선 리스트 유지
     const quotes = [
         "포기하지 않는 한 실패는 없다.",
         "오늘 걷지 않으면 내일은 뛰어야 한다.",
@@ -125,7 +133,6 @@ export default function Dashboard({ setMode, subject, dDay }) {
         "지금 흘린 땀은 합격의 눈물이 된다.",
         "어제보다 나은 오늘, 오늘보다 빛날 2027년.",
         "고통은 지나가지만, 합격의 영광은 영원하다.",
-        "늦었다고 생각할 때가 가장 빠른 때다.",
         "실력은 계단식으로 성장한다. 버티면 올라간다.",
         "나 자신을 믿는 것이 성공의 제1비결이다.",
         "중요한 것은 꺾이지 않는 마음이다.",
@@ -133,8 +140,6 @@ export default function Dashboard({ setMode, subject, dDay }) {
         "합격의 기쁨을 상상하며 오늘을 견뎌라.",
         "오늘의 힘듦은 내일의 스펙이 된다.",
         "꾸준함이 비범함을 만든다.",
-        "내일의 나는 오늘의 내가 만든다.",
-        "핑계로 성공한 사람은 없다.",
         "안전을 지키는 전문가, 그 무게를 견뎌라.",
         "시작이 반이다. 나머지는 끈기다.",
         "한계는 내 마음속에만 있다.",
@@ -157,7 +162,7 @@ export default function Dashboard({ setMode, subject, dDay }) {
     return (
         <div className="flex flex-col h-full bg-slate-950 text-white p-4 md:p-6 overflow-y-auto w-full animate-in fade-in duration-500 pb-20">
             
-            {/* 1. Hero Section & D-Day */}
+            {/* Hero Section & D-Day */}
             <div className="relative rounded-3xl bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-indigo-500/20 shadow-2xl p-5 md:p-6 mb-6 overflow-hidden group">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -mr-16 -mt-16 group-hover:bg-indigo-500/20 transition-all duration-700"></div>
                 
@@ -177,7 +182,7 @@ export default function Dashboard({ setMode, subject, dDay }) {
                         </p>
                     </div>
 
-                    {/* Stats Compact View */}
+                    {/* Stats Summary */}
                     <div className="flex gap-3 w-full md:w-auto">
                         <div className="flex-1 md:flex-none bg-slate-950/50 backdrop-blur-md p-3 rounded-xl border border-slate-700 text-center min-w-[80px]">
                             <div className="text-xl font-bold text-white">
@@ -195,7 +200,7 @@ export default function Dashboard({ setMode, subject, dDay }) {
                 </div>
             </div>
 
-            {/* 2. Main Grid */}
+            {/* Main Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Subject Mastery Chart */}
                 <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-3xl p-6">
@@ -239,7 +244,6 @@ export default function Dashboard({ setMode, subject, dDay }) {
                     )}
                 </div>
 
-                {/* Recent & Daily Mission */}
                 <div className="flex flex-col gap-6">
                     {/* Daily Mission Card */}
                     <div className="bg-gradient-to-b from-amber-500/10 to-slate-900 border border-amber-500/20 rounded-3xl p-6 relative overflow-hidden group cursor-pointer hover:border-amber-500/40 transition-all" onClick={() => setMode('workbook')}>
@@ -261,9 +265,7 @@ export default function Dashboard({ setMode, subject, dDay }) {
                         <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
                             <Clock size={18} className="text-slate-400" /> 최근 활동
                         </h3>
-                        {loading ? (
-                            <div className="text-center py-4 text-slate-700 text-xs">Loading...</div>
-                        ) : recentActivities.length > 0 ? (
+                        {recentActivities.length > 0 ? (
                             <div className="space-y-4">
                                 {recentActivities.map((activity) => (
                                     <div key={activity.id} className="flex items-center gap-3 group cursor-pointer" onClick={() => setMode('workbook')}>
