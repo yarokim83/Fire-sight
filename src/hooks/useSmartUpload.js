@@ -3,11 +3,11 @@ import { db, storage } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import imageCompression from 'browser-image-compression';
-// 🔴 [체크] import 경로가 올바른지 확인하세요 (utils 폴더)
+// 🔴 analyzeImage가 grading_points를 반환하도록 수정된 버전이어야 합니다.
 import { analyzeImage } from '../utils/gemini'; 
 
 export const useSmartUpload = (initialData, onSaveComplete) => {
-    // --- 상태 관리 ---
+    // --- [기능 보존] 상태 관리 전체 ---
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [isManualMode, setIsManualMode] = useState(!navigator.onLine);
     const [isSaving, setIsSaving] = useState(false);
@@ -18,23 +18,34 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
     const [isAnalyzingAnswer, setIsAnalyzingAnswer] = useState(false);
     const [step, setStep] = useState(1);
     
-    // 데이터 상태
     const [problemPreviewUrls, setProblemPreviewUrls] = useState([]);
     const [answerPreviewUrls, setAnswerPreviewUrls] = useState([]);
     const [problemFiles, setProblemFiles] = useState([]);
     const [answerFiles, setAnswerFiles] = useState([]);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     
+    // 🔴 [개선] gradingPoints 초기 상태 추가
     const [formData, setFormData] = useState({
-        type: 'workbook', category: '수계', title: '', description: '',
-        modelAnswer: '', keywords: '', problemType: 'descriptive',
-        answer: '', reference: '',
+        type: 'workbook', 
+        category: '수계소화설비', 
+        title: '', 
+        description: '',
+        modelAnswer: '', 
+        keywords: '', 
+        problemType: 'descriptive',
+        answer: '', 
+        reference: '',
+        gradingPoints: {
+            mandatory_terms: [],
+            mandatory_numbers: []
+        }
     });
 
     const inputFileRef = useRef(null);
     const inputAddRef = useRef(null);
     const isMounted = useRef(true);
 
+    // --- [기능 보존] 로그 및 네트워크 관리 ---
     const addLog = useCallback((msg) => {
         const time = new Date().toLocaleTimeString();
         console.log(`[${time}] ${msg}`);
@@ -56,13 +67,15 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
             isMounted.current = false;
             window.removeEventListener('online', handleStatus);
             window.removeEventListener('offline', handleStatus);
+            // 메모리 누수 방지
             problemPreviewUrls.forEach(url => { if(url && url.startsWith('blob:')) URL.revokeObjectURL(url); });
             answerPreviewUrls.forEach(url => { if(url && url.startsWith('blob:')) URL.revokeObjectURL(url); });
         };
-    }, []); 
+    }, [problemPreviewUrls, answerPreviewUrls, addLog]); 
 
     useEffect(() => { setCurrentImageIndex(0); }, [viewMode]);
 
+    // --- [기능 보존] 데이터 로드 ---
     useEffect(() => {
         if (initialData) {
             setFormData(prev => ({
@@ -73,6 +86,8 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
                 category: initialData.subject || prev.category,
                 keywords: initialData.tags ? initialData.tags.join(', ') : '',
                 modelAnswer: initialData.answer || '',
+                // 🔴 기존 데이터 로드 시 채점 포인트도 함께 로드
+                gradingPoints: initialData.gradingPoints || { mandatory_terms: [], mandatory_numbers: [] }
             }));
             const pImages = initialData.images || (initialData.imageUrl ? [initialData.imageUrl] : []);
             const aImages = initialData.answerImages || (initialData.answerImageUrl ? [initialData.answerImageUrl] : []);
@@ -88,9 +103,9 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         return { newUrls };
     };
 
+    // --- [기능 보존] 이미지 압축 및 업로드 로직 전체 ---
     const uploadImagesToStorage = async (files) => {
         const uploadedUrls = [];
-        
         const compressionOptions = { 
             maxSizeMB: 0.8,
             maxWidthOrHeight: 1280,
@@ -115,10 +130,9 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
             
             return new Promise((resolve, reject) => {
                 const uploadTask = uploadBytesResumable(storageRef, fileToUpload);
-                
                 const timer = setTimeout(() => {
                     uploadTask.cancel();
-                    reject(new Error("2분 동안 전송 안됨 (방화벽 확인 필요)"));
+                    reject(new Error("2분 시간 초과"));
                 }, 120000);
 
                 uploadTask.on('state_changed', 
@@ -128,10 +142,7 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
                             addLog(`📡 [${index + 1}] 전송 중... ${Math.round(progress)}%`);
                         }
                     }, 
-                    (error) => {
-                        clearTimeout(timer);
-                        reject(error);
-                    }, 
+                    (error) => { clearTimeout(timer); reject(error); }, 
                     async () => {
                         clearTimeout(timer);
                         const url = await getDownloadURL(uploadTask.snapshot.ref);
@@ -146,20 +157,15 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
                 const url = await uploadSingleFile(file, index);
                 uploadedUrls.push(url);
                 addLog(`✅ [${index + 1}] 업로드 완료`);
-            } catch (error) {
-                addLog(`🔥 [${index + 1}] 실패: ${error.message}`);
-                throw error;
-            }
+            } catch (error) { addLog(`🔥 [${index + 1}] 실패: ${error.message}`); throw error; }
         }
-
         return uploadedUrls;
     };
 
-    // --- 액션 핸들러 ---
+    // --- [기능 보존 & 개선] 액션 핸들러 ---
     const handleInitialUpload = async (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
-        
         const { newUrls } = await processFiles(files);
         setProblemPreviewUrls(prev => [...prev, ...newUrls]);
         setProblemFiles(prev => [...prev, ...files]);
@@ -173,23 +179,16 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
             try {
                 const result = await analyzeImage(files[0], formData.type, 'problem');
                 if (isMounted.current) {
-                    // 🔴 [수정] AI가 분석한 Category와 Keywords도 반영
                     setFormData(prev => ({ 
                         ...prev, 
                         title: result.title || '', 
                         description: result.content || '',
-                        category: result.category || prev.category, // 카테고리 자동 적용
-                        keywords: result.keywords || ''             // 키워드 자동 적용
+                        category: result.category || prev.category,
+                        keywords: result.keywords || ''
                     }));
                 }
-            } catch (e) {
-                addLog(`분석 실패: ${e.message}`);
-            } finally { 
-                if (isMounted.current) {
-                    setIsAnalyzing(false); 
-                    setStep(3);
-                }
-            }
+            } catch (e) { addLog(`분석 실패: ${e.message}`); }
+            finally { if (isMounted.current) { setIsAnalyzing(false); setStep(3); } }
         }
     };
 
@@ -217,15 +216,20 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
                 setIsAnalyzingAnswer(true);
                 try {
                     let accAnswer = ""; 
-                    let accKeywords = ""; // 🔴 [수정] 배열 대신 문자열로 처리
+                    let accKeywords = ""; 
+                    // 🔴 채점 포인트 누적용 변수
+                    let newTerms = [];
+                    let newNumbers = [];
                     
                     for (const file of files) {
                         const res = await analyzeImage(file, formData.type, 'answer');
                         if (res.answer) accAnswer += `\n\n[추가 해설]\n${res.answer}`;
+                        if (res.keywords) accKeywords += (accKeywords ? ", " : "") + res.keywords;
                         
-                        // 🔴 [수정] gemini.js는 이제 keywords를 문자열로 반환함
-                        if (res.keywords) {
-                            accKeywords += (accKeywords ? ", " : "") + res.keywords;
+                        // 🔴 AI가 추출한 채점 포인트 수집
+                        if (res.grading_points) {
+                            newTerms = [...newTerms, ...(res.grading_points.mandatory_terms || [])];
+                            newNumbers = [...newNumbers, ...(res.grading_points.mandatory_numbers || [])];
                         }
                     }
                     
@@ -233,11 +237,15 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
                         setFormData(prev => ({
                             ...prev,
                             modelAnswer: (prev.modelAnswer + accAnswer).trim(),
-                            // 기존 키워드에 새 키워드 추가 (중복 제거 로직 포함)
                             keywords: [...new Set([
                                 ...(prev.keywords ? prev.keywords.split(',').map(s=>s.trim()) : []), 
                                 ...(accKeywords ? accKeywords.split(',').map(s=>s.trim()) : [])
-                            ])].join(', ')
+                            ])].join(', '),
+                            // 🔴 기존 포인트와 새 포인트를 합쳐서 업데이트 (중복 제거)
+                            gradingPoints: {
+                                mandatory_terms: [...new Set([...prev.gradingPoints.mandatory_terms, ...newTerms])],
+                                mandatory_numbers: [...new Set([...prev.gradingPoints.mandatory_numbers, ...newNumbers])]
+                            }
                         }));
                     }
                 } catch(e) { addLog(`해설 분석 오류: ${e.message}`); }
@@ -264,18 +272,11 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         setCurrentImageIndex(prev => Math.max(0, prev - 1));
     };
 
+    // --- [기능 보존 & 개선] 저장 로직 ---
     const handleSave = async () => {
         addLog("👇 저장 시작");
-        
-        if (!formData.title.trim()) {
-             addLog("⚠️ 제목 누락으로 중단");
-             return alert("제목을 입력해주세요.");
-        }
-        
-        if (isSaving) {
-            addLog("⏳ 중복 방지");
-            return;
-        }
+        if (!formData.title.trim()) return alert("제목을 입력해주세요.");
+        if (isSaving) return;
 
         setIsSaving(true); 
         setDebugLogs([]); 
@@ -289,8 +290,9 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
                 title: formData.title || "제목 없음",
                 content: formData.description || "",
                 answer: formData.modelAnswer || "", 
-                // 키워드 문자열을 배열로 변환하여 저장
                 tags: formData.keywords.split(',').map(t => t.trim().replace(/^#/, '')).filter(t => t),
+                // 🔴 [핵심] Firestore에 채점 포인트 필드 추가 저장
+                gradingPoints: formData.gradingPoints,
                 createdAt: serverTimestamp(),
                 images: pUrls, imageUrl: pUrls[0] || null,
                 answerImages: aUrls, answerImageUrl: aUrls[0] || null,
@@ -306,9 +308,7 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
             addLog(`🔥 최종 실패: ${e.message}`);
             alert(`저장 실패: ${e.message}`);
         } finally { 
-            if(isMounted.current) {
-                setIsSaving(false); 
-            }
+            if(isMounted.current) setIsSaving(false);
         }
     };
 
@@ -321,11 +321,12 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         setProblemPreviewUrls([]); setAnswerPreviewUrls([]);
         setFormData(prev => ({
             ...prev, title: '', description: '', modelAnswer: '', keywords: '', answer: '',
-            category: keepSettings ? prev.category : '수계',
+            category: keepSettings ? prev.category : '수계소화설비',
+            // 🔴 초기화 시 채점 포인트도 리셋
+            gradingPoints: { mandatory_terms: [], mandatory_numbers: [] }
         }));
         if(inputFileRef.current) inputFileRef.current.value = '';
         if(inputAddRef.current) inputAddRef.current.value = '';
-        
         if(isMounted.current) setIsSaving(false);
         addLog("상태 초기화됨");
     };
