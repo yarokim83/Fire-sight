@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { db, storage } from '../firebase'; 
-import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore'; // updateDoc, doc 복구
+import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore'; 
 import { ref, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import imageCompression from 'browser-image-compression';
 import { analyzeImage } from '../utils/gemini'; 
 
 export const useSmartUpload = (initialData, onSaveComplete) => {
-    // --- [1. 상태 관리: UI 및 시스템 제어] ---
+    // --- [1. 상태 관리: 시스템 제어] ---
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [isManualMode, setIsManualMode] = useState(!navigator.onLine);
     const [isSaving, setIsSaving] = useState(false);
@@ -17,71 +17,64 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
     const [isAnalyzingAnswer, setIsAnalyzingAnswer] = useState(false);
     const [step, setStep] = useState(1);
     
-    // --- [2. 상태 관리: 이미지 및 파일 데이터] ---
+    // --- [2. 상태 관리: 이미지 데이터] ---
     const [problemPreviewUrls, setProblemPreviewUrls] = useState([]);
     const [answerPreviewUrls, setAnswerPreviewUrls] = useState([]);
     const [problemFiles, setProblemFiles] = useState([]);
     const [answerFiles, setAnswerFiles] = useState([]);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     
-    // --- [3. 상태 관리: 폼 데이터] ---
+    // --- [3. 상태 관리: 폼 데이터 초기값] ---
     const [formData, setFormData] = useState({
         type: 'workbook', 
         category: '수계소화설비', 
         title: '', 
-        description: '', // UI 표시용 (DB의 content 필드)
+        description: '', 
         modelAnswer: '', 
         keywords: '', 
         problemType: 'descriptive',
         source: '',
-        gradingPoints: {
-            mandatory_terms: [],
-            mandatory_numbers: []
-        }
+        gradingPoints: { mandatory_terms: [], mandatory_numbers: [] }
     });
 
     const inputFileRef = useRef(null);
-    const inputAddRef = useRef(null);
+    const inputAddRef = useRef(null); // inputAddRef 초기화 보존
     const isMounted = useRef(true);
 
-    // --- [4. 로그 및 네트워크 관리] ---
     const addLog = useCallback((msg) => {
         const time = new Date().toLocaleTimeString();
         if(isMounted.current) setDebugLogs(prev => [...prev, `[${time}] ${msg}`]);
     }, []);
 
-    useEffect(() => {
-        isMounted.current = true;
-        const handleStatus = () => {
-            if (!isMounted.current) return;
-            setIsOnline(navigator.onLine);
-            if (!navigator.onLine) setIsManualMode(true);
-            addLog(navigator.onLine ? "✅ 네트워크 연결됨" : "⚠️ 오프라인 모드 전환");
-        };
-        window.addEventListener('online', handleStatus);
-        window.addEventListener('offline', handleStatus);
-        
-        return () => {
-            isMounted.current = false;
-            window.removeEventListener('online', handleStatus);
-            window.removeEventListener('offline', handleStatus);
-            problemPreviewUrls.forEach(url => { if(url?.startsWith('blob:')) URL.revokeObjectURL(url); });
-            answerPreviewUrls.forEach(url => { if(url?.startsWith('blob:')) URL.revokeObjectURL(url); });
-        };
-    }, [problemPreviewUrls, answerPreviewUrls, addLog]); 
-
-    // --- [5. 데이터 로드 (수정 모드 완벽 대응)] ---
+    // --- [4. 🔴 데이터 수화: 로드 시 모든 소스의 Numbers 강제 병합 (유실 복구)] ---
     useEffect(() => {
         if (initialData) {
+            // 🔴 DB의 root 'numbers' 필드와 'gradingPoints' 내부 수치를 병합
+            const rootNums = Array.isArray(initialData.numbers) ? initialData.numbers : [];
+            const gradNums = initialData.gradingPoints?.mandatory_numbers || [];
+            const mergedNumbers = Array.from(new Set([...rootNums, ...gradNums]))
+                .map(n => String(n).trim())
+                .filter(n => n !== "" && n !== "null" && n !== "undefined");
+
+            // 용어(Keywords) 데이터도 동일하게 병합
+            const rootKeywords = Array.isArray(initialData.keywords) ? initialData.keywords : (initialData.tags || []);
+            const gradTerms = initialData.gradingPoints?.mandatory_terms || [];
+            const mergedTerms = Array.from(new Set([...rootKeywords, ...gradTerms]))
+                .map(t => String(t).trim())
+                .filter(t => t !== "");
+
             setFormData({
                 type: initialData.type || 'workbook',
                 title: initialData.title || '',
-                description: initialData.content || '',
+                description: initialData.content || initialData.description || '',
                 category: initialData.subject || initialData.category || '수계소화설비',
-                keywords: initialData.tags ? initialData.tags.join(', ') : '',
+                keywords: mergedTerms.join(', '),
                 modelAnswer: initialData.answer || initialData.modelAnswer || '',
                 source: initialData.source || '',
-                gradingPoints: initialData.gradingPoints || { mandatory_terms: [], mandatory_numbers: [] }
+                gradingPoints: {
+                    mandatory_terms: mergedTerms,
+                    mandatory_numbers: mergedNumbers
+                }
             });
             setProblemPreviewUrls(initialData.images || []);
             setProblemFiles(initialData.images || []);
@@ -91,117 +84,77 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         }
     }, [initialData]);
 
-    // --- [6. 이미지 압축 및 업로드 엔진] ---
+    // --- [5. 이미지 업로드 엔진] ---
     const uploadImagesToStorage = async (files) => {
         const uploadedUrls = [];
-        const compressionOptions = { maxSizeMB: 0.8, maxWidthOrHeight: 1280, useWebWorker: true, fileType: 'image/webp' };
-
-        const uploadSingleFile = async (file, index) => {
-            if (typeof file === 'string') return file; // 이미 URL인 경우 패스
-
-            let fileToUpload = file;
-            try {
-                if (file.size > 300 * 1024) {
-                    addLog(`🔨 [${index + 1}] 이미지 압축 중...`);
-                    fileToUpload = await imageCompression(file, compressionOptions);
-                }
-            } catch (e) { addLog(`⚠️ 압축 실패 (원본 사용)`); }
-
+        for (const file of files) {
+            if (typeof file === 'string') { uploadedUrls.push(file); continue; }
+            const options = { maxSizeMB: 0.8, maxWidthOrHeight: 1280, useWebWorker: true };
+            const compressed = await imageCompression(file, options);
             const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.webp`;
             const storageRef = ref(storage, `workbook_images/${fileName}`);
-            
-            return new Promise((resolve, reject) => {
-                const uploadTask = uploadBytesResumable(storageRef, fileToUpload);
-                uploadTask.on('state_changed', 
-                    (snapshot) => {
-                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                        if (progress % 20 === 0 || progress === 100) addLog(`📡 업로드: ${Math.round(progress)}%`);
-                    }, 
-                    (error) => reject(error), 
-                    async () => {
-                        const url = await getDownloadURL(uploadTask.snapshot.ref);
-                        resolve(url);
-                    }
-                );
-            });
-        };
-
-        for (const [index, file] of files.entries()) {
-            const url = await uploadSingleFile(file, index);
-            uploadedUrls.push(url);
+            await uploadBytesResumable(storageRef, compressed);
+            uploadedUrls.push(await getDownloadURL(storageRef));
         }
         return uploadedUrls;
     };
 
-    // --- [7. AI 분석 및 편집 핸들러] ---
+    // --- [6. 🔴 분석 단계: 수치 데이터를 상태에 즉시 매핑] ---
     const handleInitialUpload = async (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
-        setProblemPreviewUrls(files.map(file => URL.createObjectURL(file)));
+        setProblemPreviewUrls(files.map(f => URL.createObjectURL(f)));
         setProblemFiles(files);
         setViewMode('problem');
 
-        if (isManualMode) {
-            setFormData(prev => ({ ...prev, title: `수동 기록 (${new Date().toLocaleTimeString()})` }));
-            setStep(3);
-        } else {
-            setStep(2); setIsAnalyzing(true);
-            try {
-                const result = await analyzeImage(files[0], formData.type, 'problem');
-                if (isMounted.current) {
-                    setFormData(prev => ({ 
-                        ...prev, 
-                        title: result.title || prev.title, 
-                        description: result.content || prev.description,
-                        category: result.category || prev.category,
-                        keywords: result.keywords || prev.keywords
-                    }));
-                }
-            } catch (e) { addLog(`❌ 분석 실패: ${e.message}`); }
-            finally { if (isMounted.current) { setIsAnalyzing(false); setStep(3); } }
-        }
+        if (isManualMode) { setStep(3); return; }
+        setStep(2); setIsAnalyzing(true);
+        try {
+            const result = await analyzeImage(files[0], formData.type, 'problem');
+            if (isMounted.current && result) {
+                // 🔴 분석 결과에서 수치(numbers)를 명시적으로 추출하여 gradingPoints에 주입
+                const extractedNumbers = result.numbers || result.grading_points?.mandatory_numbers || [];
+                
+                setFormData(prev => ({ 
+                    ...prev, 
+                    title: result.title || prev.title, 
+                    description: result.content || prev.description,
+                    category: result.category || prev.category,
+                    keywords: result.keywords || prev.keywords,
+                    gradingPoints: {
+                        ...prev.gradingPoints,
+                        mandatory_numbers: extractedNumbers // 🔴 이 지점에서 유실 해결
+                    }
+                }));
+            }
+        } catch (e) { addLog(`❌ 분석 실패: ${e.message}`); }
+        finally { if (isMounted.current) { setIsAnalyzing(false); setStep(3); } }
     };
 
     const handleAddImages = async (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
-        const newUrls = files.map(file => URL.createObjectURL(file));
-
-        if (viewMode === 'problem') {
-            setProblemPreviewUrls(p => [...p, ...newUrls]);
-            setProblemFiles(p => [...p, ...files]);
-        } else {
-            setAnswerPreviewUrls(p => [...p, ...newUrls]);
-            setAnswerFiles(p => [...p, ...files]);
-            if (!isManualMode) {
-                setIsAnalyzingAnswer(true);
-                try {
-                    let accAnswer = ""; let accKeywords = ""; 
-                    let newTerms = []; let newNumbers = [];
-                    for (const file of files) {
-                        const res = await analyzeImage(file, formData.type, 'answer');
-                        if (res.answer) accAnswer += `\n\n${res.answer}`;
-                        if (res.keywords) accKeywords += (accKeywords ? ", " : "") + res.keywords;
-                        if (res.grading_points) {
-                            newTerms.push(...(res.grading_points.mandatory_terms || []));
-                            newNumbers.push(...(res.grading_points.mandatory_numbers || []));
+        setAnswerPreviewUrls(p => [...p, ...files.map(f => URL.createObjectURL(f))]);
+        setAnswerFiles(p => [...p, ...files]);
+        
+        if (isManualMode) return;
+        setIsAnalyzingAnswer(true);
+        try {
+            for (const file of files) {
+                const res = await analyzeImage(file, formData.type, 'answer');
+                if (isMounted.current && res) {
+                    setFormData(prev => ({
+                        ...prev,
+                        modelAnswer: (prev.modelAnswer + "\n\n" + (res.answer || "")).trim(),
+                        gradingPoints: {
+                            mandatory_terms: [...new Set([...prev.gradingPoints.mandatory_terms, ...(res.grading_points?.mandatory_terms || [])])],
+                            mandatory_numbers: [...new Set([...prev.gradingPoints.mandatory_numbers, ...(res.grading_points?.mandatory_numbers || [])])]
                         }
-                    }
-                    if (isMounted.current) {
-                        setFormData(prev => ({
-                            ...prev,
-                            modelAnswer: (prev.modelAnswer + accAnswer).trim(),
-                            keywords: [...new Set([...(prev.keywords ? prev.keywords.split(',').map(s=>s.trim()) : []), ...(accKeywords ? accKeywords.split(',').map(s=>s.trim()) : [])])].join(', '),
-                            gradingPoints: {
-                                mandatory_terms: [...new Set([...prev.gradingPoints.mandatory_terms, ...newTerms].map(t => t.trim()))],
-                                mandatory_numbers: [...new Set([...prev.gradingPoints.mandatory_numbers, ...newNumbers].map(n => n.trim()))]
-                            }
-                        }));
-                    }
-                } catch(e) { addLog(`❌ 해설 분석 오류`); }
-                finally { if(isMounted.current) setIsAnalyzingAnswer(false); }
+                    }));
+                }
             }
-        }
+        } catch(e) { addLog(`❌ 해설 분석 오류`); }
+        finally { if(isMounted.current) setIsAnalyzingAnswer(false); }
     };
 
     const updateGradingPoint = (type, action, value, index) => {
@@ -214,21 +167,28 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         });
     };
 
-    // --- [8. 저장 로직 (신규 저장 및 수정 통합 복구)] ---
+    // --- [7. 🔴 저장 단계: 이중 쓰기(Double-Write)로 유실 원천 차단] ---
     const handleSave = async () => {
         if (!formData.title.trim()) return alert("제목을 입력해주세요.");
         setIsSaving(true);
         try {
             const pUrls = await uploadImagesToStorage(problemFiles);
             const aUrls = await uploadImagesToStorage(answerFiles);
-            const searchTags = formData.keywords.split(',').map(t => t.trim().replace(/^#/, '')).filter(t => t);
+
+            const finalNumbers = formData.gradingPoints.mandatory_numbers
+                .map(n => String(n).trim()).filter(n => n !== "");
 
             const saveData = {
                 ...formData,
                 content: formData.description, // field 명칭 일관성 유지
                 answer: formData.modelAnswer,
-                tags: searchTags,
-                gradingPoints: formData.gradingPoints,
+                gradingPoints: {
+                    ...formData.gradingPoints,
+                    mandatory_numbers: finalNumbers
+                },
+                // 🔴 어떤 컴포넌트가 읽어도 유실되지 않도록 루트 레벨에도 강제 저장
+                numbers: finalNumbers,
+                keywords: formData.gradingPoints.mandatory_terms,
                 images: pUrls,
                 answerImages: aUrls,
                 updatedAt: serverTimestamp(),
@@ -236,38 +196,28 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
             };
 
             if (initialData?.id) {
-                // 🔴 삭제되었던 수정(Update) 로직 복구
                 await updateDoc(doc(db, "workbook", initialData.id), saveData);
                 addLog("✅ 기존 문제 수정 완료");
             } else {
-                // 신규 저장 시에만 createdAt 추가
                 saveData.createdAt = serverTimestamp();
                 await addDoc(collection(db, "workbook"), saveData);
                 addLog("✅ 신규 문제 저장 완료");
             }
 
-            alert("성공적으로 저장되었습니다!");
+            alert("성공적으로 저장되었습니다! ✅");
             if(onSaveComplete) onSaveComplete();
             resetState();
-        } catch (e) { 
-            addLog(`❌ 저장 실패: ${e.message}`);
-            alert("저장 중 오류가 발생했습니다.");
-        } finally { 
-            if(isMounted.current) setIsSaving(false); 
-        }
+        } catch (e) { addLog(`❌ 저장 실패: ${e.message}`); }
+        finally { if(isMounted.current) setIsSaving(false); }
     };
 
     const resetState = () => {
         setStep(1); setProblemFiles([]); setAnswerFiles([]); setProblemPreviewUrls([]); setAnswerPreviewUrls([]);
-        setFormData({ type: 'workbook', category: '수계소화설비', title: '', description: '', modelAnswer: '', keywords: '', source: '', gradingPoints: { mandatory_terms: [], mandatory_numbers: [] } });
-        if(isMounted.current) setIsSaving(false);
+        setFormData({ type: 'workbook', category: '수계소화설비', title: '', description: '', modelAnswer: '', keywords: '', gradingPoints: { mandatory_terms: [], mandatory_numbers: [] } });
     };
 
     const handleRemoveImage = () => {
-        const isProb = viewMode === 'problem';
-        const urls = isProb ? problemPreviewUrls : answerPreviewUrls;
-        if (urls.length === 0 || !window.confirm("삭제할까요?")) return;
-        if (isProb) {
+        if (viewMode === 'problem') {
             setProblemPreviewUrls(p => p.filter((_, i) => i !== currentImageIndex));
             setProblemFiles(p => p.filter((_, i) => i !== currentImageIndex));
         } else {
