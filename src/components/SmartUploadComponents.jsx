@@ -3,7 +3,7 @@ import {
     Upload, ScanLine, Image as ImageIcon, CheckCircle2, 
     ChevronLeft, ChevronRight, FileText, Edit3, Trash2, 
     Plus, Sparkles, Layers, Terminal, BookOpen, Maximize2, X,
-    Link // 🟢 Link 아이콘 추가
+    Link 
 } from 'lucide-react';
 
 // 🔴 공통 상수 import
@@ -197,12 +197,12 @@ export const ProblemForm = ({ formData, setFormData, isAnalyzingAnswer }) => (
 
         <div className="space-y-2">
             <label className="text-xs font-bold text-slate-500 uppercase">제목</label>
-            <input type="text" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} className="w-full bg-slate-950 border border-slate-800 text-white font-bold rounded-xl p-3 text-sm focus:border-emerald-500 outline-none transition-all placeholder:text-slate-600" placeholder="문제의 핵심 주제를 입력하세요" />
+            <input type="text" value={formData.title || ''} onChange={(e) => setFormData({ ...formData, title: e.target.value })} className="w-full bg-slate-950 border border-slate-800 text-white font-bold rounded-xl p-3 text-sm focus:border-emerald-500 outline-none transition-all placeholder:text-slate-600" placeholder="문제의 핵심 주제를 입력하세요" />
         </div>
 
         <div className="space-y-2">
             <label className="text-xs font-bold text-slate-500 uppercase">문제 지문 / 내용</label>
-            <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full h-28 bg-slate-950 border border-slate-800 text-slate-300 rounded-xl p-3 text-sm outline-none focus:border-emerald-500 transition-all resize-none leading-relaxed placeholder:text-slate-700" placeholder="문제 내용을 입력하세요..." />
+            <textarea value={formData.description || ''} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full h-28 bg-slate-950 border border-slate-800 text-slate-300 rounded-xl p-3 text-sm outline-none focus:border-emerald-500 transition-all resize-none leading-relaxed placeholder:text-slate-700" placeholder="문제 내용을 입력하세요..." />
         </div>
 
         <div className="space-y-2">
@@ -214,16 +214,16 @@ export const ProblemForm = ({ formData, setFormData, isAnalyzingAnswer }) => (
                     </span>
                 )}
             </div>
-            <textarea value={formData.modelAnswer} onChange={(e) => setFormData({ ...formData, modelAnswer: e.target.value })} className={`w-full h-40 bg-slate-950 border text-slate-300 rounded-xl p-3 text-sm outline-none transition-all resize-none leading-relaxed placeholder:text-slate-700 ${isAnalyzingAnswer ? 'border-emerald-500/50 bg-emerald-950/10 ring-1 ring-emerald-500/20' : 'border-slate-800 focus:border-emerald-500'}`} placeholder="정답과 해설을 입력하세요..." />
+            <textarea value={formData.modelAnswer || ''} onChange={(e) => setFormData({ ...formData, modelAnswer: e.target.value })} className={`w-full h-40 bg-slate-950 border text-slate-300 rounded-xl p-3 text-sm outline-none transition-all resize-none leading-relaxed placeholder:text-slate-700 ${isAnalyzingAnswer ? 'border-emerald-500/50 bg-emerald-950/10 ring-1 ring-emerald-500/20' : 'border-slate-800 focus:border-emerald-500'}`} placeholder="정답과 해설을 입력하세요..." />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
              <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 uppercase">태그 (키워드)</label>
-                <input type="text" value={formData.keywords} onChange={(e) => setFormData({ ...formData, keywords: e.target.value })} className="w-full bg-slate-950 border border-slate-800 text-emerald-400 rounded-xl p-3 text-sm outline-none focus:border-emerald-500 transition-all placeholder:text-slate-700" placeholder="#화재안전기준, #설치기준" />
+                {/* 🔴 [수정] value={formData.keywords || ''} 적용으로 AI 분석 결과 유실 방지 */}
+                <input type="text" value={formData.keywords || ''} onChange={(e) => setFormData({ ...formData, keywords: e.target.value })} className="w-full bg-slate-950 border border-slate-800 text-emerald-400 rounded-xl p-3 text-sm outline-none focus:border-emerald-500 transition-all placeholder:text-slate-700" placeholder="#화재안전기준, #설치기준" />
             </div>
             <div className="space-y-2">
-                {/* 🟢 [수정] reference -> source 필드명 변경 및 Link 아이콘 적용 */}
                 <label className="text-xs font-bold text-blue-400 flex items-center gap-1 uppercase tracking-tight">
                     <Link size={12} /> 출처 / 참고
                 </label>

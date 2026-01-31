@@ -12,7 +12,7 @@ export default function SmartUpload({ onSaveComplete, initialData, defaultCatego
         inputFileRef, inputAddRef,
         handleInitialUpload, handleAddImages, handleRemoveImage, handleSave, resetState
     } = useSmartUpload(initialData, onSaveComplete);
-
+a
     // 뷰어에 보여줄 현재 URL 목록 계산
     const activeUrls = viewMode === 'problem' ? problemPreviewUrls : answerPreviewUrls;
 
