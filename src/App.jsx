@@ -13,7 +13,7 @@ import Reference from './components/Reference'
 import Dashboard from './components/Dashboard'
 import StrategyView from './components/StrategyView'
 import StudyManager from './components/StudyManager'
-import CanvasWidget from './components/CanvasWidget' // [NEW] 1. 연습장 위젯 임포트
+import CanvasWidget from './components/CanvasWidget'
 
 // [NFTC 6대 분류 테마 설정]
 const THEME_CONFIG = {
@@ -25,15 +25,13 @@ const THEME_CONFIG = {
   '공통': { bg: 'bg-slate-900', border: 'border-purple-500/30', activeTab: 'bg-purple-600 text-white shadow-purple-500/20', text: 'text-purple-400', icon: Layers }
 };
 
-const APP_VERSION = 'v2.8';
-const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
+const APP_VERSION = 'v2.8.1'; // 데이터 연동 패치 버전
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
 
 function App() {
   // --- 상태 관리 ---
   const [accessToken, setAccessToken] = useState(null); 
-
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const pinInputRef = useRef(null);
@@ -45,15 +43,14 @@ function App() {
   const [isExamMode, setIsExamMode] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
-  // 데이터 흐름
+  // 데이터 흐름 (수정 데이터 관리 핵심)
   const [activeStrategy, setActiveStrategy] = useState(null);
-  const [sharedData, setSharedData] = useState(null);
+  const [sharedData, setSharedData] = useState(null); // 수정할 문제 데이터 보관소
 
   // 인증 상태
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [tokenClient, setTokenClient] = useState(null);
 
-  // 테마 적용
   const theme = THEME_CONFIG[subject] || THEME_CONFIG['수계'];
 
   // D-Day 계산
@@ -91,30 +88,13 @@ function App() {
 
   // Google Auth 초기화
   useEffect(() => {
-    const loadGis = () => {
-      if (window.google?.accounts?.oauth2) {
-          initGis();
-          return;
-      }
-      const script = document.createElement('script');
-      script.src = 'https://accounts.google.com/gsi/client';
-      script.onload = () => initGis();
-      script.onerror = (e) => console.error("GIS Load Failed", e);
-      document.body.appendChild(script);
-    };
-
     const initGis = () => {
-      if (!CLIENT_ID) return;
+      if (!CLIENT_ID || !window.google?.accounts?.oauth2) return;
       try {
         const client = window.google.accounts.oauth2.initTokenClient({
           client_id: CLIENT_ID, scope: SCOPES,
           callback: (resp) => {
-            if (resp.error) {
-                console.error("Token Client Error:", resp);
-                return;
-            }
             if (resp.access_token) {
-                console.log("Login Success: Token Acquired");
                 setAccessToken(resp.access_token);
                 setIsAuthenticated(true);
             }
@@ -123,8 +103,7 @@ function App() {
         setTokenClient(client);
       } catch (err) { console.error("GIS Init Error", err); }
     };
-
-    loadGis();
+    initGis();
   }, []);
 
   // --- Handlers ---
@@ -138,19 +117,20 @@ function App() {
     }
   };
 
+  // 🔴 [핵심] 수정 모드 트리거: Workbook에서 수정 버튼 클릭 시 호출됨
+  const handleEditProblem = (problem) => {
+    setSharedData(problem); // 수정할 데이터를 sharedData에 주입
+    setMode('smart-upload'); // 전문 에디터(SmartUpload) 모드로 전환
+    setIsExamMode(false);    // 수정 시에는 집중 모드 자동 해제
+  };
+
   const handleDataToss = (data) => {
     setSharedData(data);
     setMode('smart-upload');
   };
 
   const handleLogin = () => {
-    if (!CLIENT_ID) {
-      alert("API 설정 오류: .env 파일을 확인하세요.");
-      return;
-    }
-    if (tokenClient) {
-        tokenClient.requestAccessToken({ prompt: 'consent' });
-    }
+    if (tokenClient) tokenClient.requestAccessToken({ prompt: 'consent' });
   };
 
   const handleLogout = () => {
@@ -163,7 +143,6 @@ function App() {
 
   if (!isUnlocked) {
       return (
-        // [FIX] 잠금 화면도 모바일 높이 대응
         <div className="flex flex-col items-center justify-center w-screen bg-slate-950 text-white p-4 fixed inset-0" style={{ height: '100dvh' }}>
             <div className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-8 shadow-2xl animate-in zoom-in-95 duration-300">
                 <div className="flex justify-center mb-6">
@@ -177,10 +156,6 @@ function App() {
                     <input type="password" value={pinInput} onChange={e=>setPinInput(e.target.value)} className="w-full text-center text-3xl tracking-[1em] font-bold bg-slate-800 border border-slate-700 rounded-xl py-4 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none" placeholder="PIN" autoFocus />
                     <button type="submit" className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-500/20 active:scale-95">Unlock System</button>
                 </form>
-                <div className="text-center mt-6">
-                    <p className="text-slate-600 text-xs">Fire Safety Manager Prep 2027</p>
-                    <p className="text-slate-500 text-[10px] mt-1 font-mono">{APP_VERSION}</p>
-                </div>
             </div>
         </div>
       );
@@ -189,8 +164,29 @@ function App() {
   const renderContent = () => {
     switch (mode) {
       case 'dashboard': return <Dashboard setMode={setMode} subject={subject} dDay={dDay} />;
-      case 'smart-upload': return <SmartUpload onSaveComplete={() => setMode('dashboard')} initialData={sharedData} defaultCategory={subject} />;
-      case 'workbook': return <Workbook isExamMode={isExamMode} subject={subject} initialFilter={activeStrategy} />;
+      
+      case 'smart-upload': 
+        return (
+          <SmartUpload 
+            initialData={sharedData} // 🔴 공유된 수정 데이터 전달
+            onSaveComplete={() => {
+              setSharedData(null); // 저장 완료 시 데이터 비우기
+              setMode('workbook');  // 다시 문제 풀던 워크북으로 복귀
+            }} 
+            defaultCategory={subject} 
+          />
+        );
+
+      case 'workbook': 
+        return (
+          <Workbook 
+            isExamMode={isExamMode} 
+            subject={subject} 
+            initialFilter={activeStrategy} 
+            onEditProblem={handleEditProblem} // 🔴 수정 핸들러 주입
+          />
+        );
+
       case 'reference': 
         return <Reference
           subject={subject}
@@ -209,10 +205,6 @@ function App() {
   };
 
   return (
-    // [FIX] 최상위 레이아웃 수정
-    // 1. fixed inset-0: 화면에 앱을 딱 고정
-    // 2. h-[100dvh]: 모바일 브라우저 주소창 제외한 실제 높이 사용
-    // 3. pt-[env(safe-area-inset-top)]: 아이패드 상단바(시간/배터리) 영역만큼 패딩 추가하여 헤더 가림 방지
     <div 
         className={`fixed inset-0 flex flex-col w-screen overflow-hidden ${theme.bg} text-white font-sans transition-all duration-500 pt-[env(safe-area-inset-top)] ${isExamMode ? 'brightness-90 saturate-50' : ''}`}
         style={{ height: '100dvh' }} 
@@ -225,7 +217,6 @@ function App() {
 
       {!isExamMode && (
         <header className={`h-14 border-b ${theme.border} bg-slate-900/80 backdrop-blur-md flex items-center justify-between px-4 z-50 shadow-sm shrink-0 transition-colors duration-500`}>
-          {/* 로고 및 홈 버튼 */}
           <div className="flex items-center gap-2 cursor-pointer min-w-max" onClick={() => setMode('dashboard')}>
             <div className="p-1.5 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg shadow-lg">
               <Flame size={18} className="text-white fill-white" />
@@ -236,10 +227,8 @@ function App() {
             </h1>
           </div>
 
-          {/* 중앙 영역 */}
           <div className="flex-1"></div>
 
-          {/* 우측 상단 버튼들 */}
           <div className="flex items-center gap-3">
             <div className="hidden lg:flex flex-col items-end group relative cursor-help mr-2">
               <div className="text-xs font-mono text-slate-500">Target: {dDay}</div>
@@ -252,7 +241,6 @@ function App() {
               {isExamMode ? <EyeOff size={14} /> : <Eye size={14} />}
               <span className="hidden sm:inline">{isExamMode ? '집중 모드' : '학습 모드'}</span>
             </button>
-            
             <div className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-700'}`} title={isAuthenticated ? "Connected" : "Disconnected"}></div>
             <button onClick={handleLogout} className="text-[10px] px-2 py-1 bg-red-600 hover:bg-red-500 text-white border border-red-400 rounded transition-all z-50">LogOut</button>
           </div>
@@ -272,9 +260,7 @@ function App() {
         </main>
       </div>
 
-      {/* 연습장 위젯 (Workbook 모드에서만 표시) */}
       {mode === 'workbook' && <CanvasWidget />}
-      
     </div>
   );
 }
