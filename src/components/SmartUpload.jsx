@@ -10,9 +10,13 @@ export default function SmartUpload({ onSaveComplete, initialData, defaultCatego
         problemPreviewUrls, answerPreviewUrls, currentImageIndex, setCurrentImageIndex,
         isAnalyzing, isAnalyzingAnswer, debugLogs, showDebug, setShowDebug, setDebugLogs,
         inputFileRef, inputAddRef,
-        handleInitialUpload, handleAddImages, handleRemoveImage, handleSave, resetState
+        handleInitialUpload, handleAddImages, handleRemoveImage, handleSave, resetState,
+        // 🔴 1. 훅에서 편집 함수를 꺼내옵니다.
+        updateGradingPoint 
     } = useSmartUpload(initialData, onSaveComplete);
-a
+
+    // 🔴 2. [문제 해결] 14행에 있던 의미 없는 문자 'a'를 삭제했습니다.
+
     // 뷰어에 보여줄 현재 URL 목록 계산
     const activeUrls = viewMode === 'problem' ? problemPreviewUrls : answerPreviewUrls;
 
@@ -71,10 +75,13 @@ a
                                 problemCount={problemPreviewUrls.length} answerCount={answerPreviewUrls.length}
                                 onRemove={handleRemoveImage} onAdd={handleAddImages} inputAddRef={inputAddRef}
                             />
-                            {/* 오른쪽: 입력 폼 (이곳에서 출처 정보를 입력받습니다) */}
+                            {/* 오른쪽: 입력 폼 */}
                             <ProblemForm 
-                                formData={formData} setFormData={setFormData}
+                                formData={formData} 
+                                setFormData={setFormData}
                                 isAnalyzingAnswer={isAnalyzingAnswer}
+                                // 🔴 3. 하위 컴포넌트로 편집 함수를 전달합니다.
+                                updateGradingPoint={updateGradingPoint} 
                             />
                         </div>
                         
