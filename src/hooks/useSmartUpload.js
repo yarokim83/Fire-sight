@@ -32,6 +32,7 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         description: '', 
         modelAnswer: '', 
         keywords: '', 
+        searchTags: [], // 🔴 [신규] 문제 검색용 태그 배열 추가
         problemType: 'descriptive',
         source: '',
         gradingPoints: { mandatory_terms: [], mandatory_numbers: [] }
@@ -46,16 +47,18 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         if(isMounted.current) setDebugLogs(prev => [...prev, `[${time}] ${msg}`]);
     }, []);
 
-    // --- [4. 🔴 데이터 수화: 0을 포함한 수치 데이터 보존] ---
+    // --- [4. 데이터 수화: 0을 포함한 수치 및 태그 데이터 보존] ---
     useEffect(() => {
         if (initialData) {
             const rootNums = Array.isArray(initialData.numbers) ? initialData.numbers : [];
             const gradNums = initialData.gradingPoints?.mandatory_numbers || [];
             const mergedNumbers = Array.from(new Set([...rootNums, ...gradNums]))
                 .map(n => String(n).trim())
-                .filter(n => n !== "" && n !== "null" && n !== "undefined"); // 0은 통과됨
+                .filter(n => n !== "" && n !== "null" && n !== "undefined");
 
-            const rootKeywords = Array.isArray(initialData.keywords) ? initialData.keywords : (initialData.tags || []);
+            // 🔴 기존 tags 또는 searchTags 데이터를 안전하게 병합
+            const savedTags = initialData.tags || initialData.searchTags || [];
+            const rootKeywords = Array.isArray(initialData.keywords) ? initialData.keywords : savedTags;
             const gradTerms = initialData.gradingPoints?.mandatory_terms || [];
             const mergedTerms = Array.from(new Set([...rootKeywords, ...gradTerms]))
                 .map(t => String(t).trim())
@@ -67,6 +70,7 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
                 description: initialData.content || initialData.description || '',
                 category: initialData.subject || initialData.category || '수계소화설비',
                 keywords: mergedTerms.join(', '),
+                searchTags: Array.isArray(savedTags) ? savedTags : [], // 🔴 검색 태그 복구
                 modelAnswer: initialData.answer || initialData.modelAnswer || '',
                 source: initialData.source || '',
                 gradingPoints: {
@@ -82,7 +86,6 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         }
     }, [initialData]);
 
-    // --- [5. 이미지 업로드 엔진] ---
     const uploadImagesToStorage = async (files) => {
         const uploadedUrls = [];
         for (const file of files) {
@@ -97,7 +100,7 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         return uploadedUrls;
     };
 
-    // --- [6. 분석 단계] ---
+    // --- [6. 분석 단계: 검색용 태그 자동 추출 로직 보강] ---
     const handleInitialUpload = async (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
@@ -110,19 +113,22 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         try {
             const result = await analyzeImage(files[0], formData.type, 'problem');
             if (isMounted.current && result) {
-                const extractedNumbers = result.numbers || result.grading_points?.mandatory_numbers || [];
+                const extractedNumbers = result.grading_points?.mandatory_numbers || result.numbers || [];
+                const extractedTerms = result.grading_points?.mandatory_terms || [];
                 
                 setFormData(prev => ({ 
                     ...prev, 
                     title: result.title || prev.title, 
                     description: result.content || prev.description,
                     category: result.category || prev.category,
-                    keywords: result.keywords || prev.keywords,
+                    searchTags: result.searchTags || result.tags || [], // 🔴 AI 분석에서 추출한 검색용 태그 주입
+                    keywords: (result.searchTags || result.tags || []).join(', '),
                     gradingPoints: {
-                        ...prev.gradingPoints,
+                        mandatory_terms: extractedTerms,
                         mandatory_numbers: extractedNumbers
                     }
                 }));
+                addLog(`✅ AI 지문 분석 완료: 검색 태그 ${result.searchTags?.length || 0}개 추출`);
             }
         } catch (e) { addLog(`❌ 분석 실패: ${e.message}`); }
         finally { if (isMounted.current) { setIsAnalyzing(false); setStep(3); } }
@@ -140,18 +146,37 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
             for (const file of files) {
                 const res = await analyzeImage(file, formData.type, 'answer');
                 if (isMounted.current && res) {
-                    setFormData(prev => ({
-                        ...prev,
-                        modelAnswer: (prev.modelAnswer + "\n\n" + (res.answer || "")).trim(),
-                        gradingPoints: {
-                            mandatory_terms: [...new Set([...prev.gradingPoints.mandatory_terms, ...(res.grading_points?.mandatory_terms || [])])],
-                            mandatory_numbers: [...new Set([...prev.gradingPoints.mandatory_numbers, ...(res.grading_points?.mandatory_numbers || [])])]
-                        }
-                    }));
+                    setFormData(prev => {
+                        const newTerms = [...new Set([...prev.gradingPoints.mandatory_terms, ...(res.grading_points?.mandatory_terms || [])])];
+                        const newNumbers = [...new Set([...prev.gradingPoints.mandatory_numbers, ...(res.grading_points?.mandatory_numbers || [])])];
+                        const newSearchTags = [...new Set([...(prev.searchTags || []), ...(res.searchTags || res.tags || [])])]; // 🔴 해설 태그 병합
+                        
+                        return {
+                            ...prev,
+                            modelAnswer: (prev.modelAnswer + "\n\n" + (res.answer || "")).trim(),
+                            searchTags: newSearchTags,
+                            keywords: newTerms.join(', '),
+                            gradingPoints: {
+                                mandatory_terms: newTerms,
+                                mandatory_numbers: newNumbers
+                            }
+                        };
+                    });
                 }
             }
         } catch(e) { addLog(`❌ 해설 분석 오류`); }
         finally { if(isMounted.current) setIsAnalyzingAnswer(false); }
+    };
+
+    // 🔴 [신규] 검색용 태그 전용 업데이트 함수
+    const updateSearchTag = (action, value, index) => {
+        setFormData(prev => {
+            const list = [...(prev.searchTags || [])];
+            if (action === 'add') list.push('');
+            else if (action === 'update') list[index] = value;
+            else if (action === 'remove') list.splice(index, 1);
+            return { ...prev, searchTags: list };
+        });
     };
 
     const updateGradingPoint = (type, action, value, index) => {
@@ -164,7 +189,7 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         });
     };
 
-    // --- [7. 저장 단계: 0 보존 필터링 적용] ---
+    // --- [7. 저장 단계: 데이터 무결성 보장] ---
     const handleSave = async () => {
         if (!formData.title.trim()) return alert("제목을 입력해주세요.");
         setIsSaving(true);
@@ -172,15 +197,19 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
             const pUrls = await uploadImagesToStorage(problemFiles);
             const aUrls = await uploadImagesToStorage(answerFiles);
 
-            // 🔴 0을 보존하기 위해 명확한 필터링 사용
             const finalNumbers = formData.gradingPoints.mandatory_numbers
                 .map(n => String(n).trim())
                 .filter(n => n !== null && n !== undefined && n !== "");
+
+            const finalSearchTags = (formData.searchTags || [])
+                .map(t => String(t).trim())
+                .filter(t => t !== "");
 
             const saveData = {
                 ...formData,
                 content: formData.description,
                 answer: formData.modelAnswer,
+                tags: finalSearchTags, // 🔴 Firestore 검색용 태그 필드로 저장
                 gradingPoints: {
                     ...formData.gradingPoints,
                     mandatory_numbers: finalNumbers
@@ -211,7 +240,12 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
 
     const resetState = () => {
         setStep(1); setProblemFiles([]); setAnswerFiles([]); setProblemPreviewUrls([]); setAnswerPreviewUrls([]);
-        setFormData({ type: 'workbook', category: '수계소화설비', title: '', description: '', modelAnswer: '', keywords: '', gradingPoints: { mandatory_terms: [], mandatory_numbers: [] } });
+        setCurrentImageIndex(0);
+        setFormData({ 
+            type: 'workbook', category: '수계소화설비', title: '', description: '', 
+            modelAnswer: '', keywords: '', searchTags: [], // 🔴 리셋 시 초기화
+            gradingPoints: { mandatory_terms: [], mandatory_numbers: [] } 
+        });
     };
 
     const handleRemoveImage = () => {
@@ -229,6 +263,7 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         isOnline, isManualMode, setIsManualMode, isSaving, step, setStep, viewMode, setViewMode, formData, setFormData,
         problemPreviewUrls, answerPreviewUrls, currentImageIndex, setCurrentImageIndex, isAnalyzing, isAnalyzingAnswer, 
         debugLogs, showDebug, setShowDebug, setDebugLogs, inputFileRef, inputAddRef,
-        handleInitialUpload, handleAddImages, handleRemoveImage, handleSave, resetState, updateGradingPoint
+        handleInitialUpload, handleAddImages, handleRemoveImage, handleSave, resetState, updateGradingPoint,
+        updateSearchTag // 🔴 [신규] 반환값 추가
     };
 };

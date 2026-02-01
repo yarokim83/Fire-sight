@@ -35,7 +35,7 @@ export async function analyzeImage(file, type = 'workbook', mode = 'problem') {
         if (!API_KEY) throw new Error("API Key가 없습니다.");
         const base64Data = await fileToBase64(file);
         
-        // 🔴 수정: CLASSIFICATION_SYSTEM을 프롬프트에 직접 포함하여 지침 강화
+        // 스마트 인스트럭션: 소방시설관리사 전문 지식 주입
         const smartInstruction = `
             당신은 소방시설관리사 전문 OCR 스캐너이자 채점 설계자입니다.
             [원문 보존] 이미지의 텍스트를 절대 요약하지 말고 '원본 그대로' 추출하세요.
@@ -67,7 +67,7 @@ export async function analyzeImage(file, type = 'workbook', mode = 'problem') {
                 }`;
         }
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
 
         const response = await fetch(url, {
             method: 'POST',
@@ -87,7 +87,6 @@ export async function analyzeImage(file, type = 'workbook', mode = 'problem') {
             })
         });
 
-        // 🔴 추가: 응답 상태 확인 로직
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(`API 오류: ${errorData.error?.message || response.statusText}`);
@@ -97,9 +96,9 @@ export async function analyzeImage(file, type = 'workbook', mode = 'problem') {
         const textRes = data.candidates[0].content.parts[0].text;
         const parsedData = JSON.parse(textRes.replace(/```json|```/g, '').trim());
         
-        // 🔴 데이터 보정: UI 상태(keywords)와 DB 저장(tags)을 모두 만족시키도록 수정
+        // 🔴 데이터 보정 로직: searchTags 변수 유실 방지
         const extractedTags = parsedData.tags || [];
-        const keywordsString = extractedTags.join(', '); // 배열을 "태그1, 태그2" 형태의 문자열로 변환
+        const keywordsString = extractedTags.join(', ');
 
         return { 
             ...parsedData,
@@ -107,8 +106,9 @@ export async function analyzeImage(file, type = 'workbook', mode = 'problem') {
             content: parsedData.content || parsedData.question || "", 
             answer: parsedData.answer || parsedData.modelAnswer || "",
             category: parsedData.category || '소방시설 공통',
-            tags: extractedTags,             // Firestore 저장용 (배열)
-            keywords: keywordsString,       // UI 입력창 표시용 (문자열)
+            tags: extractedTags,             // Firestore 원본 저장용
+            searchTags: extractedTags,       // 🔴 UI의 searchTags 변수와 직결 (유실 방지 핵심)
+            keywords: keywordsString,       // 기존 UI 입력창 표시용 호환성 유지
             grading_points: parsedData.grading_points || { mandatory_terms: [], mandatory_numbers: [] }
         };
 
