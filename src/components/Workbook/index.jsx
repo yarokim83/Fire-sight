@@ -11,7 +11,6 @@ import { useWorkbookData } from './useWorkbookData';
 import ProblemSolver from '../ProblemSolver'; 
 import { deleteProblem } from '../../utils/db'; 
 
-// 🔴 수정 1: App.jsx로부터 onEditProblem 함수를 Props로 받아옵니다.
 const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem }) => {
   const { problems, loading, processedProblems, filterState, allTags } = useWorkbookData();
   
@@ -29,14 +28,14 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem }) => {
   // 무한 스크롤을 위한 상태
   const [displayCount, setDisplayCount] = useState(20);
   const observerRef = useRef(null);
-  const scrollContainerRef = useRef(null);
   
   const sortedList = processedProblems?.sortedList || [];
   const subjects = processedProblems?.grouped ? Object.keys(processedProblems.grouped).sort() : [];
 
-  // 무한 스크롤 감지 로직 (기존 로직 보존)
+  // 무한 스크롤 감지 로직
   useEffect(() => {
     if (viewType !== 'list') return;
+
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && displayCount < sortedList.length) {
@@ -45,11 +44,12 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem }) => {
       },
       { threshold: 0.1 }
     );
+
     if (observerRef.current) observer.observe(observerRef.current);
     return () => observer.disconnect();
   }, [viewType, displayCount, sortedList.length]);
 
-  // 필터 변경 시 리스트 초기화 (기존 로직 보존)
+  // 필터 변경 시 리스트 초기화
   useEffect(() => {
     setDisplayCount(20);
   }, [activeTab, searchTerm, selectedTags, sortBy]);
@@ -70,7 +70,6 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem }) => {
     </div>
   );
 
-  // 🔴 수정 2: ProblemSolver를 호출할 때 onEditProblem을 전달합니다. (이미지 실종 해결 핵심)
   if (solveSession) {
     return (
       <ProblemSolver 
@@ -78,12 +77,10 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem }) => {
         startIndex={solveSession.startIndex} 
         onBack={() => setSolveSession(null)}
         onComplete={() => setSolveSession(null)}
-        onEditProblem={onEditProblem} // 이 줄이 있어야 수정 시 SmartUpload로 이동합니다.
+        onEditProblem={onEditProblem}
       />
     );
   }
-
-  // --- 이하 사용자님의 울트라 콤팩트 UI 및 로직 100% 동일 유지 ---
 
   const handleSelectProblem = (item) => {
     const startIndex = sortedList.findIndex(p => p.id === item.id);
@@ -108,6 +105,7 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem }) => {
   const renderHeader = () => (
     <div className="flex-shrink-0 z-20 bg-slate-900/95 backdrop-blur-sm border-b border-slate-800 shadow-xl sticky top-0">
       <div className="py-1.5 px-4 md:px-6 max-w-5xl mx-auto">
+        
         <header className="flex items-center justify-between gap-4 mb-1.5">
             <h2 className="text-sm font-bold text-white flex items-center gap-1.5 whitespace-nowrap">
               <BookCopy size={16} className="text-blue-500" /> 단권화 문제집
@@ -141,6 +139,11 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem }) => {
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="w-full bg-slate-900/40 border border-slate-700/50 rounded px-8 py-1 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
                     />
+                    {searchTerm && (
+                        <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
+                            <X size={12} />
+                        </button>
+                    )}
                 </div>
                 
                 <div className="flex items-center gap-1">
@@ -150,10 +153,12 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem }) => {
                     >
                         <Tag size={13} />
                     </button>
+
                     <div className="flex bg-slate-900/50 rounded p-0.5 border border-slate-700">
                         <button onClick={() => setViewType('group')} className={`p-1 rounded ${viewType === 'group' ? 'bg-slate-700 text-white' : 'text-slate-500'}`}><AlignJustify size={13} /></button>
                         <button onClick={() => setViewType('list')} className={`p-1 rounded ${viewType === 'list' ? 'bg-slate-700 text-white' : 'text-slate-500'}`}><LayoutList size={13} /></button>
                     </div>
+
                     <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-slate-900/50 border border-slate-700 rounded px-1 py-0.5 text-[10px] text-white focus:outline-none">
                         <option value="latest">최신</option>
                         <option value="wrong">오답</option>
@@ -174,6 +179,11 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem }) => {
                                 #{tag}
                             </button>
                         ))}
+                        {(selectedTags?.length > 0 || searchTerm) && (
+                            <button onClick={resetFilters} className="text-[9px] text-red-400 ml-auto flex items-center gap-1 px-1 hover:underline">
+                                <RefreshCw size={10} /> 초기화
+                            </button>
+                        )}
                     </div>
                 </div>
             )}
@@ -183,21 +193,42 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem }) => {
   );
 
   const renderMainContent = () => {
-    if (sortedList.length === 0) return <div className="text-center py-20 text-slate-500 font-bold">조건에 맞는 문제가 없습니다.</div>;
+    if (sortedList.length === 0) {
+      return <div className="text-center py-20 text-slate-500 font-bold">조건에 맞는 문제가 없습니다.</div>;
+    }
+
     if (viewType === 'list') {
       return (
         <div className="space-y-1 pb-20">
           {sortedList.slice(0, displayCount).map((problem) => (
-            <ProblemCard key={problem.id} data={problem} onSelect={() => handleSelectProblem(problem)} onDelete={() => handleDeleteProblem(problem)} showSubjectBadge={true} />
+            <ProblemCard 
+              key={problem.id}
+              data={problem} 
+              onSelect={() => handleSelectProblem(problem)}
+              onDelete={() => handleDeleteProblem(problem)}
+              showSubjectBadge={true} 
+            />
           ))}
-          {displayCount < sortedList.length && <div ref={observerRef} className="h-10 flex items-center justify-center py-4"><Loader2 className="animate-spin text-blue-500" size={20} /></div>}
+          {displayCount < sortedList.length && (
+            <div ref={observerRef} className="h-10 flex items-center justify-center py-4">
+              <Loader2 className="animate-spin text-blue-500" size={20} />
+            </div>
+          )}
         </div>
       );
     }
+
     return (
       <div className="space-y-2 pb-32">
-        {subjects.map((subject, index) => (
-            <SubjectAccordion key={subject} subject={subject} problems={processedProblems.grouped[subject]} onSelectProblem={handleSelectProblem} onDeleteProblem={handleDeleteProblem} initialExpanded={index === 0} />
+        {subjects.map((subject) => (
+            <SubjectAccordion
+                key={subject}
+                subject={subject}
+                problems={processedProblems.grouped[subject]}
+                onSelectProblem={handleSelectProblem}
+                onDeleteProblem={handleDeleteProblem}
+                initialExpanded={false} // ✅ 첫 번째 폴더도 닫힌 상태로 시작하도록 수정
+            />
         ))}
       </div>
     );
@@ -214,7 +245,10 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem }) => {
 };
 
 const TabButton = ({ id, label, icon: Icon, activeTab, onClick }) => (
-    <button onClick={() => onClick(id)} className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2 text-[11px] font-bold border-b transition-all ${activeTab === id ? 'border-blue-500 text-white bg-blue-500/5' : 'border-transparent text-slate-500 hover:text-slate-300'}`}>
+    <button 
+      onClick={() => onClick(id)}
+      className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2 text-[11px] font-bold border-b transition-all ${activeTab === id ? 'border-blue-500 text-white bg-blue-500/5' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+    >
       <Icon size={12} /> <span>{label}</span>
     </button>
   );
