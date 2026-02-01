@@ -38,7 +38,7 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
     });
 
     const inputFileRef = useRef(null);
-    const inputAddRef = useRef(null); // inputAddRef 초기화 보존
+    const inputAddRef = useRef(null); 
     const isMounted = useRef(true);
 
     const addLog = useCallback((msg) => {
@@ -46,17 +46,15 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         if(isMounted.current) setDebugLogs(prev => [...prev, `[${time}] ${msg}`]);
     }, []);
 
-    // --- [4. 🔴 데이터 수화: 로드 시 모든 소스의 Numbers 강제 병합 (유실 복구)] ---
+    // --- [4. 🔴 데이터 수화: 0을 포함한 수치 데이터 보존] ---
     useEffect(() => {
         if (initialData) {
-            // 🔴 DB의 root 'numbers' 필드와 'gradingPoints' 내부 수치를 병합
             const rootNums = Array.isArray(initialData.numbers) ? initialData.numbers : [];
             const gradNums = initialData.gradingPoints?.mandatory_numbers || [];
             const mergedNumbers = Array.from(new Set([...rootNums, ...gradNums]))
                 .map(n => String(n).trim())
-                .filter(n => n !== "" && n !== "null" && n !== "undefined");
+                .filter(n => n !== "" && n !== "null" && n !== "undefined"); // 0은 통과됨
 
-            // 용어(Keywords) 데이터도 동일하게 병합
             const rootKeywords = Array.isArray(initialData.keywords) ? initialData.keywords : (initialData.tags || []);
             const gradTerms = initialData.gradingPoints?.mandatory_terms || [];
             const mergedTerms = Array.from(new Set([...rootKeywords, ...gradTerms]))
@@ -99,7 +97,7 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         return uploadedUrls;
     };
 
-    // --- [6. 🔴 분석 단계: 수치 데이터를 상태에 즉시 매핑] ---
+    // --- [6. 분석 단계] ---
     const handleInitialUpload = async (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
@@ -112,7 +110,6 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         try {
             const result = await analyzeImage(files[0], formData.type, 'problem');
             if (isMounted.current && result) {
-                // 🔴 분석 결과에서 수치(numbers)를 명시적으로 추출하여 gradingPoints에 주입
                 const extractedNumbers = result.numbers || result.grading_points?.mandatory_numbers || [];
                 
                 setFormData(prev => ({ 
@@ -123,7 +120,7 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
                     keywords: result.keywords || prev.keywords,
                     gradingPoints: {
                         ...prev.gradingPoints,
-                        mandatory_numbers: extractedNumbers // 🔴 이 지점에서 유실 해결
+                        mandatory_numbers: extractedNumbers
                     }
                 }));
             }
@@ -167,7 +164,7 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         });
     };
 
-    // --- [7. 🔴 저장 단계: 이중 쓰기(Double-Write)로 유실 원천 차단] ---
+    // --- [7. 저장 단계: 0 보존 필터링 적용] ---
     const handleSave = async () => {
         if (!formData.title.trim()) return alert("제목을 입력해주세요.");
         setIsSaving(true);
@@ -175,18 +172,19 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
             const pUrls = await uploadImagesToStorage(problemFiles);
             const aUrls = await uploadImagesToStorage(answerFiles);
 
+            // 🔴 0을 보존하기 위해 명확한 필터링 사용
             const finalNumbers = formData.gradingPoints.mandatory_numbers
-                .map(n => String(n).trim()).filter(n => n !== "");
+                .map(n => String(n).trim())
+                .filter(n => n !== null && n !== undefined && n !== "");
 
             const saveData = {
                 ...formData,
-                content: formData.description, // field 명칭 일관성 유지
+                content: formData.description,
                 answer: formData.modelAnswer,
                 gradingPoints: {
                     ...formData.gradingPoints,
                     mandatory_numbers: finalNumbers
                 },
-                // 🔴 어떤 컴포넌트가 읽어도 유실되지 않도록 루트 레벨에도 강제 저장
                 numbers: finalNumbers,
                 keywords: formData.gradingPoints.mandatory_terms,
                 images: pUrls,

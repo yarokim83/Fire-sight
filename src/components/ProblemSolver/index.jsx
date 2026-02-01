@@ -2,19 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import { db, storage } from '../../firebase';
 import { doc, updateDoc, arrayRemove, arrayUnion, serverTimestamp } from 'firebase/firestore'; 
 import { ref, deleteObject, uploadBytes, getDownloadURL } from 'firebase/storage'; 
-import { updateProblemResult, updateProblemInfo, deleteProblem } from '../../utils/db';
+import { updateProblemResult, updateProblemMemo, updateProblemInfo, deleteProblem } from '../../utils/db';
 import { 
     ChevronLeft, ChevronRight, CheckCircle2, XCircle, 
     BookOpen, Maximize2, Trash2, X, ArrowLeft,
     Type, PenTool, Eraser, RotateCcw, StickyNote, Edit3, Save, ImageIcon,
     Check, Trophy, RefreshCcw, AlertTriangle, Pen, CheckCircle2 as OIcon,
-    RefreshCw, Plus, Link, Target, Calculator, Highlighter
+    RefreshCw, Plus, Link, Target, Calculator, Highlighter, Sparkles
 } from 'lucide-react';
 
 // 절대 경로 사용으로 빌드 에러 방지
 import { SUBJECT_LIST, PROBLEM_TYPES } from '/src/utils/constants';
 
-// 🔴 수정 1: Props에 onEditProblem이 포함되어 있는지 확인 (App.jsx와 연결)
 export default function ProblemSolver({ problems, startIndex = 0, onBack, onComplete, onEditProblem }) {
     // --- [1. 상태 관리: 학습 및 시스템] ---
     const [currentIndex, setCurrentIndex] = useState(startIndex);
@@ -43,15 +42,16 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const activePointerId = useRef(null);
     const textareaRef = useRef(null);
 
-    // --- [4. 🔴 데이터 통합 수화 로직 (유실 없이 보존)] ---
+    // --- [4. 데이터 통합 수화 로직 (Zero-Loss 보존)] ---
     useEffect(() => {
         const p = problems && problems[currentIndex];
         if (p) {
+            // 🔴 0을 포함한 수치 데이터 보존 및 root/gradingPoints 데이터 강제 병합
             const rootNumbers = Array.isArray(p.numbers) ? p.numbers : [];
             const dbNumbers = p.gradingPoints?.mandatory_numbers || [];
             const mergedNumbers = Array.from(new Set([...rootNumbers, ...dbNumbers]))
                 .map(n => String(n).trim())
-                .filter(n => n !== "" && n !== "null");
+                .filter(n => n !== "" && n !== "null" && n !== "undefined");
 
             const rootKeywords = Array.isArray(p.keywords) ? p.keywords : [];
             const dbTerms = p.gradingPoints?.mandatory_terms || [];
@@ -71,7 +71,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
             setLocalProblemImages(p.images || []);
             setLocalAnswerImages(p.answerImages || []);
-            setMemoText(p.memo || '');
+            setMemoText(p.memo || ''); // DB의 메모 로드
             setUserAnswer('');
             setShowAnswer(false);
             setShowMemo(false);
@@ -164,7 +164,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         if (activeCanvas) activeCanvas.getContext('2d').clearRect(0, 0, activeCanvas.width, activeCanvas.height);
     };
 
-    // --- [8. 🔴 정밀 채점 로직 (유실 없이 보존)] ---
+    // --- [6. 정밀 채점 로직 (유실 없이 보존)] ---
     const analyzeAnswer = () => {
         if (!currentProblem) return null;
         const terms = currentProblem.gradingPoints?.mandatory_terms || [];
@@ -202,11 +202,20 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         if (!res.manualGradingRequired) await updateProblemResult(currentProblem.id, res.percentage);
     };
 
-    // --- [9. 🔴 이미지 및 메모 관리 로직 (유실 없이 보존)] ---
+    // --- [7. 메모 및 이미지 관리 로직 (정교한 수리)] ---
     const handleSaveMemo = async () => {
-        await updateProblemInfo(currentProblem.id, { memo: memoText });
-        setCurrentProblem(prev => ({ ...prev, memo: memoText }));
-        alert("메모 저장 완료! 📝");
+        try {
+            // PSA 정비 매뉴얼을 기록하듯 DB에 안전하게 전송
+            await updateProblemMemo(currentProblem.id, memoText);
+            
+            // 로컬 상태 동기화 (즉시 반영)
+            setCurrentProblem(prev => ({ ...prev, memo: memoText }));
+            
+            alert("메모가 안전하게 저장되었습니다! 📝");
+        } catch (e) {
+            console.error("Memo Save Error:", e);
+            alert("메모 저장 중 오류가 발생했습니다.");
+        }
     };
 
     const handleDeleteImage = async (type, imageUrl) => {
@@ -247,7 +256,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
     return (
         <div className="relative flex flex-col h-full bg-slate-950 text-white overflow-hidden">
-            {/* 🔴 헤더: 수정 버튼의 동작을 onEditProblem으로 연결 (이미지 실종 해결 1단계) */}
+            {/* [Header] Apple Minimalism Style */}
             <div className="flex items-center justify-between p-4 bg-slate-900/80 backdrop-blur border-b border-slate-800 z-10 shrink-0">
                 <div className="flex items-center gap-4">
                     <button onClick={onBack} className="text-slate-400 hover:text-white flex items-center gap-2 text-sm font-bold transition-colors"><ArrowLeft size={18} /> 목록</button>
@@ -256,43 +265,56 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                     </button>
                 </div>
                 <div className="flex gap-1">
-                    <button onClick={() => setShowMemo(!showMemo)} className={`p-2.5 rounded-xl transition-all ${showMemo ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800'}`}><StickyNote size={20} /></button>
-                    
-                    {/* 🔴 수정 포인트: 내부 수정모드를 켜는 대신 상위 App의 스마트 업로드로 전달 */}
-                    <button 
-                        onClick={() => onEditProblem(currentProblem)} 
-                        className="p-2.5 rounded-xl text-slate-400 hover:bg-slate-800 transition-all hover:text-blue-400"
-                    >
-                        <Edit3 size={20} />
-                    </button>
-                    
-                    <button onClick={() => {if(window.confirm("삭제?")) { deleteProblem(currentProblem.id); onBack(); }}} className="p-2.5 rounded-xl text-red-400 hover:bg-red-500/20"><Trash2 size={20} /></button>
+                    <button onClick={() => setShowMemo(!showMemo)} className={`p-2.5 rounded-xl transition-all ${showMemo ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20' : 'text-slate-400 hover:bg-slate-800'}`}><StickyNote size={20} /></button>
+                    <button onClick={() => onEditProblem(currentProblem)} className="p-2.5 rounded-xl text-slate-400 hover:bg-slate-800 transition-all hover:text-blue-400"><Edit3 size={20} /></button>
+                    <button onClick={() => {if(window.confirm("삭제하시겠습니까?")) { deleteProblem(currentProblem.id); onBack(); }}} className="p-2.5 rounded-xl text-red-400 hover:bg-red-500/20"><Trash2 size={20} /></button>
                 </div>
             </div>
 
+            {/* [Study Memo Panel] Apple Glassmorphism Design */}
+            {showMemo && (
+                <div className="max-w-4xl mx-auto w-full px-4 md:px-8 mt-4 animate-in slide-in-from-top-4 duration-500 z-20">
+                    <div className="bg-amber-500/10 backdrop-blur-2xl border border-amber-500/30 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/5 blur-3xl rounded-full" />
+                        <div className="flex justify-between items-center mb-6 relative z-10">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-amber-500 rounded-2xl text-white shadow-xl shadow-amber-500/20">
+                                    <StickyNote size={22} />
+                                </div>
+                                <div>
+                                    <h4 className="text-lg font-black text-white tracking-tight">Study Memo</h4>
+                                    <p className="text-[10px] text-amber-500/60 font-bold uppercase tracking-widest">Personal Revision Note</p>
+                                </div>
+                            </div>
+                            <button onClick={handleSaveMemo} className="flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-400 text-white text-xs font-black rounded-full transition-all active:scale-95 shadow-lg shadow-amber-500/20">
+                                <Save size={16} /> SAVE CHANGES
+                            </button>
+                        </div>
+                        <textarea 
+                            value={memoText}
+                            onChange={(e) => setMemoText(e.target.value)}
+                            placeholder="이 문제의 핵심 암기법이나 주의사항을 정밀하게 기록하세요..."
+                            className="w-full h-40 bg-black/40 border border-white/10 rounded-2xl p-6 text-slate-100 text-base leading-relaxed outline-none focus:border-amber-500/50 transition-all resize-none placeholder:text-white/5 shadow-inner relative z-10"
+                        />
+                        <p className="mt-4 text-[10px] text-amber-500/50 font-medium tracking-tight flex items-center gap-2 ml-1 relative z-10">
+                            <Sparkles size={12} /> 저장된 메모는 워크북의 모든 학습 세션에서 실시간으로 동기화됩니다.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             <div className="problem-container flex-1 overflow-y-auto p-4 md:p-8 pb-40 scroll-smooth">
                 <div className="max-w-4xl mx-auto space-y-8">
-                    {/* [섹션 1] 문제 카드: 🔴 내부 수정 분기를 제거하여 이미지가 항상 보이도록 보장 (이미지 실종 해결 2단계) */}
+                    {/* [섹션 1] 문제 카드 */}
                     <div className="bg-slate-900/50 backdrop-blur-sm rounded-[2rem] p-8 border border-slate-800 shadow-2xl relative overflow-hidden group">
-                        <h1 className="text-2xl md:text-3xl font-black text-white mb-8 leading-tight tracking-tight break-keep">
-                            {currentProblem.title}
-                        </h1>
-                        
-                        {/* 🔴 핵심: 이미지가 항상 렌더링되도록 구조를 평면화했습니다. */}
+                        <h1 className="text-2xl md:text-3xl font-black text-white mb-8 leading-tight tracking-tight break-keep">{currentProblem.title}</h1>
                         {localProblemImages.length > 0 && (
-                            <ImageCarousel 
-                                images={localProblemImages} 
-                                onZoom={setZoomImage} 
-                                onDelete={() => {}} 
-                            />
+                            <ImageCarousel images={localProblemImages} onZoom={setZoomImage} onDelete={() => {}} />
                         )}
-                        
-                        <div className="prose prose-invert max-w-none text-slate-300 whitespace-pre-line leading-relaxed text-lg font-medium mt-6">
-                            {currentProblem.question}
-                        </div>
+                        <div className="prose prose-invert max-w-none text-slate-300 whitespace-pre-line leading-relaxed text-lg font-medium mt-6">{currentProblem.question}</div>
                     </div>
 
-                    {/* [섹션 2] 정답 입력창 (보존) */}
+                    {/* [섹션 2] 정답 입력창 */}
                     {!showAnswer && !isOverlayMode && (
                         <div className="bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border-2 border-slate-800 focus-within:border-blue-500 transition-all relative group">
                             <div className="bg-slate-100 px-6 py-3 border-b border-slate-200 flex items-center justify-between">
@@ -324,7 +346,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                         </div>
                     )}
 
-                    {/* [섹션 3] 채점 결과 및 모범 답안 리포트 (보존) */}
+                    {/* [섹션 3] 채점 결과 리포트 */}
                     {showAnswer && gradingResult && (
                         <div className="space-y-8 animate-in slide-in-from-bottom-10 duration-700 pb-32">
                             <div className="flex flex-col sm:flex-row items-center justify-between bg-slate-900/80 backdrop-blur-xl p-8 rounded-[2.5rem] border border-slate-800 shadow-2xl gap-8">
@@ -367,7 +389,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                                 ))}
                                             </div>
                                         )}
-                                        <div className="prose prose-invert max-w-none text-emerald-50/90 whitespace-pre-line leading-relaxed text-lg font-black tracking-tight select-text">
+                                        <div className="prose prose-invert max-w-none text-emerald-50/90 whitespace-pre-line leading-relaxed text-lg font-black tracking-tight select-text shadow-sm">
                                             {currentProblem.modelAnswer || "해설이 등록되지 않았습니다."}
                                         </div>
                                     </div>
@@ -377,14 +399,14 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                             <div className="p-6 bg-emerald-950/10 rounded-3xl border border-emerald-500/20 space-y-4 shadow-xl">
                                                 <h4 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2"><Target size={14} /> Mandatory Terms (40%)</h4>
                                                 <div className="flex flex-wrap gap-2.5">
-                                                    {gradingResult.matchedTerms.map(t => <span key={t} className="px-3.5 py-2 bg-emerald-500 text-white rounded-xl text-xs font-black shadow-lg">{t}</span>)}
+                                                    {gradingResult.matchedTerms.map(t => <span key={t} className="px-3.5 py-2 bg-emerald-500 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-950/30">{t}</span>)}
                                                     {gradingResult.missingTerms.map(t => <span key={t} className="px-3.5 py-2 bg-slate-900 text-slate-500 rounded-xl text-xs font-bold border border-slate-800 line-through opacity-50">{t}</span>)}
                                                 </div>
                                             </div>
                                             <div className="p-6 bg-blue-950/10 rounded-3xl border border-blue-500/20 space-y-4 shadow-xl">
                                                 <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest flex items-center gap-2"><Calculator size={14} /> Mandatory Numbers (60%)</h4>
                                                 <div className="flex flex-wrap gap-2.5">
-                                                    {gradingResult.matchedNumbers.map(n => <span key={n} className="px-3.5 py-2 bg-blue-600 text-white rounded-xl text-xs font-black shadow-lg">{n}</span>)}
+                                                    {gradingResult.matchedNumbers.map(n => <span key={n} className={`px-3.5 py-2 bg-blue-600 text-white rounded-xl text-xs font-black shadow-lg shadow-blue-950/30`}>{n}</span>)}
                                                     {gradingResult.missingNumbers.map(n => <span key={n} className="px-3.5 py-2 bg-slate-900 text-slate-500 rounded-xl text-xs font-bold border border-slate-800 line-through opacity-50">{n}</span>)}
                                                 </div>
                                             </div>
@@ -397,7 +419,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 </div>
             </div>
 
-            {/* Modals: Zoom (보존) */}
             {zoomImage && (
                 <div className="fixed inset-0 z-[200] bg-black/98 flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={() => setZoomImage(null)}>
                     <img src={zoomImage} alt="Zoomed" className="max-w-full max-h-[95vh] object-contain shadow-2xl animate-in zoom-in-95 duration-500" onClick={(e) => e.stopPropagation()} />
@@ -407,7 +428,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     );
 }
 
-// 보조 컴포넌트: ImageCarousel (유지)
+// [ImageCarousel] 보조 컴포넌트 정비
 function ImageCarousel({ images, onZoom, onDelete }) {
     const [index, setIndex] = useState(0);
     const next = () => setIndex((i) => (i + 1) % images.length);
@@ -416,12 +437,12 @@ function ImageCarousel({ images, onZoom, onDelete }) {
     return (
         <div className="relative w-full max-w-2xl mx-auto aspect-video bg-black/80 rounded-[2rem] overflow-hidden border-2 border-slate-800 group/carousel shadow-2xl select-none">
             <img src={images[index]} alt="Problem" className="w-full h-full object-contain cursor-zoom-in" onClick={() => onZoom(images[index])} />
-            <div className="absolute top-6 left-6 bg-black/60 backdrop-blur px-4 py-2 rounded-xl text-white text-[10px] font-black tracking-widest flex items-center gap-2 pointer-events-none border border-white/10 opacity-0 group-carousel:opacity-100 transition-opacity"><Maximize2 size={14} /> TAP TO ENLARGE</div>
+            <div className="absolute top-6 left-6 bg-black/60 backdrop-blur px-4 py-2 rounded-xl text-white text-[10px] font-black tracking-widest flex items-center gap-2 pointer-events-none border border-white/10 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity"><Maximize2 size={14} /> TAP TO ENLARGE</div>
             {images.length > 1 && (
                 <>
-                    <button onClick={(e) => { e.stopPropagation(); prev(); }} className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-emerald-500 text-white p-4 rounded-full transition-all opacity-0 group-carousel:opacity-100"><ChevronLeft size={32} /></button>
-                    <button onClick={(e) => { e.stopPropagation(); next(); }} className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-emerald-500 text-white p-4 rounded-full transition-all opacity-0 group-carousel:opacity-100"><ChevronRight size={32} /></button>
-                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-2xl px-6 py-2 rounded-full text-emerald-400 text-xs font-black border border-emerald-500/20">{index + 1} / {images.length}</div>
+                    <button onClick={(e) => { e.stopPropagation(); prev(); }} className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-emerald-500 text-white p-4 rounded-full transition-all opacity-0 group-hover:opacity-100 border border-white/5"><ChevronLeft size={32} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); next(); }} className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-emerald-500 text-white p-4 rounded-full transition-all opacity-0 group-hover:opacity-100 border border-white/5"><ChevronRight size={32} /></button>
+                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-2xl px-6 py-2 rounded-full text-emerald-400 text-xs font-black border border-emerald-500/20 shadow-2xl tracking-widest">{index + 1} / {images.length}</div>
                 </>
             )}
         </div>
