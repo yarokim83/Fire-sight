@@ -11,11 +11,9 @@ import {
     RefreshCw, Plus, Link, Target, Calculator, Highlighter, Sparkles
 } from 'lucide-react';
 
-// 절대 경로 사용으로 빌드 에러 방지
 import { SUBJECT_LIST, PROBLEM_TYPES } from '/src/utils/constants';
 
 export default function ProblemSolver({ problems, startIndex = 0, onBack, onComplete, onEditProblem }) {
-    // --- [1. 상태 관리: 학습 및 시스템] ---
     const [currentIndex, setCurrentIndex] = useState(startIndex);
     const [currentProblem, setCurrentProblem] = useState(null);
     const [showAnswer, setShowAnswer] = useState(false);
@@ -24,7 +22,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const [gradingResult, setGradingResult] = useState(null);
     const [isRetrying, setIsRetrying] = useState(false);
 
-    // --- [2. 상태 관리: 편집 및 부가기능] ---
     const [isEditMode, setIsEditMode] = useState(false);
     const [showMemo, setShowMemo] = useState(false);
     const [memoText, setMemoText] = useState('');
@@ -33,7 +30,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const [localProblemImages, setLocalProblemImages] = useState([]);
     const [localAnswerImages, setLocalAnswerImages] = useState([]);
 
-    // --- [3. 상태 관리: 드로잉 및 캔버스 엔진] ---
     const canvasRef = useRef(null);        
     const overlayCanvasRef = useRef(null); 
     const [isDrawing, setIsDrawing] = useState(false);
@@ -42,11 +38,9 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const activePointerId = useRef(null);
     const textareaRef = useRef(null);
 
-    // --- [4. 데이터 통합 수화 로직 (Zero-Loss 보존)] ---
     useEffect(() => {
         const p = problems && problems[currentIndex];
         if (p) {
-            // 🔴 0을 포함한 수치 데이터 보존 및 root/gradingPoints 데이터 강제 병합
             const rootNumbers = Array.isArray(p.numbers) ? p.numbers : [];
             const dbNumbers = p.gradingPoints?.mandatory_numbers || [];
             const mergedNumbers = Array.from(new Set([...rootNumbers, ...dbNumbers]))
@@ -71,7 +65,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
             setLocalProblemImages(p.images || []);
             setLocalAnswerImages(p.answerImages || []);
-            setMemoText(p.memo || ''); // DB의 메모 로드
+            setMemoText(p.memo || '');
             setUserAnswer('');
             setShowAnswer(false);
             setShowMemo(false);
@@ -85,64 +79,12 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         }
     }, [currentIndex, problems]);
 
-    // --- [5. 캔버스 및 포인터 이벤트 엔진 (유실 없이 보존)] ---
     useEffect(() => {
-        if (isOverlayMode) {
-            const style = document.createElement('style');
-            style.id = 'drawing-mode-lock';
-            style.innerHTML = `*{-webkit-touch-callout:none!important;-webkit-user-select:none!important;user-select:none!important;touch-action:none!important;}`;
-            document.head.appendChild(style);
-        } else {
-            const style = document.getElementById('drawing-mode-lock');
-            if (style) style.remove();
+        if (isRetrying && textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+            textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
         }
-    }, [isOverlayMode]);
-
-    useEffect(() => {
-        const activeCanvas = isOverlayMode ? overlayCanvasRef.current : (inputMode === 'draw' ? canvasRef.current : null);
-        if (!activeCanvas) return;
-        const preventAll = (e) => { if (e.cancelable) e.preventDefault(); e.stopPropagation(); };
-        const options = { passive: false };
-        const events = ['touchstart','touchmove','touchend','touchcancel','click','dblclick','selectstart','contextmenu'];
-        events.forEach(evt => activeCanvas.addEventListener(evt, preventAll, options));
-        return () => { events.forEach(evt => activeCanvas.removeEventListener(evt, preventAll, options)); };
-    }, [isOverlayMode, inputMode]);
-
-    useEffect(() => {
-        const updateCanvasSize = () => {
-            const activeCanvas = isOverlayMode ? overlayCanvasRef.current : (inputMode === 'draw' ? canvasRef.current : null);
-            if (activeCanvas) {
-                const parent = activeCanvas.parentElement;
-                if (activeCanvas.width !== parent.clientWidth || activeCanvas.height !== parent.clientHeight) {
-                    activeCanvas.width = isOverlayMode ? window.innerWidth : parent.clientWidth;
-                    activeCanvas.height = isOverlayMode ? window.innerHeight : parent.clientHeight;
-                    const ctx = activeCanvas.getContext('2d');
-                    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-                }
-            }
-        };
-        updateCanvasSize();
-        window.addEventListener('resize', updateCanvasSize);
-        return () => window.removeEventListener('resize', updateCanvasSize);
-    }, [inputMode, isOverlayMode]); 
-
-    useEffect(() => {
-        const activeCanvas = isOverlayMode ? overlayCanvasRef.current : canvasRef.current;
-        if (activeCanvas) {
-            const ctx = activeCanvas.getContext('2d');
-            ctx.strokeStyle = penColor;
-            if (penColor === '#fdfd96aa') { 
-                ctx.globalCompositeOperation = 'multiply'; 
-                ctx.lineWidth = 25; 
-            } else if (penColor === '#ffffff') {
-                ctx.globalCompositeOperation = 'destination-out';
-                ctx.lineWidth = 60;
-            } else {
-                ctx.globalCompositeOperation = 'source-over';
-                ctx.lineWidth = lineWidth;
-            }
-        }
-    }, [penColor, lineWidth, isOverlayMode, inputMode]);
+    }, [userAnswer, isRetrying]);
 
     const startDrawing = (e) => {
         e.preventDefault(); if (e.nativeEvent.pointerType !== 'pen' && e.nativeEvent.pointerType !== 'mouse') return;
@@ -164,7 +106,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         if (activeCanvas) activeCanvas.getContext('2d').clearRect(0, 0, activeCanvas.width, activeCanvas.height);
     };
 
-    // --- [6. 정밀 채점 로직 (유실 없이 보존)] ---
     const analyzeAnswer = () => {
         if (!currentProblem) return null;
         const terms = currentProblem.gradingPoints?.mandatory_terms || [];
@@ -202,20 +143,12 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         if (!res.manualGradingRequired) await updateProblemResult(currentProblem.id, res.percentage);
     };
 
-    // --- [7. 메모 및 이미지 관리 로직 (정교한 수리)] ---
     const handleSaveMemo = async () => {
         try {
-            // PSA 정비 매뉴얼을 기록하듯 DB에 안전하게 전송
             await updateProblemMemo(currentProblem.id, memoText);
-            
-            // 로컬 상태 동기화 (즉시 반영)
             setCurrentProblem(prev => ({ ...prev, memo: memoText }));
-            
-            alert("메모가 안전하게 저장되었습니다! 📝");
-        } catch (e) {
-            console.error("Memo Save Error:", e);
-            alert("메모 저장 중 오류가 발생했습니다.");
-        }
+            alert("메모 저장 완료! 📝");
+        } catch (e) { alert("메모 저장 실패"); }
     };
 
     const handleDeleteImage = async (type, imageUrl) => {
@@ -256,7 +189,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
     return (
         <div className="relative flex flex-col h-full bg-slate-950 text-white overflow-hidden">
-            {/* [Header] Apple Minimalism Style */}
             <div className="flex items-center justify-between p-4 bg-slate-900/80 backdrop-blur border-b border-slate-800 z-10 shrink-0">
                 <div className="flex items-center gap-4">
                     <button onClick={onBack} className="text-slate-400 hover:text-white flex items-center gap-2 text-sm font-bold transition-colors"><ArrowLeft size={18} /> 목록</button>
@@ -271,7 +203,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 </div>
             </div>
 
-            {/* [Study Memo Panel] Apple Glassmorphism Design */}
             {showMemo && (
                 <div className="max-w-4xl mx-auto w-full px-4 md:px-8 mt-4 animate-in slide-in-from-top-4 duration-500 z-20">
                     <div className="bg-amber-500/10 backdrop-blur-2xl border border-amber-500/30 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden">
@@ -296,16 +227,12 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                             placeholder="이 문제의 핵심 암기법이나 주의사항을 정밀하게 기록하세요..."
                             className="w-full h-40 bg-black/40 border border-white/10 rounded-2xl p-6 text-slate-100 text-base leading-relaxed outline-none focus:border-amber-500/50 transition-all resize-none placeholder:text-white/5 shadow-inner relative z-10"
                         />
-                        <p className="mt-4 text-[10px] text-amber-500/50 font-medium tracking-tight flex items-center gap-2 ml-1 relative z-10">
-                            <Sparkles size={12} /> 저장된 메모는 워크북의 모든 학습 세션에서 실시간으로 동기화됩니다.
-                        </p>
                     </div>
                 </div>
             )}
 
             <div className="problem-container flex-1 overflow-y-auto p-4 md:p-8 pb-40 scroll-smooth">
                 <div className="max-w-4xl mx-auto space-y-8">
-                    {/* [섹션 1] 문제 카드 */}
                     <div className="bg-slate-900/50 backdrop-blur-sm rounded-[2rem] p-8 border border-slate-800 shadow-2xl relative overflow-hidden group">
                         <h1 className="text-2xl md:text-3xl font-black text-white mb-8 leading-tight tracking-tight break-keep">{currentProblem.title}</h1>
                         {localProblemImages.length > 0 && (
@@ -314,7 +241,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                         <div className="prose prose-invert max-w-none text-slate-300 whitespace-pre-line leading-relaxed text-lg font-medium mt-6">{currentProblem.question}</div>
                     </div>
 
-                    {/* [섹션 2] 정답 입력창 */}
                     {!showAnswer && !isOverlayMode && (
                         <div className="bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border-2 border-slate-800 focus-within:border-blue-500 transition-all relative group">
                             <div className="bg-slate-100 px-6 py-3 border-b border-slate-200 flex items-center justify-between">
@@ -322,16 +248,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                     <button onClick={() => setInputMode('text')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${inputMode === 'text' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200'}`}><Type size={14} /> TEXT</button>
                                     <button onClick={() => setInputMode('draw')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${inputMode === 'draw' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200'}`}><PenTool size={14} /> DRAW</button>
                                 </div>
-                                {inputMode === 'draw' && (
-                                    <div className="flex items-center gap-3 animate-in slide-in-from-right-2">
-                                        {['#000000', '#ef4444', '#3b82f6'].map(color => (
-                                            <button key={color} onClick={() => {setPenColor(color); setLineWidth(2)}} className={`w-7 h-7 rounded-full border-2 transition-transform ${penColor === color && lineWidth === 2 ? 'border-blue-500 scale-125 shadow-lg' : 'border-white'}`} style={{ backgroundColor: color }} />
-                                        ))}
-                                        <button onClick={() => {setPenColor('#fdfd96aa'); setLineWidth(25)}} className={`w-7 h-7 rounded-full border-2 transition-transform ${penColor === '#fdfd96aa' ? 'border-blue-500 scale-125' : 'border-white'}`} style={{ backgroundColor: '#fdfd96' }} title="형광펜" />
-                                        <button onClick={() => {setPenColor('#ffffff'); setLineWidth(60)}} className={`p-1.5 rounded-lg ${penColor === '#ffffff' ? 'bg-blue-100 text-blue-600 shadow-inner' : 'text-slate-500'}`}><Eraser size={18} /></button>
-                                        <button onClick={clearCurrentCanvas} className="p-1.5 text-slate-500 hover:bg-slate-200 rounded-lg"><RotateCcw size={18} /></button>
-                                    </div>
-                                )}
                             </div>
                             <div className="relative w-full h-[450px] bg-white"> 
                                 {inputMode === 'text' ? (
@@ -346,9 +262,9 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                         </div>
                     )}
 
-                    {/* [섹션 3] 채점 결과 리포트 */}
                     {showAnswer && gradingResult && (
                         <div className="space-y-8 animate-in slide-in-from-bottom-10 duration-700 pb-32">
+                            {/* Grading Header */}
                             <div className="flex flex-col sm:flex-row items-center justify-between bg-slate-900/80 backdrop-blur-xl p-8 rounded-[2.5rem] border border-slate-800 shadow-2xl gap-8">
                                 <div className="flex items-center gap-6">
                                     <div className={`p-5 rounded-3xl ${gradingResult.percentage >= 70 ? 'bg-emerald-500/20 text-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.2)]' : 'bg-amber-500/20 text-amber-500'}`}>
@@ -365,13 +281,36 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                             </div>
 
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                {/* [🔴 핵심 수정] 나의 답안 분석 섹션 (수정/재채점 버튼 복구) */}
                                 <div className="bg-white rounded-[2.5rem] p-10 border border-slate-200 shadow-2xl h-full flex flex-col min-h-[500px]">
-                                    <h3 className="text-slate-900 font-black flex items-center gap-3 text-xl mb-8"><CheckCircle2 size={28} className="text-blue-600" /> 나의 답안 분석</h3>
-                                    <div className="flex-1 p-8 bg-slate-50 rounded-3xl border border-slate-100 shadow-inner">
+                                    <div className="flex justify-between items-center mb-8">
+                                        <h3 className="text-slate-900 font-black flex items-center gap-3 text-xl"><CheckCircle2 size={28} className="text-blue-600" /> 나의 답안 분석</h3>
+                                        {!isRetrying && inputMode === 'text' && (
+                                            <button 
+                                                onClick={() => setIsRetrying(true)}
+                                                className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-blue-50 text-blue-600 text-xs font-black rounded-xl transition-all"
+                                            >
+                                                <Edit3 size={14} /> 수정하기
+                                            </button>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="flex-1 p-8 bg-slate-50 rounded-3xl border border-slate-100 shadow-inner relative">
                                         {isRetrying ? (
                                             <div className="flex flex-col h-full gap-5">
-                                                <textarea ref={textareaRef} value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} className="w-full flex-1 bg-white p-6 rounded-2xl border-2 border-slate-200 outline-none resize-none text-slate-900 text-lg font-bold" autoFocus />
-                                                <button onClick={handleRetrySubmit} className="w-full py-5 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-2xl shadow-xl transition-all transform active:scale-95">재채점 실시</button>
+                                                <textarea 
+                                                    ref={textareaRef} 
+                                                    value={userAnswer} 
+                                                    onChange={(e) => setUserAnswer(e.target.value)} 
+                                                    className="w-full flex-1 bg-white p-6 rounded-2xl border-2 border-blue-500/30 outline-none resize-none text-slate-900 text-lg font-bold shadow-xl" 
+                                                    autoFocus 
+                                                />
+                                                <div className="flex gap-3">
+                                                    <button onClick={() => setIsRetrying(false)} className="flex-1 py-4 bg-slate-200 text-slate-600 font-black rounded-2xl transition-all active:scale-95">취소</button>
+                                                    <button onClick={handleRetrySubmit} className="flex-[2] py-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-2xl shadow-xl transition-all transform active:scale-95 flex items-center justify-center gap-2">
+                                                        <RefreshCw size={18} /> 재채점 실시
+                                                    </button>
+                                                </div>
                                             </div>
                                         ) : <HighlightedUserAnswer />}
                                     </div>
@@ -389,7 +328,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                                 ))}
                                             </div>
                                         )}
-                                        <div className="prose prose-invert max-w-none text-emerald-50/90 whitespace-pre-line leading-relaxed text-lg font-black tracking-tight select-text shadow-sm">
+                                        <div className="prose prose-invert max-w-none text-emerald-50/90 whitespace-pre-line leading-relaxed text-lg font-black tracking-tight select-text">
                                             {currentProblem.modelAnswer || "해설이 등록되지 않았습니다."}
                                         </div>
                                     </div>
@@ -428,7 +367,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     );
 }
 
-// [ImageCarousel] 보조 컴포넌트 정비
 function ImageCarousel({ images, onZoom, onDelete }) {
     const [index, setIndex] = useState(0);
     const next = () => setIndex((i) => (i + 1) % images.length);
