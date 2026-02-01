@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { 
   Flame, Droplets, Zap, Eye, EyeOff, 
   Wind, DoorOpen, Layers 
@@ -25,9 +25,9 @@ const THEME_CONFIG = {
   '공통': { bg: 'bg-slate-900', border: 'border-purple-500/30', activeTab: 'bg-purple-600 text-white shadow-purple-500/20', text: 'text-purple-400', icon: Layers }
 };
 
-const APP_VERSION = 'v2.8.1'; // 데이터 연동 패치 버전
+const APP_VERSION = 'v2.8.2'; // GIS 초기화 보강 패치 적용
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
+const SCOPES = 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets.readonly';
 
 function App() {
   // --- 상태 관리 ---
@@ -43,9 +43,9 @@ function App() {
   const [isExamMode, setIsExamMode] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
-  // 데이터 흐름 (수정 데이터 관리 핵심)
+  // 데이터 흐름 (수정 데이터 관리)
   const [activeStrategy, setActiveStrategy] = useState(null);
-  const [sharedData, setSharedData] = useState(null); // 수정할 문제 데이터 보관소
+  const [sharedData, setSharedData] = useState(null);
 
   // 인증 상태
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -60,6 +60,30 @@ function App() {
     const diff = targetDate - today;
     const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
     return days > 0 ? `D-${days}` : 'D-Day';
+  }, []);
+
+  // --- Functions: GIS 초기화 로직 보강 ---
+  const initGis = useCallback(() => {
+    if (!CLIENT_ID || !window.google?.accounts?.oauth2) {
+      console.warn("GIS 라이브러리가 아직 로드되지 않았습니다.");
+      return;
+    }
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID, 
+        scope: SCOPES,
+        callback: (resp) => {
+          if (resp.access_token) {
+              setAccessToken(resp.access_token);
+              setIsAuthenticated(true);
+              console.log("✅ 구글 인증 성공: 시스템 동기화 활성화");
+          }
+        },
+      });
+      setTokenClient(client);
+    } catch (err) { 
+      console.error("GIS Init Error", err); 
+    }
   }, []);
 
   // --- Effects ---
@@ -86,42 +110,28 @@ function App() {
     else setIsSidebarCollapsed(false);
   }, [isExamMode]);
 
-  // Google Auth 초기화
+  // Google GIS 초기화 실행 (지연 시간 부여하여 안정성 확보)
   useEffect(() => {
-    const initGis = () => {
-      if (!CLIENT_ID || !window.google?.accounts?.oauth2) return;
-      try {
-        const client = window.google.accounts.oauth2.initTokenClient({
-          client_id: CLIENT_ID, scope: SCOPES,
-          callback: (resp) => {
-            if (resp.access_token) {
-                setAccessToken(resp.access_token);
-                setIsAuthenticated(true);
-            }
-          },
-        });
-        setTokenClient(client);
-      } catch (err) { console.error("GIS Init Error", err); }
-    };
-    initGis();
-  }, []);
+    const timer = setTimeout(() => initGis(), 1000);
+    return () => clearTimeout(timer);
+  }, [initGis]);
 
   // --- Handlers ---
 
   const handlePinSubmit = (e) => {
     e.preventDefault();
-    if (pinInput === '2027') setIsUnlocked(true);
+    if (pinInput === '2027') setIsUnlocked(true); // 2027년 합격 목표 PIN
     else {
       alert("암호가 일치하지 않습니다.");
       setPinInput('');
     }
   };
 
-  // 🔴 [핵심] 수정 모드 트리거: Workbook에서 수정 버튼 클릭 시 호출됨
+  // 🔴 수정 모드 트리거: Workbook에서 수정 버튼 클릭 시 호출됨
   const handleEditProblem = (problem) => {
-    setSharedData(problem); // 수정할 데이터를 sharedData에 주입
-    setMode('smart-upload'); // 전문 에디터(SmartUpload) 모드로 전환
-    setIsExamMode(false);    // 수정 시에는 집중 모드 자동 해제
+    setSharedData(problem); 
+    setMode('smart-upload');
+    setIsExamMode(false);   
   };
 
   const handleDataToss = (data) => {
@@ -130,16 +140,22 @@ function App() {
   };
 
   const handleLogin = () => {
-    if (tokenClient) tokenClient.requestAccessToken({ prompt: 'consent' });
+    if (tokenClient) {
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+    } else {
+      initGis(); // 객체 유실 시 재초기화 시도
+      alert("인증 시스템을 재가동 중입니다. 잠시 후 다시 시도해주세요.");
+    }
   };
 
   const handleLogout = () => {
     setAccessToken(null);
     setIsAuthenticated(false);
+    localStorage.removeItem('google_access_token');
     window.location.reload();
   };
 
-  // --- Render ---
+  // --- Render Logic ---
 
   if (!isUnlocked) {
       return (
@@ -150,11 +166,18 @@ function App() {
                         <Flame size={48} className="text-white fill-white" />
                     </div>
                 </div>
-                <h2 className="text-2xl font-bold text-center mb-2">Fire-Sight Access</h2>
+                <h2 className="text-2xl font-bold text-center mb-2 tracking-tight">Fire-Sight Access</h2>
                 <p className="text-slate-400 text-center text-sm mb-8">보안을 위해 접속 암호를 입력해주세요.</p>
                 <form onSubmit={handlePinSubmit} className="space-y-4">
-                    <input type="password" value={pinInput} onChange={e=>setPinInput(e.target.value)} className="w-full text-center text-3xl tracking-[1em] font-bold bg-slate-800 border border-slate-700 rounded-xl py-4 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none" placeholder="PIN" autoFocus />
-                    <button type="submit" className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-500/20 active:scale-95">Unlock System</button>
+                    <input 
+                      type="password" 
+                      ref={pinInputRef}
+                      value={pinInput} 
+                      onChange={e=>setPinInput(e.target.value)} 
+                      className="w-full text-center text-3xl tracking-[1em] font-bold bg-slate-800 border border-slate-700 rounded-xl py-4 focus:ring-2 focus:ring-orange-500 outline-none transition-all" 
+                      placeholder="PIN" 
+                    />
+                    <button type="submit" className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl transition-all shadow-lg active:scale-95 uppercase tracking-widest">Unlock System</button>
                 </form>
             </div>
         </div>
@@ -168,10 +191,10 @@ function App() {
       case 'smart-upload': 
         return (
           <SmartUpload 
-            initialData={sharedData} // 🔴 공유된 수정 데이터 전달
+            initialData={sharedData} 
             onSaveComplete={() => {
-              setSharedData(null); // 저장 완료 시 데이터 비우기
-              setMode('workbook');  // 다시 문제 풀던 워크북으로 복귀
+              setSharedData(null); 
+              setMode('workbook');  
             }} 
             defaultCategory={subject} 
           />
@@ -183,7 +206,7 @@ function App() {
             isExamMode={isExamMode} 
             subject={subject} 
             initialFilter={activeStrategy} 
-            onEditProblem={handleEditProblem} // 🔴 수정 핸들러 주입
+            onEditProblem={handleEditProblem}
           />
         );
 
@@ -210,8 +233,8 @@ function App() {
         style={{ height: '100dvh' }} 
     >
       {!isOnline && (
-        <div className="bg-red-600 text-white text-center py-1 text-xs animate-pulse shrink-0">
-          오프라인 모드: 로컬에 저장된 데이터만 열람 가능합니다.
+        <div className="bg-red-600 text-white text-center py-1 text-[10px] font-black tracking-widest animate-pulse shrink-0 uppercase">
+          Offline Mode: Accessing Local Cache Only
         </div>
       )}
 
@@ -221,9 +244,9 @@ function App() {
             <div className="p-1.5 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg shadow-lg">
               <Flame size={18} className="text-white fill-white" />
             </div>
-            <h1 className="text-lg font-bold tracking-tight text-white">
-              Fire-Sight <span className="font-light text-slate-400">Lite</span>
-              <span className="ml-2 text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 border border-slate-700 hidden md:inline">{APP_VERSION}</span>
+            <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+              Fire-Sight <span className="font-light text-slate-400">Pro</span>
+              <span className="text-[9px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 border border-white/5 uppercase font-black">{APP_VERSION}</span>
             </h1>
           </div>
 
@@ -231,7 +254,7 @@ function App() {
 
           <div className="flex items-center gap-3">
             <div className="hidden lg:flex flex-col items-end group relative cursor-help mr-2">
-              <div className="text-xs font-mono text-slate-500">Target: {dDay}</div>
+              <div className="text-[10px] font-mono text-slate-500 font-bold uppercase tracking-tighter">Target: {dDay}</div>
             </div>
             <button
               onClick={() => setIsExamMode(!isExamMode)}
@@ -239,22 +262,33 @@ function App() {
                 ${isExamMode ? 'bg-red-500/10 text-red-500 border-red-500/50 animate-pulse' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}`}
             >
               {isExamMode ? <EyeOff size={14} /> : <Eye size={14} />}
-              <span className="hidden sm:inline">{isExamMode ? '집중 모드' : '학습 모드'}</span>
+              <span className="hidden sm:inline uppercase">{isExamMode ? 'Exam Mode' : 'Study Mode'}</span>
             </button>
-            <div className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-700'}`} title={isAuthenticated ? "Connected" : "Disconnected"}></div>
-            <button onClick={handleLogout} className="text-[10px] px-2 py-1 bg-red-600 hover:bg-red-500 text-white border border-red-400 rounded transition-all z-50">LogOut</button>
+            <div className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-emerald-500 shadow-[0_0_100px_#10b981]' : 'bg-slate-700'}`} title={isAuthenticated ? "Connected" : "Disconnected"}></div>
+            <button onClick={handleLogout} className="text-[9px] font-black px-2.5 py-1.5 bg-rose-600/10 text-rose-500 border border-rose-500/20 rounded-lg hover:bg-rose-600 hover:text-white transition-all z-50 uppercase tracking-widest">Exit</button>
           </div>
         </header>
       )}
 
       {isExamMode && (
-        <button onClick={() => setIsExamMode(false)} className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-full shadow-lg shadow-red-600/30 transition-all active:scale-95 animate-in slide-in-from-top-10 fade-in duration-300">
-          <EyeOff size={18} /> <span>Exit Exam Mode</span>
+        <button onClick={() => setIsExamMode(false)} className="fixed top-4 right-4 z-50 flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-full shadow-2xl shadow-rose-600/30 transition-all active:scale-95 animate-in slide-in-from-top-10 fade-in duration-300 uppercase text-xs tracking-widest">
+          <EyeOff size={16} /> <span>Exit Exam Mode</span>
         </button>
       )}
       
       <div className="flex-1 flex overflow-hidden">
-        {!isExamMode && <Sidebar currentMode={mode} setMode={setMode} subject={subject} isCollapsed={isSidebarCollapsed} setIsCollapsed={setIsSidebarCollapsed} isAuthenticated={isAuthenticated} handleLogout={handleLogout}/>}
+        {!isExamMode && (
+          <Sidebar 
+            currentMode={mode} 
+            setMode={setMode} 
+            subject={subject} 
+            setSubject={setSubject} 
+            isCollapsed={isSidebarCollapsed} 
+            setIsCollapsed={setIsSidebarCollapsed} 
+            isAuthenticated={isAuthenticated} 
+            handleLogout={handleLogout}
+          />
+        )}
         <main className={`flex-1 relative overflow-hidden ${theme.bg} transition-colors duration-500 ${isExamMode ? 'text-lg tracking-wide' : 'text-base'}`}>
           {renderContent()}
         </main>
