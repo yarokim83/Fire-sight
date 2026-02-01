@@ -178,7 +178,7 @@ export default function Dashboard({ setMode, dDay }) {
                             <div className="h-full bg-white transition-all duration-[2.5s] ease-out shadow-[0_0_15px_white]" style={{ width: `${stats.accuracy}%` }} />
                         </div>
                         <p className="text-[11px] text-white/30 font-medium tracking-tight">
-                            PSA 신항만 크레인 {stats.totalProblems}기 점검 수준 정밀 데이터 축적
+                            Total {stats.totalProblems} 문제 축적
                         </p>
                     </div>
                 </div>
@@ -273,7 +273,7 @@ export default function Dashboard({ setMode, dDay }) {
                 </div>
                 <div className="flex items-center gap-2 text-white/20 text-[11px] font-medium tracking-tight">
                     <Ship size={13} className="opacity-40" /> 
-                    <span>HMM PSA Shinhangman 38-Units PM Schedule Sync Active.</span>
+                    <span>YaroKim's Schedule Sync Active.</span>
                     <Box size={11} className="ml-1 opacity-20" />
                 </div>
             </footer>
