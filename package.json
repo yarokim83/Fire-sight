@@ -17,6 +17,7 @@
     "lucide-react": "^0.562.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-image-crop": "^11.0.10",
     "react-virtualized-auto-sizer": "^2.0.2",
     "react-window": "^2.2.4"
   },

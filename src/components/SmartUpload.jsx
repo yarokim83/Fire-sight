@@ -1,7 +1,10 @@
 import React from 'react';
 import { Camera, Wifi, WifiOff, Loader2, Save, Terminal, RotateCcw, ShieldCheck, Sparkles } from 'lucide-react';
 import { useSmartUpload } from '../hooks/useSmartUpload'; 
-import { UploadIntro, AnalysisLoading, ImageViewer, ProblemForm, DebugConsole } from './SmartUploadComponents'; 
+import { 
+    UploadIntro, AnalysisLoading, ImageViewer, ProblemForm, DebugConsole,
+    CropModal 
+} from './SmartUploadComponents'; 
 
 export default function SmartUpload({ onSaveComplete, initialData, defaultCategory = '수계' }) {
     const {
@@ -11,16 +14,33 @@ export default function SmartUpload({ onSaveComplete, initialData, defaultCatego
         isAnalyzing, isAnalyzingAnswer, debugLogs, showDebug, setShowDebug, setDebugLogs,
         inputFileRef, inputAddRef,
         handleInitialUpload, handleAddImages, handleRemoveImage, handleSave, resetState,
-        updateGradingPoint 
+        updateGradingPoint, updateSearchTag,
+        // 🔴 [데이터 유실 방지] 순차 진행 상태 및 큐 데이터 수신 배선
+        cropSrc, crop, setCrop, completedCrop, setCompletedCrop, 
+        isCropModalOpen, imgRef, onCropConfirm, onCropCancel,
+        currentCropTotal, currentCropIndex 
     } = useSmartUpload(initialData, onSaveComplete);
 
-    // 🔴 [데이터 유실 방지 핵심] 뷰어에 전달할 URL 리스트를 실시간으로 계산합니다.
-    // 수정 모드일 때 초기 데이터의 이미지가 이 배열에 담겨 있어야 ImageViewer에 나타납니다.
+    // 뷰어에 전달할 URL 리스트 (실시간 계산 및 유실 방지)
     const activeUrls = viewMode === 'problem' ? problemPreviewUrls : answerPreviewUrls;
 
     return (
         <div className="flex flex-col h-full bg-black text-white p-6 md:p-10 overflow-hidden w-full animate-in fade-in duration-1000">
             
+            {/* 🔴 [업데이트] 이미지 영역 지정 모달 (멀티 이미지 진행도 연동) */}
+            <CropModal 
+                isOpen={isCropModalOpen}
+                src={cropSrc}
+                crop={crop}
+                setCrop={setCrop}
+                setCompletedCrop={setCompletedCrop}
+                imgRef={imgRef}
+                onConfirm={onCropConfirm}
+                onCancel={onCropCancel}
+                totalCount={currentCropTotal}    // 🔴 전체 이미지 수 전달 (예: 3)
+                currentIndex={currentCropIndex}  // 🔴 현재 진행 번호 전달 (예: 1)
+            />
+
             {/* 1. Header: Apple Typography Style */}
             <div className="flex justify-between items-center mb-10 shrink-0">
                 <div className="space-y-1">
@@ -67,7 +87,7 @@ export default function SmartUpload({ onSaveComplete, initialData, defaultCatego
                 {/* 배경 은은한 광채 효과 */}
                 <div className="absolute top-0 left-1/4 w-1/2 h-1/2 bg-white/[0.01] rounded-full blur-[120px] pointer-events-none" />
 
-                {/* Step 1: 시작 화면 (공간 중심형) */}
+                {/* Step 1: 시작 화면 */}
                 {step === 1 && (
                     <div className="flex-1 overflow-y-auto scrollbar-hide py-12 px-8">
                         <UploadIntro 
@@ -78,20 +98,33 @@ export default function SmartUpload({ onSaveComplete, initialData, defaultCatego
                     </div>
                 )}
 
-                {/* Step 2: 분석 중 화면 */}
+                {/* Step 2: 분석 중 화면 (문제 지문 초기 분석) */}
                 {step === 2 && !isManualMode && (
                     <div className="flex-1 flex items-center justify-center">
                         <AnalysisLoading previewUrl={problemPreviewUrls[0]} />
                     </div>
                 )}
 
-                {/* Step 3: 편집 화면 (Flex-Row 기반 고성능 워크스테이션 레이아웃) */}
+                {/* Step 3: 편집 화면 (고성능 워크스테이션 레이아웃) */}
                 {step === 3 && (
                     <div className="flex-1 flex flex-col h-full overflow-hidden animate-in slide-in-from-bottom-4 duration-1000">
                         <div className="flex flex-col lg:flex-row gap-12 p-8 md:p-12 flex-1 min-h-0 overflow-hidden">
                             
-                            {/* 왼쪽: 이미지 뷰어 (공간 확보형) */}
-                            <div className="lg:w-[450px] flex flex-col gap-6 shrink-0">
+                            {/* 왼쪽: 이미지 뷰어 및 추출 로딩 피드백 */}
+                            <div className="lg:w-[450px] flex flex-col gap-6 shrink-0 relative">
+                                
+                                {/* 🔴 [업데이트] 해설 추출 중 전용 오버레이: 멀티 이미지 병합 중임을 명시적으로 표시 */}
+                                {isAnalyzingAnswer && (
+                                    <div className="absolute inset-0 z-[60] bg-black/70 backdrop-blur-md rounded-[2.5rem] flex flex-col items-center justify-center animate-in fade-in">
+                                        <div className="relative mb-6">
+                                            <div className="w-16 h-16 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
+                                            <Sparkles className="absolute inset-0 m-auto text-blue-400 animate-pulse" size={24} />
+                                        </div>
+                                        <p className="text-blue-400 font-black tracking-[0.3em] text-[10px] uppercase">AI Extraction Active</p>
+                                        <p className="text-white/40 text-[9px] mt-2 font-mono italic">Syncing with NFPC Standards...</p>
+                                    </div>
+                                )}
+
                                 <ImageViewer 
                                     viewMode={viewMode} setViewMode={setViewMode}
                                     activeUrls={activeUrls} 
@@ -100,46 +133,47 @@ export default function SmartUpload({ onSaveComplete, initialData, defaultCatego
                                     problemCount={problemPreviewUrls.length} 
                                     answerCount={answerPreviewUrls.length}
                                     onRemove={handleRemoveImage} 
-                                    onAdd={handleAddImages} 
+                                    onAdd={handleAddImages} // 🔴 크롭 모달이 연결된 훅의 함수와 결속
                                     inputAddRef={inputAddRef}
                                 />
                             </div>
 
-                            {/* 오른쪽: 입력 폼 (스크롤 독립형) */}
+                            {/* 오른쪽: 입력 폼 (검색 태그 및 매트릭스 통합) */}
                             <div className="flex-1 flex flex-col min-w-0">
                                 <ProblemForm 
                                     formData={formData} 
                                     setFormData={setFormData}
                                     isAnalyzingAnswer={isAnalyzingAnswer}
                                     updateGradingPoint={updateGradingPoint} 
+                                    updateSearchTag={updateSearchTag}
                                 />
                             </div>
                         </div>
                         
                         {/* 3. 하단 액션바: Apple's Floating Footer Style */}
                         <footer className="p-8 border-t border-white/5 bg-white/[0.01] backdrop-blur-md flex justify-between items-center shrink-0">
-                            <div className="flex items-center gap-2 text-white/20 text-xs font-bold tracking-widest uppercase">
-                                <ShieldCheck size={14} /> System Verified for 2027 Success
+                            <div className="flex items-center gap-2 text-white/20 text-xs font-bold tracking-widest uppercase font-mono">
+                                <ShieldCheck size={14} className="text-emerald-500/50" /> System Verified for 2027 Success
                             </div>
                             <div className="flex gap-4">
                                 <button 
                                     onClick={() => resetState(false)} 
-                                    className="px-8 py-4 text-white/30 hover:text-white transition-all font-semibold text-sm"
+                                    className="px-8 py-4 text-white/30 hover:text-rose-400 transition-all font-bold text-xs uppercase tracking-widest"
                                 >
-                                    Cancel
+                                    Abort
                                 </button>
                                 <button 
                                     onClick={handleSave} 
                                     disabled={isSaving} 
                                     className={`
-                                        group relative px-10 py-4 rounded-[1.25rem] font-semibold text-sm shadow-2xl flex items-center gap-3 transition-all transform active:scale-95 overflow-hidden
+                                        group relative px-12 py-4 rounded-[1.25rem] font-black text-xs shadow-2xl flex items-center gap-3 transition-all transform active:scale-95 overflow-hidden uppercase tracking-[0.2em]
                                         ${isSaving 
                                             ? 'bg-white/5 text-white/20 cursor-not-allowed' 
-                                            : 'bg-white text-black hover:bg-white/90'}
+                                            : 'bg-white text-black hover:bg-white/90 shadow-[0_0_30px_rgba(255,255,255,0.1)]'}
                                     `}
                                 >
-                                    {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
-                                    <span>{isSaving ? '데이터 저장 중...' : (isOnline ? '통합 저장하기' : '로컬 백업 저장')}</span>
+                                    {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                                    <span>{isSaving ? 'Synchronizing...' : (isOnline ? 'Commit to Cloud' : 'Save Local')}</span>
                                 </button>
                             </div>
                         </footer>
