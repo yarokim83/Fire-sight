@@ -281,7 +281,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                             </div>
 
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                {/* [🔴 핵심 수정] 나의 답안 분석 섹션 (수정/재채점 버튼 복구) */}
                                 <div className="bg-white rounded-[2.5rem] p-10 border border-slate-200 shadow-2xl h-full flex flex-col min-h-[500px]">
                                     <div className="flex justify-between items-center mb-8">
                                         <h3 className="text-slate-900 font-black flex items-center gap-3 text-xl"><CheckCircle2 size={28} className="text-blue-600" /> 나의 답안 분석</h3>
@@ -358,9 +357,28 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 </div>
             </div>
 
+            {/* 🔴 [핵심 수리 완료] 이미지 확대 모달 영역: 클릭 시 닫힘 방어 코드 해제 및 UI 보강 */}
             {zoomImage && (
-                <div className="fixed inset-0 z-[200] bg-black/98 flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={() => setZoomImage(null)}>
-                    <img src={zoomImage} alt="Zoomed" className="max-w-full max-h-[95vh] object-contain shadow-2xl animate-in zoom-in-95 duration-500" onClick={(e) => e.stopPropagation()} />
+                <div 
+                    className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300 cursor-zoom-out" 
+                    onClick={() => setZoomImage(null)}
+                >
+                    <button 
+                        className="absolute top-6 right-6 md:top-10 md:right-10 text-white/60 hover:text-white bg-black/50 hover:bg-red-500/80 p-3 rounded-full transition-all z-50 shadow-2xl"
+                        onClick={() => setZoomImage(null)}
+                    >
+                        <X size={28} />
+                    </button>
+                    
+                    <img 
+                        src={zoomImage} 
+                        alt="Zoomed" 
+                        className="max-w-full max-h-[95vh] object-contain shadow-2xl rounded-2xl animate-in zoom-in-95 duration-300" 
+                        onClick={(e) => {
+                            e.stopPropagation(); 
+                            setZoomImage(null); 
+                        }} 
+                    />
                 </div>
             )}
         </div>
