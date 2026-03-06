@@ -143,11 +143,11 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         }
     };
 
-    // --- [6. AI 지문 추출 엔진 (검수 완료: Step 2 강제)] ---
+    // --- [6. AI 지문 추출 엔진 (다중 페이지 일괄 병합 지원)] ---
     const processInitialUpload = async (files) => {
         if (!files || files.length === 0) return;
         
-        setStep(2); // 🔴 로딩 화면 즉시 전환 확인
+        setStep(2); // 로딩 화면 즉시 전환
         setIsAnalyzing(true);
         setProblemPreviewUrls(files.map(f => URL.createObjectURL(f)));
         setProblemFiles(files); 
@@ -155,30 +155,53 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
 
         if (isManualMode) { setStep(3); setIsAnalyzing(false); return; }
 
-        try {
-            addLog(`🔍 AI 지문 정밀 분석 시작...`);
-            const res = await analyzeImage(files[0], formData.type, 'problem');
-            if (isMounted.current && res) {
-                const extractedNumbers = res.grading_points?.mandatory_numbers || res.numbers || [];
-                const extractedTerms = res.grading_points?.mandatory_terms || [];
-                const extractedTags = res.searchTags || res.tags || [];
+        // 🔴 [해결 핵심] 해설처럼 지문도 여러 장의 결과를 담을 임시 바구니 생성
+        const batchResults = [];
 
-                setFormData(prev => ({ 
-                    ...prev, 
-                    title: res.title || prev.title, 
-                    description: res.content || prev.description,
-                    category: res.category || prev.category,
-                    searchTags: extractedTags, 
-                    keywords: extractedTerms.join(', '),
-                    gradingPoints: { 
-                        mandatory_terms: extractedTerms, 
-                        mandatory_numbers: extractedNumbers 
-                    }
-                }));
-                addLog(`✅ 지문 추출 및 필드 매핑 성공`);
+        try {
+            // 전달받은 모든 지문 이미지를 순회하며 분석 (루프 가동)
+            for (let i = 0; i < files.length; i++) {
+                addLog(`🔍 지문 페이지(${i + 1}/${files.length}) 정밀 분석 중...`);
+                const res = await analyzeImage(files[i], formData.type, 'problem');
+                if (res) batchResults.push(res);
             }
-        } catch (e) { addLog(`❌ 지문 분석 오류`); }
-        finally { if (isMounted.current) { setIsAnalyzing(false); setStep(3); } }
+
+            // 🏁 모든 분석이 끝난 후 단 한 번만 상태 업데이트 (병합)
+            if (isMounted.current && batchResults.length > 0) {
+                setFormData(prev => {
+                    // 기준이 될 첫 번째 페이지의 제목과 카테고리
+                    const baseTitle = batchResults[0].title || prev.title;
+                    const baseCategory = batchResults[0].category || prev.category;
+                    
+                    // 🔴 모든 페이지의 지문 내용(content)을 줄바꿈(\n\n)으로 연결
+                    const combinedDescription = batchResults.map(r => r.content || r.description || "").join("\n\n");
+                    
+                    // 태그 및 키워드, 수치 데이터 중복 제거 병합
+                    const combinedTags = [...new Set([...(prev.searchTags || []), ...batchResults.flatMap(r => r.searchTags || r.tags || [])])];
+                    const combinedTerms = [...new Set([...prev.gradingPoints.mandatory_terms, ...batchResults.flatMap(r => r.grading_points?.mandatory_terms || [])])];
+                    const combinedNumbers = [...new Set([...prev.gradingPoints.mandatory_numbers, ...batchResults.flatMap(r => r.grading_points?.mandatory_numbers || r.numbers || [])])];
+
+                    return { 
+                        ...prev, 
+                        title: baseTitle, 
+                        description: combinedDescription, 
+                        category: baseCategory,
+                        searchTags: combinedTags, 
+                        keywords: combinedTerms.join(', '),
+                        gradingPoints: { 
+                            mandatory_terms: combinedTerms, 
+                            mandatory_numbers: combinedNumbers 
+                        }
+                    };
+                });
+                addLog(`✅ 지문 ${files.length}매 추출 및 병합 성공`);
+            }
+        } catch (e) { 
+            addLog(`❌ 지문 분석 오류`); 
+            alert(`🚨 지문 분석 실패!\n\n${e.message}`);
+        } finally { 
+            if (isMounted.current) { setIsAnalyzing(false); setStep(3); } 
+        }
     };
 
     // --- [7. AI 해설 병합 엔진 (검수 완료: 일괄 처리)] ---
