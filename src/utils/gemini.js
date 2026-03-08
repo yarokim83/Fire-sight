@@ -30,7 +30,7 @@ async function fileToBase64(file) {
 /**
  * Gemini 이미지 분석 함수
  */
-export async function analyzeImage(file, type = 'workbook', mode = 'problem') {
+export async function analyzeImage(file, type = 'workbook', mode = 'problem', modelName = 'gemini-pro-vision') {
     try {
         if (!API_KEY) throw new Error("API Key가 없습니다.");
         const base64Data = await fileToBase64(file);
@@ -71,7 +71,7 @@ export async function analyzeImage(file, type = 'workbook', mode = 'problem') {
                 }`;
         }
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${API_KEY}`;
 
         const response = await fetch(url, {
             method: 'POST',

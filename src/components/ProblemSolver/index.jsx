@@ -23,6 +23,13 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const [isRetrying, setIsRetrying] = useState(false);
 
     const [isEditMode, setIsEditMode] = useState(false);
+    const [editedQuestion, setEditedQuestion] = useState('');
+    const [editedAnswer, setEditedAnswer] = useState('');
+    const [editedTerms, setEditedTerms] = useState([]);
+    const [editedNumbers, setEditedNumbers] = useState([]);
+    const [newTerm, setNewTerm] = useState('');
+    const [newNumber, setNewNumber] = useState('');
+
     const [showMemo, setShowMemo] = useState(false);
     const [memoText, setMemoText] = useState('');
     const [zoomImage, setZoomImage] = useState(null);
@@ -33,8 +40,11 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const canvasRef = useRef(null);        
     const overlayCanvasRef = useRef(null); 
     const [isDrawing, setIsDrawing] = useState(false);
-    const [penColor, setPenColor] = useState('#000000');
-    const [lineWidth, setLineWidth] = useState(2);
+    
+    const [penColor, setPenColor] = useState('#facc15'); 
+    const [lineWidth, setLineWidth] = useState(4);
+    const [isEraserMode, setIsEraserMode] = useState(false);
+
     const activePointerId = useRef(null);
     const textareaRef = useRef(null);
 
@@ -53,15 +63,23 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 .map(t => String(t).trim())
                 .filter(t => t !== "");
 
+            const formattedQuestion = p.content || p.question || '';
+            const formattedAnswer = p.answer || p.modelAnswer || '';
+
             setCurrentProblem({
                 ...p,
                 gradingPoints: {
                     mandatory_terms: mergedTerms,
                     mandatory_numbers: mergedNumbers
                 },
-                question: p.content || p.question || '',
-                modelAnswer: p.answer || p.modelAnswer || ''
+                question: formattedQuestion,
+                modelAnswer: formattedAnswer
             });
+
+            setEditedQuestion(formattedQuestion);
+            setEditedAnswer(formattedAnswer);
+            setEditedTerms(mergedTerms);
+            setEditedNumbers(mergedNumbers);
 
             setLocalProblemImages(p.images || []);
             setLocalAnswerImages(p.answerImages || []);
@@ -69,7 +87,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             setUserAnswer('');
             setShowAnswer(false);
             setShowMemo(false);
-            setIsEditMode(false);
+            setIsEditMode(false); 
             setIsOverlayMode(false);
             setGradingResult(null);
             setIsRetrying(false); 
@@ -80,24 +98,73 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     }, [currentIndex, problems]);
 
     useEffect(() => {
+        if (isOverlayMode && overlayCanvasRef.current) {
+            const canvas = overlayCanvasRef.current;
+            if (canvas.width !== window.innerWidth) canvas.width = window.innerWidth;
+            if (canvas.height !== window.innerHeight) canvas.height = window.innerHeight;
+        }
+    }, [isOverlayMode]);
+
+    useEffect(() => {
         if (isRetrying && textareaRef.current) {
             textareaRef.current.style.height = 'auto';
             textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
         }
     }, [userAnswer, isRetrying]);
 
+    const addTerm = () => {
+        if (newTerm.trim() && !editedTerms.includes(newTerm.trim())) {
+            setEditedTerms([...editedTerms, newTerm.trim()]);
+            setNewTerm('');
+        }
+    };
+
+    const addNumber = () => {
+        if (newNumber.trim() && !editedNumbers.includes(newNumber.trim())) {
+            setEditedNumbers([...editedNumbers, newNumber.trim()]);
+            setNewNumber('');
+        }
+    };
+
     const startDrawing = (e) => {
-        e.preventDefault(); if (e.nativeEvent.pointerType !== 'pen' && e.nativeEvent.pointerType !== 'mouse') return;
+        e.preventDefault(); 
+        if (e.nativeEvent.pointerType !== 'pen' && e.nativeEvent.pointerType !== 'mouse') return;
         activePointerId.current = e.pointerId;
-        const ctx = e.target.getContext('2d');
-        const rect = e.target.getBoundingClientRect();
-        ctx.beginPath(); ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+        
+        const activeCanvas = isOverlayMode ? overlayCanvasRef.current : canvasRef.current;
+        if (!activeCanvas) return;
+
+        const ctx = activeCanvas.getContext('2d');
+        const rect = activeCanvas.getBoundingClientRect();
+
+        if (!isOverlayMode) {
+            if (activeCanvas.width !== activeCanvas.offsetWidth) activeCanvas.width = activeCanvas.offsetWidth;
+            if (activeCanvas.height !== activeCanvas.offsetHeight) activeCanvas.height = activeCanvas.offsetHeight;
+        }
+
+        if (isEraserMode) {
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.lineWidth = lineWidth * 2;
+        } else {
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.strokeStyle = penColor;
+            ctx.lineWidth = lineWidth;
+        }
+
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        ctx.beginPath(); 
+        ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
         setIsDrawing(true);
     };
+    
     const draw = (e) => {
         e.preventDefault(); if (!isDrawing || e.pointerId !== activePointerId.current) return;
-        const ctx = e.target.getContext('2d');
-        const rect = e.target.getBoundingClientRect();
+        const activeCanvas = isOverlayMode ? overlayCanvasRef.current : canvasRef.current;
+        if (!activeCanvas) return;
+        const ctx = activeCanvas.getContext('2d');
+        const rect = activeCanvas.getBoundingClientRect();
         ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top); ctx.stroke();
     };
     const stopDrawing = (e) => { if (e.pointerId === activePointerId.current) { setIsDrawing(false); activePointerId.current = null; } };
@@ -151,6 +218,46 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         } catch (e) { alert("메모 저장 실패"); }
     };
 
+    const handleQuickUpdate = async () => {
+        try {
+            const finalTerms = editedTerms.map(t => String(t).trim()).filter(t => t !== "");
+            const finalNumbers = editedNumbers.map(n => String(n).trim()).filter(n => n !== "");
+
+            await updateProblemInfo(currentProblem.id, {
+                content: editedQuestion,
+                answer: editedAnswer,
+                keywords: finalTerms,
+                numbers: finalNumbers,
+                gradingPoints: {
+                    mandatory_terms: finalTerms,
+                    mandatory_numbers: finalNumbers
+                }
+            });
+
+            setCurrentProblem(prev => ({
+                ...prev,
+                question: editedQuestion,
+                modelAnswer: editedAnswer,
+                keywords: finalTerms,
+                numbers: finalNumbers,
+                gradingPoints: {
+                    mandatory_terms: finalTerms,
+                    mandatory_numbers: finalNumbers
+                }
+            }));
+            
+            setIsEditMode(false);
+            setGradingResult(null);
+            setShowAnswer(false);
+            setUserAnswer('');
+
+            alert("지문, 해설 및 채점 기준이 성공적으로 수정되었습니다! ✅\n변경된 기준으로 다시 풀어보세요.");
+        } catch (e) {
+            console.error(e);
+            alert("수정 저장 중 오류가 발생했습니다.");
+        }
+    };
+
     const handleDeleteImage = async (type, imageUrl) => {
         if (!window.confirm("삭제하시겠습니까?")) return;
         try {
@@ -198,7 +305,15 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 </div>
                 <div className="flex gap-1">
                     <button onClick={() => setShowMemo(!showMemo)} className={`p-2.5 rounded-xl transition-all ${showMemo ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20' : 'text-slate-400 hover:bg-slate-800'}`}><StickyNote size={20} /></button>
-                    <button onClick={() => onEditProblem(currentProblem)} className="p-2.5 rounded-xl text-slate-400 hover:bg-slate-800 transition-all hover:text-blue-400"><Edit3 size={20} /></button>
+                    
+                    <button 
+                        onClick={() => setIsEditMode(!isEditMode)} 
+                        className={`p-2.5 rounded-xl transition-all ${isEditMode ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-blue-400'}`}
+                        title="제자리 수정 모드"
+                    >
+                        <Edit3 size={20} />
+                    </button>
+                    
                     <button onClick={() => {if(window.confirm("삭제하시겠습니까?")) { deleteProblem(currentProblem.id); onBack(); }}} className="p-2.5 rounded-xl text-red-400 hover:bg-red-500/20"><Trash2 size={20} /></button>
                 </div>
             </div>
@@ -233,16 +348,126 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
             <div className="problem-container flex-1 overflow-y-auto p-4 md:p-8 pb-40 scroll-smooth">
                 <div className="max-w-4xl mx-auto space-y-8">
+                    
                     <div className="bg-slate-900/50 backdrop-blur-sm rounded-[2rem] p-8 border border-slate-800 shadow-2xl relative overflow-hidden group">
-                        <h1 className="text-2xl md:text-3xl font-black text-white mb-8 leading-tight tracking-tight break-keep">{currentProblem.title}</h1>
+                        <div className="flex justify-between items-start mb-8">
+                            <h1 className="text-2xl md:text-3xl font-black text-white leading-tight tracking-tight break-keep">{currentProblem.title}</h1>
+                            {isEditMode && (
+                                <button onClick={handleQuickUpdate} className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-black rounded-xl transition-all active:scale-95 shadow-lg shadow-blue-500/20">
+                                    <Save size={16} /> 전체 저장
+                                </button>
+                            )}
+                        </div>
+                        
                         {localProblemImages.length > 0 && (
-                            <ImageCarousel images={localProblemImages} onZoom={setZoomImage} onDelete={() => {}} />
+                            <ImageCarousel images={localProblemImages} onZoom={setZoomImage} onDelete={(url) => handleDeleteImage('problem', url)} isEditMode={isEditMode} />
                         )}
-                        <div className="prose prose-invert max-w-none text-slate-300 whitespace-pre-line leading-relaxed text-lg font-medium mt-6">{currentProblem.question}</div>
+
+                        <div className="mt-6">
+                            {isEditMode ? (
+                                <textarea 
+                                    value={editedQuestion}
+                                    onChange={(e) => setEditedQuestion(e.target.value)}
+                                    className="w-full min-h-[150px] bg-black/40 border-2 border-blue-500/50 rounded-2xl p-4 text-slate-200 text-lg font-medium outline-none focus:border-blue-400 transition-all resize-y"
+                                    placeholder="지문 내용을 수정하세요..."
+                                />
+                            ) : (
+                                <div className="prose prose-invert max-w-none text-slate-300 whitespace-pre-line leading-relaxed text-lg font-medium">{currentProblem.question}</div>
+                            )}
+                        </div>
                     </div>
 
-                    {!showAnswer && !isOverlayMode && (
-                        <div className="bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border-2 border-slate-800 focus-within:border-blue-500 transition-all relative group">
+                    {isEditMode && (
+                        <div className="bg-slate-900/80 rounded-[2.5rem] p-8 border border-slate-700 shadow-2xl space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                            <h3 className="text-xl font-black text-emerald-400 flex items-center gap-2 border-b border-slate-700 pb-4">
+                                <BookOpen size={24} /> 해설 및 채점 기준 수정
+                            </h3>
+                            
+                            {localAnswerImages.length > 0 && (
+                                <div className="mb-6">
+                                    <label className="text-sm font-bold text-slate-400 mb-3 block">Answer Images (해설 이미지)</label>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {localAnswerImages.map((url, idx) => (
+                                            <div key={idx} className="relative aspect-[4/3] rounded-2xl overflow-hidden border-2 border-emerald-500/20 bg-black/40 group/img">
+                                                <img src={url} alt="Answer" className="w-full h-full object-contain cursor-zoom-in" onClick={() => setZoomImage(url)} />
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteImage('answer', url); }}
+                                                    className="absolute top-3 right-3 bg-red-500/90 hover:bg-red-500 text-white p-2.5 rounded-xl shadow-xl transition-all"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="text-sm font-bold text-slate-400 mb-2 block">Model Answer (정답 해설)</label>
+                                <textarea 
+                                    value={editedAnswer}
+                                    onChange={(e) => setEditedAnswer(e.target.value)}
+                                    className="w-full min-h-[200px] bg-black/40 border-2 border-emerald-500/50 rounded-2xl p-4 text-emerald-50/90 text-lg font-black tracking-tight outline-none focus:border-emerald-400 transition-all resize-y shadow-inner"
+                                    placeholder="해설 내용을 수정하세요..."
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div className="bg-black/20 p-6 rounded-2xl border border-slate-800">
+                                    <label className="text-xs font-black text-emerald-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <Target size={14} /> Mandatory Terms
+                                    </label>
+                                    <div className="flex flex-wrap gap-2 mb-4">
+                                        {editedTerms.map((t, idx) => (
+                                            <span key={idx} className="px-3 py-1.5 bg-emerald-500 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-lg">
+                                                {t} 
+                                                <button onClick={() => setEditedTerms(prev => prev.filter((_, i) => i !== idx))} className="hover:text-red-200 bg-black/20 rounded-full p-0.5"><X size={12}/></button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <input 
+                                            type="text" 
+                                            value={newTerm}
+                                            onChange={(e) => setNewTerm(e.target.value)}
+                                            onKeyDown={(e) => { if(e.key === 'Enter') addTerm(); }}
+                                            placeholder="새 키워드 입력 후 Enter" 
+                                            className="flex-1 bg-black/40 border border-slate-700 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-emerald-500"
+                                        />
+                                        <button onClick={addTerm} className="px-4 py-2 bg-slate-800 hover:bg-emerald-600 text-white rounded-xl font-black transition-all">추가</button>
+                                    </div>
+                                </div>
+
+                                <div className="bg-black/20 p-6 rounded-2xl border border-slate-800">
+                                    <label className="text-xs font-black text-blue-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <Calculator size={14} /> Mandatory Numbers
+                                    </label>
+                                    <div className="flex flex-wrap gap-2 mb-4">
+                                        {editedNumbers.map((n, idx) => (
+                                            <span key={idx} className="px-3 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-lg">
+                                                {n} 
+                                                <button onClick={() => setEditedNumbers(prev => prev.filter((_, i) => i !== idx))} className="hover:text-red-200 bg-black/20 rounded-full p-0.5"><X size={12}/></button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <input 
+                                            type="text" 
+                                            value={newNumber}
+                                            onChange={(e) => setNewNumber(e.target.value)}
+                                            onKeyDown={(e) => { if(e.key === 'Enter') addNumber(); }}
+                                            placeholder="새 수치 입력 후 Enter" 
+                                            className="flex-1 bg-black/40 border border-slate-700 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-blue-500"
+                                        />
+                                        <button onClick={addNumber} className="px-4 py-2 bg-slate-800 hover:bg-blue-600 text-white rounded-xl font-black transition-all">추가</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {!isEditMode && !showAnswer && !isOverlayMode && (
+                        <div className="bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border-2 border-slate-800 focus-within:border-blue-500 transition-all relative group animate-in fade-in">
                             <div className="bg-slate-100 px-6 py-3 border-b border-slate-200 flex items-center justify-between">
                                 <div className="flex gap-3">
                                     <button onClick={() => setInputMode('text')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${inputMode === 'text' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200'}`}><Type size={14} /> TEXT</button>
@@ -262,9 +487,8 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                         </div>
                     )}
 
-                    {showAnswer && gradingResult && (
+                    {!isEditMode && showAnswer && gradingResult && (
                         <div className="space-y-8 animate-in slide-in-from-bottom-10 duration-700 pb-32">
-                            {/* Grading Header */}
                             <div className="flex flex-col sm:flex-row items-center justify-between bg-slate-900/80 backdrop-blur-xl p-8 rounded-[2.5rem] border border-slate-800 shadow-2xl gap-8">
                                 <div className="flex items-center gap-6">
                                     <div className={`p-5 rounded-3xl ${gradingResult.percentage >= 70 ? 'bg-emerald-500/20 text-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.2)]' : 'bg-amber-500/20 text-amber-500'}`}>
@@ -357,7 +581,62 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 </div>
             </div>
 
-            {/* 🔴 [핵심 수리 완료] 이미지 확대 모달 영역: 클릭 시 닫힘 방어 코드 해제 및 UI 보강 */}
+            {isOverlayMode && (
+                <div className="fixed inset-0 z-[100] pointer-events-none flex flex-col">
+                    <canvas 
+                        ref={overlayCanvasRef} 
+                        onPointerDown={startDrawing} 
+                        onPointerMove={draw} 
+                        onPointerUp={stopDrawing} 
+                        onPointerLeave={stopDrawing} 
+                        className="w-full h-full cursor-crosshair pointer-events-auto touch-none"
+                    />
+                    
+                    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md border border-slate-700 px-6 py-4 rounded-[2rem] flex gap-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] pointer-events-auto items-center animate-in slide-in-from-bottom-10">
+                        <div className="flex gap-3 border-r border-slate-700 pr-6">
+                            {['#ffffff', '#facc15', '#ef4444', '#3b82f6', '#10b981'].map(color => (
+                                <button 
+                                    key={color} 
+                                    onClick={() => {
+                                        setPenColor(color);
+                                        setIsEraserMode(false);
+                                    }}
+                                    className={`w-8 h-8 rounded-full border-2 transition-transform ${(!isEraserMode && penColor === color) ? 'border-amber-400 scale-125 shadow-lg' : 'border-slate-600 hover:scale-110'}`}
+                                    style={{ backgroundColor: color }}
+                                />
+                            ))}
+                        </div>
+                        
+                        <div className="flex gap-3 border-r border-slate-700 pr-6 items-center">
+                            {[2, 4, 8].map(weight => (
+                                <button 
+                                    key={weight}
+                                    onClick={() => setLineWidth(weight)}
+                                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${lineWidth === weight ? 'bg-slate-700' : 'hover:bg-slate-800'}`}
+                                >
+                                    <div className="bg-white rounded-full" style={{ width: weight * 2, height: weight * 2 }} />
+                                </button>
+                            ))}
+                        </div>
+                        
+                        <div className="flex gap-3">
+                            <button 
+                                onClick={() => setIsEraserMode(!isEraserMode)} 
+                                className={`px-4 py-3 rounded-xl transition-all flex items-center gap-2 text-sm font-black tracking-widest ${isEraserMode ? 'bg-amber-500 text-white shadow-lg' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'}`}
+                            >
+                                <Eraser size={18} /> 부분 지우개
+                            </button>
+                            <button onClick={clearCurrentCanvas} className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all flex items-center gap-2 text-sm font-black tracking-widest" title="전체 지우기">
+                                <RotateCcw size={18} /> 전체 삭제
+                            </button>
+                            <button onClick={() => setIsOverlayMode(false)} className="px-4 py-3 bg-red-500/80 hover:bg-red-500 text-white rounded-xl transition-all flex items-center gap-2 text-sm font-black tracking-widest shadow-lg">
+                                <X size={18} /> 닫기
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {zoomImage && (
                 <div 
                     className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300 cursor-zoom-out" 
@@ -385,15 +664,25 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     );
 }
 
-function ImageCarousel({ images, onZoom, onDelete }) {
+function ImageCarousel({ images, onZoom, onDelete, isEditMode }) {
     const [index, setIndex] = useState(0);
     const next = () => setIndex((i) => (i + 1) % images.length);
     const prev = () => setIndex((i) => (i - 1 + images.length) % images.length);
     if (!images || images.length === 0) return null;
     return (
-        <div className="relative w-full max-w-2xl mx-auto aspect-video bg-black/80 rounded-[2rem] overflow-hidden border-2 border-slate-800 group/carousel shadow-2xl select-none">
+        <div className="relative w-full max-w-2xl mx-auto aspect-video bg-black/80 rounded-[2rem] overflow-hidden border-2 border-slate-800 group/carousel shadow-2xl select-none mb-6">
             <img src={images[index]} alt="Problem" className="w-full h-full object-contain cursor-zoom-in" onClick={() => onZoom(images[index])} />
             <div className="absolute top-6 left-6 bg-black/60 backdrop-blur px-4 py-2 rounded-xl text-white text-[10px] font-black tracking-widest flex items-center gap-2 pointer-events-none border border-white/10 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity"><Maximize2 size={14} /> TAP TO ENLARGE</div>
+            
+            {isEditMode && (
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onDelete(images[index]); }}
+                    className="absolute top-6 right-6 bg-red-500/80 hover:bg-red-500 text-white p-3 rounded-xl shadow-xl z-50 transition-all"
+                >
+                    <Trash2 size={18} />
+                </button>
+            )}
+
             {images.length > 1 && (
                 <>
                     <button onClick={(e) => { e.stopPropagation(); prev(); }} className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-emerald-500 text-white p-4 rounded-full transition-all opacity-0 group-hover:opacity-100 border border-white/5"><ChevronLeft size={32} /></button>
