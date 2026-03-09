@@ -12,7 +12,7 @@
 
 /* iPad Touch & PWA Optimization */
 * {
-  -webkit-tap-highlight-color: transparent; /* 터치 시 생기는 회색 껌벅임 음영 완벽 제거 */
+  -webkit-tap-highlight-color: transparent;
   box-sizing: border-box;
 }
 
@@ -22,30 +22,35 @@ body {
   margin: 0;
   padding: 0;
   
-  /* 아이패드 네이티브 앱처럼 스크롤 바운스(고무줄 효과) 및 당겨서 새로고침 방지 */
   overflow: hidden;
   overscroll-behavior-y: none;
   -webkit-overflow-scrolling: touch;
   
-  /* 🔴 [핵심 추가] 애플 펜슬 사용 중 텍스트가 파랗게 드래그되는 현상 방지 */
+  /* 바탕화면, 사이드바 등 불필요한 UI 요소의 우발적 드래그 방지 */
   -webkit-user-select: none;
   user-select: none;
 }
 
-/* 🔴 [핵심 추가] 텍스트 입력창(textarea)과 일반 입력창은 글씨를 써야 하므로 선택/입력 허용 */
+/* 🔴 [기능 복구] 지문, 해설 등 본문 텍스트가 있는 영역은 자유롭게 드래그 및 복사 허용! */
+.prose, 
+.select-text {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  cursor: text;
+}
+
+/* 텍스트 입력창과 캔버스는 정상 작동하도록 허용 */
 input, 
 textarea {
   -webkit-user-select: auto;
   user-select: auto;
 }
 
-/* Touch Optimization */
 .touch-target {
   min-height: 44px;
   min-width: 44px;
 }
 
-/* 버튼, 링크 등 상호작용 요소의 터치 딜레이(더블 탭 확대 등) 제거 */
 button,
 a,
 input,
@@ -54,6 +59,5 @@ textarea {
   touch-action: manipulation;
 }
 
-/* (선택 사항) 아이패드 노치 및 하단 홈 바 안전 영역 확보 보조 클래스 */
 .safe-area-pt { padding-top: env(safe-area-inset-top); }
 .safe-area-pb { padding-bottom: env(safe-area-inset-bottom); }
