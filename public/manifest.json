@@ -1,22 +1,20 @@
 {
-    "name": "Fire-Sight Lite",
-    "short_name": "FireSight",
-    "start_url": ".",
-    "display": "standalone",
-    "background_color": "#1e293b",
-    "theme_color": "#0f172a",
-    "description": "Fire Safety Engineer Exam Prep App",
-    "orientation": "portrait-primary",
-    "icons": [
-        {
-            "src": "vite.svg",
-            "sizes": "192x192",
-            "type": "image/svg+xml"
-        },
-        {
-            "src": "vite.svg",
-            "sizes": "512x512",
-            "type": "image/svg+xml"
-        }
-    ]
+  "short_name": "FireSight",
+  "name": "Fire-Sight Pro",
+  "icons": [
+    {
+      "src": "fire-sight-icon.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "fire-sight-icon.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#1e293b",
+  "background_color": "#1e293b"
 }
