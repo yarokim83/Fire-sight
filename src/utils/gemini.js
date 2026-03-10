@@ -29,8 +29,9 @@ async function fileToBase64(file) {
 
 /**
  * Gemini 이미지 분석 함수
+ * 🔴 [개선] 인자로 넘어오는 modelName을 우선하되, 기본값을 최신 3.1 Pro Preview로 설정
  */
-export async function analyzeImage(file, type = 'workbook', mode = 'problem', modelName = 'gemini-pro-vision') {
+export async function analyzeImage(file, type = 'workbook', mode = 'problem', modelName = 'gemini-3.1-pro-preview') {
     try {
         if (!API_KEY) throw new Error("API Key가 없습니다.");
         const base64Data = await fileToBase64(file);
@@ -47,6 +48,7 @@ export async function analyzeImage(file, type = 'workbook', mode = 'problem', mo
 
         let promptText = "";
 
+        // 🔴 [핵심 개선] AI에게 결과물을 줄 때부터 UI 폼 변수명(description, modelAnswer)에 맞춰서 달라고 강제합니다.
         if (mode === 'problem') {
             promptText = `${smartInstruction}
                 이미지의 지문을 OCR 하고 검색용 'tags'를 5개 이내로 추출하세요. 
@@ -54,7 +56,7 @@ export async function analyzeImage(file, type = 'workbook', mode = 'problem', mo
                 결과 JSON: { 
                     "category": "정식명칭", 
                     "title": "20자 이내 요약", 
-                    "content": "가독성 있게 줄바꿈이 정제된 원문 전체", 
+                    "description": "가독성 있게 줄바꿈이 정제된 원문 전체", 
                     "tags": ["키워드1", "키워드2"] 
                 }`;
         } else if (mode === 'answer') {
@@ -62,8 +64,8 @@ export async function analyzeImage(file, type = 'workbook', mode = 'problem', mo
                 이미지의 해설을 OCR 하고, 채점 기준이 될 '필수 요소'를 분리하세요.
                 해설 문장이 물리적 폭 때문에 끊기지 않도록 문맥 위주로 통합하되, 단계별 설명은 줄바꿈을 유지하세요.
                 결과 JSON: { 
-                    "answer": "가독성 있게 줄바꿈이 정제된 해설 원문 전체", 
-                    "grading_points": {
+                    "modelAnswer": "가독성 있게 줄바꿈이 정제된 해설 원문 전체", 
+                    "gradingPoints": {
                         "mandatory_terms": ["필수용어1"], 
                         "mandatory_numbers": ["수치1"]
                     },
@@ -98,22 +100,30 @@ export async function analyzeImage(file, type = 'workbook', mode = 'problem', mo
 
         const data = await response.json();
         const textRes = data.candidates[0].content.parts[0].text;
-        const parsedData = JSON.parse(textRes.replace(/```json|```/g, '').trim());
         
-        // 🔴 데이터 보정 로직: searchTags/keywords/grading_points 유실 방지 (기존 로직 유지)
+        let parsedData = {};
+        try {
+            parsedData = JSON.parse(textRes.replace(/```json|```/g, '').trim());
+        } catch (e) {
+            console.error("JSON 파싱 오류:", textRes);
+            throw new Error("AI 응답을 JSON으로 변환할 수 없습니다.");
+        }
+        
         const extractedTags = parsedData.tags || [];
         const keywordsString = extractedTags.join(', ');
 
+        // 🔴 [최종 매핑] AI가 과거 프롬프트 습관대로 content나 answer를 뱉어도, 강제로 화면 변수명(description, modelAnswer)으로 연결
         return { 
             ...parsedData,
             type: type,
-            content: parsedData.content || parsedData.question || "", 
-            answer: parsedData.answer || parsedData.modelAnswer || "",
             category: parsedData.category || '소방시설 공통',
-            tags: extractedTags,             // Firestore 원본 저장용
-            searchTags: extractedTags,       // 🔴 UI의 searchTags 변수와 직결
-            keywords: keywordsString,       // 기존 UI 입력창 표시용 호환성 유지
-            grading_points: parsedData.grading_points || { mandatory_terms: [], mandatory_numbers: [] }
+            title: parsedData.title || '',
+            description: parsedData.description || parsedData.content || parsedData.question || "", 
+            modelAnswer: parsedData.modelAnswer || parsedData.answer || "",
+            tags: extractedTags,             
+            searchTags: extractedTags,       
+            keywords: keywordsString,       
+            gradingPoints: parsedData.gradingPoints || parsedData.grading_points || { mandatory_terms: [], mandatory_numbers: [] }
         };
 
     } catch (error) {

@@ -25,7 +25,7 @@ const THEME_CONFIG = {
   '공통': { bg: 'bg-slate-900', border: 'border-purple-500/30', activeTab: 'bg-purple-600 text-white shadow-purple-500/20', text: 'text-purple-400', icon: Layers }
 };
 
-const APP_VERSION = 'v2.9.8'; // 연습장모드 개선
+const APP_VERSION = 'v3.0.0'; // 스마트업로드 오류개선
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const SCOPES = 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets.readonly';
 

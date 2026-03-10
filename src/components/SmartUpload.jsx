@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Settings, Cpu, Terminal, BrainCircuit, X, Save, Sparkles, Loader2, RotateCcw } from 'lucide-react';
 import { useSmartUpload } from '../hooks/useSmartUpload';
@@ -22,27 +23,25 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
     } = useSmartUpload(initialData, onSaveComplete);
 
     const [showModelSettings, setShowModelSettings] = useState(false);
-    const [tempModelName, setTempModelName] = useState(aiModel);
+    const [tempModelName, setTempModelName] = useState(aiModel || '');
     
     const activeUrls = viewMode === 'problem' ? problemPreviewUrls : answerPreviewUrls;
 
     return (
-        <div className="flex flex-col h-full bg-slate-950 text-white overflow-hidden">
-            {/* --- [헤더 관제 센터] --- */}
-            <header className="flex items-center justify-between p-4 bg-slate-900/40 border-b border-slate-800/50 backdrop-blur-md z-50">
+        <div className="flex flex-col h-full bg-slate-950 text-white overflow-hidden relative"> {/* 🔴 relative 추가 */}
+            {/* 🟢 헤더 관제 센터 */}
+            <header className="flex items-center justify-between p-4 bg-slate-900/40 border-b border-slate-800/50 backdrop-blur-md z-50 shrink-0">
                 <div className="flex items-center gap-2">
                     <BrainCircuit className="text-blue-500" size={20} />
                     <h1 className="text-sm font-black tracking-tighter uppercase">Ingestion Control</h1>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    {/* 1. 현재 모델 상태 배지 */}
-                    <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 rounded-lg border border-slate-700/50 mr-2">
+                <div className="flex flex-wrap items-center gap-2 justify-end">
+                    <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 rounded-lg border border-slate-700/50">
                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                         <span className="text-[10px] font-mono text-slate-400">{aiModel}</span>
                     </div>
 
-                    {/* 2. 🔴 터미널 토글 버튼 (복구 완료) */}
                     <button
                         onClick={() => setShowDebug(!showDebug)}
                         className={`p-2 rounded-lg border transition-all ${
@@ -55,7 +54,6 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
                         <Terminal size={16} />
                     </button>
 
-                    {/* 3. 모델 설정 버튼 */}
                     <button
                         onClick={() => {
                             setTempModelName(aiModel);
@@ -110,20 +108,22 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
             {/* --- [터미널 로그 창] --- */}
             <DebugConsole logs={debugLogs} show={showDebug} onClose={() => setShowDebug(false)} />
 
+            {/* 🔴 [위치 이동] CropModal을 main 밖으로 빼내서 무조건 최상단에 뜨게 만듭니다! */}
+            <CropModal
+                isOpen={isCropModalOpen}
+                src={cropSrc}
+                crop={crop}
+                setCrop={setCrop}
+                setCompletedCrop={setCompletedCrop}
+                imgRef={imgRef}
+                onConfirm={onCropConfirm}
+                onCancel={onCropCancel}
+                totalCount={currentCropTotal}
+                currentIndex={currentCropIndex}
+            />
+
             {/* --- [기존 업로드 메인 영역] --- */}
             <main className="flex-1 w-full max-w-[1600px] mx-auto bg-white/[0.02] backdrop-blur-3xl rounded-[3rem] border border-white/10 shadow-[0_0_100px_rgba(0,0,0,0.5)] relative overflow-hidden flex flex-col min-h-0 mt-8">
-                <CropModal
-                    isOpen={isCropModalOpen}
-                    src={cropSrc}
-                    crop={crop}
-                    setCrop={setCrop}
-                    setCompletedCrop={setCompletedCrop}
-                    imgRef={imgRef}
-                    onConfirm={onCropConfirm}
-                    onCancel={onCropCancel}
-                    totalCount={currentCropTotal}
-                    currentIndex={currentCropIndex}
-                />
 
                 {step === 1 && (
                     <div className="flex-1 overflow-y-auto scrollbar-hide py-12 px-8">
@@ -135,9 +135,10 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
                     </div>
                 )}
 
+                {/* 🔴 [긴급 복구 완료] 단수형(previewUrl)과 배열의 첫 번째 요소([0]) 전달 및 안전장치 추가 */}
                 {step === 2 && !isManualMode && (
                     <div className="flex-1 flex items-center justify-center">
-                        <AnalysisLoading previewUrl={problemPreviewUrls[0]} />
+                        <AnalysisLoading previewUrl={problemPreviewUrls && problemPreviewUrls.length > 0 ? problemPreviewUrls[0] : null} />
                     </div>
                 )}
 
@@ -188,7 +189,7 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
                                     disabled={isSaving}
                                     className={`group relative px-12 py-4 rounded-[1.25rem] font-black text-xs shadow-2xl flex items-center gap-3 transition-all transform active:scale-95 overflow-hidden uppercase tracking-[0.2em] ${isSaving ? 'bg-white/5 text-white/20 cursor-not-allowed' : 'bg-white text-black hover:bg-white/90 shadow-[0_0_30px_rgba(255,255,255,0.1)]'}`}>
                                     {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                                    <span>{isSaving ? 'Synchronizing...' : (isOnline ? 'Commit to Cloud' : 'Save Local')}</span>
+                                    <span>{isSaving ? 'Synchronizing...' : 'Save Database'}</span>
                                 </button>
                             </div>
                         </footer>
