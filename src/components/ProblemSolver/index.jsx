@@ -582,7 +582,16 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                                     </button>
                                                 </div>
                                             </div>
-                                        ) : <HighlightedUserAnswer />}
+                                        ) : (
+                                            /* 🔴 추가된 부분: 데이터가 이미지면 <img>태그로, 텍스트면 기존 방식으로 렌더링! */
+                                            userAnswer?.startsWith('data:image') ? (
+                                                <div className="w-full h-full min-h-[300px] flex items-center justify-center bg-white rounded-2xl border-2 border-slate-200 p-2 shadow-sm">
+                                                    <img src={userAnswer} alt="나의 답안 이미지" className="max-w-full max-h-[400px] object-contain rounded-xl" />
+                                                </div>
+                                            ) : (
+                                                <HighlightedUserAnswer />
+                                            )
+                                        )}
                                     </div>
                                 </div>
 
