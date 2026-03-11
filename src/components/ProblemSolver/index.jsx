@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 
 import { SUBJECT_LIST, PROBLEM_TYPES } from '/src/utils/constants';
+import SharedCanvas from '../SharedCanvas';
 
 export default function ProblemSolver({ problems, startIndex = 0, onBack, onComplete, onEditProblem }) {
     const [currentIndex, setCurrentIndex] = useState(startIndex);
@@ -39,13 +40,11 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
     const canvasRef = useRef(null);        
     const overlayCanvasRef = useRef(null); 
-    const [isDrawing, setIsDrawing] = useState(false);
     
     const [penColor, setPenColor] = useState('#facc15'); 
     const [lineWidth, setLineWidth] = useState(4);
     const [isEraserMode, setIsEraserMode] = useState(false);
 
-    const activePointerId = useRef(null);
     const textareaRef = useRef(null);
 
     useEffect(() => {
@@ -55,13 +54,13 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             const dbNumbers = p.gradingPoints?.mandatory_numbers || [];
             const mergedNumbers = Array.from(new Set([...rootNumbers, ...dbNumbers]))
                 .map(n => String(n).trim())
-                .filter(n => n !== "" && n !== "null" && n !== "undefined");
+                .filter(n => n !== '' && n !== 'null' && n !== 'undefined');
 
             const rootKeywords = Array.isArray(p.keywords) ? p.keywords : [];
             const dbTerms = p.gradingPoints?.mandatory_terms || [];
             const mergedTerms = Array.from(new Set([...rootKeywords, ...dbTerms]))
                 .map(t => String(t).trim())
-                .filter(t => t !== "");
+                .filter(t => t !== '');
 
             const formattedQuestion = p.content || p.question || '';
             const formattedAnswer = p.answer || p.modelAnswer || '';
@@ -98,14 +97,6 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     }, [currentIndex, problems]);
 
     useEffect(() => {
-        if (isOverlayMode && overlayCanvasRef.current) {
-            const canvas = overlayCanvasRef.current;
-            if (canvas.width !== window.innerWidth) canvas.width = window.innerWidth;
-            if (canvas.height !== window.innerHeight) canvas.height = window.innerHeight;
-        }
-    }, [isOverlayMode]);
-
-    useEffect(() => {
         if (isRetrying && textareaRef.current) {
             textareaRef.current.style.height = 'auto';
             textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
@@ -126,62 +117,20 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         }
     };
 
-    const startDrawing = (e) => {
-        e.preventDefault(); 
-        if (e.nativeEvent.pointerType !== 'pen' && e.nativeEvent.pointerType !== 'mouse') return;
-        activePointerId.current = e.pointerId;
-        
-        const activeCanvas = isOverlayMode ? overlayCanvasRef.current : canvasRef.current;
-        if (!activeCanvas) return;
-
-        const ctx = activeCanvas.getContext('2d');
-        const rect = activeCanvas.getBoundingClientRect();
-
-        if (!isOverlayMode) {
-            if (activeCanvas.width !== activeCanvas.offsetWidth) activeCanvas.width = activeCanvas.offsetWidth;
-            if (activeCanvas.height !== activeCanvas.offsetHeight) activeCanvas.height = activeCanvas.offsetHeight;
-        }
-
-        if (isEraserMode) {
-            ctx.globalCompositeOperation = 'destination-out';
-            ctx.lineWidth = lineWidth * 2;
-        } else {
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.strokeStyle = penColor;
-            ctx.lineWidth = lineWidth;
-        }
-
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        ctx.beginPath(); 
-        ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-        setIsDrawing(true);
-    };
-    
-    const draw = (e) => {
-        e.preventDefault(); if (!isDrawing || e.pointerId !== activePointerId.current) return;
-        const activeCanvas = isOverlayMode ? overlayCanvasRef.current : canvasRef.current;
-        if (!activeCanvas) return;
-        const ctx = activeCanvas.getContext('2d');
-        const rect = activeCanvas.getBoundingClientRect();
-        ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top); ctx.stroke();
-    };
-    const stopDrawing = (e) => { if (e.pointerId === activePointerId.current) { setIsDrawing(false); activePointerId.current = null; } };
     const clearCurrentCanvas = () => {
-        const activeCanvas = isOverlayMode ? overlayCanvasRef.current : canvasRef.current;
-        if (activeCanvas) activeCanvas.getContext('2d').clearRect(0, 0, activeCanvas.width, activeCanvas.height);
+        if (isOverlayMode && overlayCanvasRef.current) overlayCanvasRef.current.clear();
+        else if (!isOverlayMode && canvasRef.current) canvasRef.current.clear();
     };
 
-    const analyzeAnswer = () => {
+    const analyzeAnswer = (answerText = userAnswer) => { // 매개변수 추가됨!
         if (!currentProblem) return null;
         const terms = currentProblem.gradingPoints?.mandatory_terms || [];
         const numbers = currentProblem.gradingPoints?.mandatory_numbers || [];
-        if (inputMode === 'draw' || !userAnswer.trim()) {
+        if (inputMode === 'draw' || !answerText.trim()) {
             return { percentage: 0, matchedTerms: [], matchedNumbers: [], missingTerms: terms, missingNumbers: numbers, manualGradingRequired: true };
         }
         const normalize = (text) => String(text).replace(/\s+/g, '').toLowerCase();
-        const normalizedInput = normalize(userAnswer);
+        const normalizedInput = normalize(answerText);
         const matchedTerms = terms.filter(t => normalizedInput.includes(normalize(t)));
         const matchedNumbers = numbers.filter(n => normalizedInput.includes(normalize(n)));
         let finalScore = 0;
@@ -197,9 +146,18 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     };
 
     const handleSubmit = async () => {
-        const res = analyzeAnswer();
-        setGradingResult(res); setShowAnswer(true);
-        if (inputMode === 'text' && userAnswer.trim() && !res.manualGradingRequired) {
+        let currentAnswer = userAnswer;
+        // 도화지에 그림을 그렸다면, 새 도화지에서 이미지를 뽑아옵니다!
+        if (inputMode === 'draw' && canvasRef.current) {
+            currentAnswer = canvasRef.current.getImageData('white');
+            setUserAnswer(currentAnswer);
+        }
+
+        const res = analyzeAnswer(currentAnswer);
+        setGradingResult(res); 
+        setShowAnswer(true);
+
+        if (inputMode === 'text' && currentAnswer.trim() && !res.manualGradingRequired) {
             await updateProblemResult(currentProblem.id, res.percentage);
         }
     };
@@ -214,14 +172,14 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         try {
             await updateProblemMemo(currentProblem.id, memoText);
             setCurrentProblem(prev => ({ ...prev, memo: memoText }));
-            alert("메모 저장 완료! 📝");
-        } catch (e) { alert("메모 저장 실패"); }
+            alert('메모 저장 완료! 📝');
+        } catch (e) { alert('메모 저장 실패'); }
     };
 
     const handleQuickUpdate = async () => {
         try {
-            const finalTerms = editedTerms.map(t => String(t).trim()).filter(t => t !== "");
-            const finalNumbers = editedNumbers.map(n => String(n).trim()).filter(n => n !== "");
+            const finalTerms = editedTerms.map(t => String(t).trim()).filter(t => t !== '');
+            const finalNumbers = editedNumbers.map(n => String(n).trim()).filter(n => n !== '');
 
             await updateProblemInfo(currentProblem.id, {
                 content: editedQuestion,
@@ -251,19 +209,97 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             setShowAnswer(false);
             setUserAnswer('');
 
-            alert("지문, 해설 및 채점 기준이 성공적으로 수정되었습니다! ✅\n변경된 기준으로 다시 풀어보세요.");
+            alert('지문, 해설 및 채점 기준이 성공적으로 수정되었습니다! ✅\n변경된 기준으로 다시 풀어보세요.');
         } catch (e) {
             console.error(e);
-            alert("수정 저장 중 오류가 발생했습니다.");
+            alert('수정 저장 중 오류가 발생했습니다.');
         }
     };
+    
+    const DrawingToolbar = ({ onClose }) => (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-[#1e293b]/90 backdrop-blur-xl border border-white/10 px-4 py-2.5 rounded-full flex items-center gap-2 md:gap-3 shadow-[0_10px_40px_rgba(0,0,0,0.5)] pointer-events-auto animate-in slide-in-from-bottom-5 z-[200]">
+            
+            {/* 1. 색상 팔레트 */}
+            <div className="flex items-center gap-1.5 md:gap-2">
+                {['#000000', '#ffffff', '#facc15', '#ef4444', '#3b82f6', '#10b981'].map(color => (
+                    <button 
+                        key={color} 
+                        onClick={() => { setPenColor(color); setIsEraserMode(false); }}
+                        title={`${color} 색상`}
+                        className={`w-6 h-6 rounded-full border-2 transition-all duration-200 ${
+                            (!isEraserMode && penColor === color) 
+                            ? 'border-blue-400 scale-125 shadow-[0_0_12px_rgba(59,130,246,0.6)]' 
+                            : 'border-white/20 hover:scale-110'
+                        }`}
+                        style={{ backgroundColor: color }}
+                    />
+                ))}
+            </div>
+            
+            <div className="w-px h-5 bg-slate-600/50 mx-1 md:mx-2"></div>
+            
+            {/* 2. 선 굵기 조절 */}
+            <div className="flex items-center gap-1">
+                {[2, 4, 8].map(weight => (
+                    <button 
+                        key={weight}
+                        onClick={() => { setLineWidth(weight); setIsEraserMode(false); }}
+                        title={`굵기 ${weight}`}
+                        className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+                            (!isEraserMode && lineWidth === weight) ? 'bg-slate-700/80 ring-1 ring-slate-500' : 'hover:bg-slate-800/50'
+                        }`}
+                    >
+                        <div className="bg-slate-300 rounded-full" style={{ width: weight * 1.5, height: weight * 1.5 }} />
+                    </button>
+                ))}
+            </div>
+            
+            <div className="w-px h-5 bg-slate-600/50 mx-1 md:mx-2"></div>
+            
+            {/* 3. 도구 액션 (텍스트 완전 제거, 아이콘만 남김!) */}
+            <div className="flex items-center gap-1">
+                <button 
+                    onClick={() => setIsEraserMode(!isEraserMode)} 
+                    title="부분 지우개"
+                    className={`p-2 rounded-full transition-all ${
+                        isEraserMode 
+                        ? 'bg-blue-600 text-white shadow-[0_0_10px_rgba(37,99,235,0.5)] scale-110' 
+                        : 'text-slate-400 hover:bg-slate-700 hover:text-white'
+                    }`}
+                >
+                    <Eraser size={18} strokeWidth={isEraserMode ? 2.5 : 2} />
+                </button>
+                <button 
+                    onClick={clearCurrentCanvas} 
+                    title="전체 삭제"
+                    className="p-2 rounded-full text-slate-400 hover:bg-red-500/20 hover:text-red-400 transition-all"
+                >
+                    <RotateCcw size={18} />
+                </button>
+                
+                {/* 오버레이(연습장) 모드일 때만 나오는 닫기 버튼 */}
+                {onClose && (
+                    <>
+                        <div className="w-px h-4 bg-slate-600/50 mx-1"></div>
+                        <button 
+                            onClick={onClose} 
+                            title="연습장 닫기"
+                            className="p-2 rounded-full text-slate-400 hover:bg-slate-700 hover:text-white transition-all"
+                        >
+                            <X size={18} />
+                        </button>
+                    </>
+                )}
+            </div>
+        </div>
+    );
 
     const handleDeleteImage = async (type, imageUrl) => {
-        if (!window.confirm("삭제하시겠습니까?")) return;
+        if (!window.confirm('삭제하시겠습니까?')) return;
         try {
             const fileRef = ref(storage, imageUrl);
             await deleteObject(fileRef);
-            const docRef = doc(db, "workbook", currentProblem.id);
+            const docRef = doc(db, 'workbook', currentProblem.id);
             if (type === 'problem') {
                 await updateDoc(docRef, { images: arrayRemove(imageUrl) });
                 setLocalProblemImages(prev => prev.filter(url => url !== imageUrl));
@@ -271,14 +307,14 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 await updateDoc(docRef, { answerImages: arrayRemove(imageUrl) });
                 setLocalAnswerImages(prev => prev.filter(url => url !== imageUrl));
             }
-        } catch (e) { alert("삭제 실패"); }
+        } catch (e) { alert('삭제 실패'); }
     };
 
     const HighlightedUserAnswer = () => {
         if (!gradingResult) return <p className="text-slate-700 whitespace-pre-wrap">{userAnswer}</p>;
         const allMatched = [...gradingResult.matchedTerms, ...gradingResult.matchedNumbers];
         if (allMatched.length === 0) return <p className="text-slate-700 whitespace-pre-wrap leading-relaxed text-lg">{userAnswer}</p>;
-        const pattern = new RegExp(`(${allMatched.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g');
+        const pattern = new RegExp(`(${allMatched.map(k => k.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')).join('|')})`, 'g');
         const parts = userAnswer.split(pattern);
         return (
             <p className="text-slate-700 whitespace-pre-wrap leading-relaxed text-lg font-medium">
@@ -300,7 +336,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 <div className="flex items-center gap-4">
                     <button onClick={onBack} className="text-slate-400 hover:text-white flex items-center gap-2 text-sm font-bold transition-colors"><ArrowLeft size={18} /> 목록</button>
                     <button onClick={() => setIsOverlayMode(!isOverlayMode)} className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-black border transition-all ${isOverlayMode ? 'bg-amber-500 border-amber-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
-                        <Pen size={14} /> {isOverlayMode ? "연습장 끄기" : "연습장 모드"}
+                        <Pen size={14} /> {isOverlayMode ? '연습장 끄기' : '연습장 모드'}
                     </button>
                 </div>
                 <div className="flex gap-1">
@@ -314,7 +350,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                         <Edit3 size={20} />
                     </button>
                     
-                    <button onClick={() => {if(window.confirm("삭제하시겠습니까?")) { deleteProblem(currentProblem.id); onBack(); }}} className="p-2.5 rounded-xl text-red-400 hover:bg-red-500/20"><Trash2 size={20} /></button>
+                    <button onClick={() => {if(window.confirm('삭제하시겠습니까?')) { deleteProblem(currentProblem.id); onBack(); }}} className="p-2.5 rounded-xl text-red-400 hover:bg-red-500/20"><Trash2 size={20} /></button>
                 </div>
             </div>
 
@@ -470,19 +506,30 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                         <div className="bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border-2 border-slate-800 focus-within:border-blue-500 transition-all relative group animate-in fade-in">
                             <div className="bg-slate-100 px-6 py-3 border-b border-slate-200 flex items-center justify-between">
                                 <div className="flex gap-3">
-                                    <button onClick={() => setInputMode('text')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${inputMode === 'text' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200'}`}><Type size={14} /> TEXT</button>
-                                    <button onClick={() => setInputMode('draw')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${inputMode === 'draw' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200'}`}><PenTool size={14} /> DRAW</button>
+                                    <button onClick={() => { setInputMode('text'); }} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${inputMode === 'text' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200'}`}><Type size={14} /> TEXT</button>
+                                    {/* 🔴 DRAW 버튼 클릭 시 기본 펜 색상을 검은색으로 설정 */}
+                                    <button onClick={() => { setInputMode('draw'); setPenColor('#000000'); }} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${inputMode === 'draw' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200'}`}><PenTool size={14} /> DRAW</button>
                                 </div>
                             </div>
-                            <div className="relative w-full h-[450px] bg-white"> 
+                            
+                            <div className="relative w-full h-[500px] bg-slate-50 overflow-hidden"> 
                                 {inputMode === 'text' ? (
-                                    <textarea value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} placeholder="답안을 서술하세요..." className="w-full h-full p-8 text-slate-900 text-xl font-bold leading-relaxed outline-none resize-none border-none placeholder:text-slate-300 shadow-inner" spellCheck="false" />
+                                    <textarea value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} placeholder="답안을 서술하세요..." className="w-full h-full p-8 text-slate-900 text-xl font-bold leading-relaxed outline-none resize-none border-none placeholder:text-slate-300 shadow-inner bg-transparent relative z-10" spellCheck="false" />
                                 ) : (
-                                    <canvas ref={canvasRef} onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={stopDrawing} onPointerLeave={stopDrawing} className="w-full h-full bg-slate-50 touch-none" />
+                                    <>
+                                        {/* 🔴 정답 입력창 캔버스 */}
+                                        <div className="absolute inset-0 z-10">
+                                            <SharedCanvas ref={canvasRef} penColor={penColor} lineWidth={lineWidth} isEraserMode={isEraserMode} />
+                                        </div>
+                                        
+                                        {/* 🔴 아까 만든 예쁜 캡슐 툴바를 여기에 쏙! 집어넣습니다! */}
+                                        <DrawingToolbar />
+                                    </>
                                 )}
-                            </div>
-                            <div className="absolute bottom-8 right-8 z-50">
-                                <button onClick={handleSubmit} className="flex items-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-10 py-4 rounded-[1.5rem] font-black shadow-2xl transition-all transform active:scale-95 group-hover:scale-105"><Check size={24} /> 제출하기</button>
+                                
+                                <div className="absolute bottom-8 right-8 z-[300]">
+                                    <button onClick={handleSubmit} className="flex items-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-10 py-4 rounded-[1.5rem] font-black shadow-2xl transition-all transform active:scale-95 pointer-events-auto"><Check size={24} /> {inputMode === 'draw' ? '정답 확인' : '제출하기'}</button>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -552,7 +599,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                             </div>
                                         )}
                                         <div className="prose prose-invert max-w-none text-emerald-50/90 whitespace-pre-line leading-relaxed text-lg font-black tracking-tight select-text">
-                                            {currentProblem.modelAnswer || "해설이 등록되지 않았습니다."}
+                                            {currentProblem.modelAnswer || '해설이 등록되지 않았습니다.'}
                                         </div>
                                     </div>
                                     
@@ -561,15 +608,15 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                             <div className="p-6 bg-emerald-950/10 rounded-3xl border border-emerald-500/20 space-y-4 shadow-xl">
                                                 <h4 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2"><Target size={14} /> Mandatory Terms (40%)</h4>
                                                 <div className="flex flex-wrap gap-2.5">
-                                                    {gradingResult.matchedTerms.map(t => <span key={t} className="px-3.5 py-2 bg-emerald-500 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-950/30">{t}</span>)}
-                                                    {gradingResult.missingTerms.map(t => <span key={t} className="px-3.5 py-2 bg-slate-900 text-slate-500 rounded-xl text-xs font-bold border border-slate-800 line-through opacity-50">{t}</span>)}
+                                                    {gradingResult.matchedTerms.map(t => <span key={t} className={`px-3.5 py-2 bg-emerald-500 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-950/30`}>{t}</span>)}
+                                                    {gradingResult.missingTerms.map(t => <span key={t} className={`px-3.5 py-2 bg-slate-900 text-slate-500 rounded-xl text-xs font-bold border border-slate-800 line-through opacity-50`}>{t}</span>)}
                                                 </div>
                                             </div>
                                             <div className="p-6 bg-blue-950/10 rounded-3xl border border-blue-500/20 space-y-4 shadow-xl">
                                                 <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest flex items-center gap-2"><Calculator size={14} /> Mandatory Numbers (60%)</h4>
                                                 <div className="flex flex-wrap gap-2.5">
                                                     {gradingResult.matchedNumbers.map(n => <span key={n} className={`px-3.5 py-2 bg-blue-600 text-white rounded-xl text-xs font-black shadow-lg shadow-blue-950/30`}>{n}</span>)}
-                                                    {gradingResult.missingNumbers.map(n => <span key={n} className="px-3.5 py-2 bg-slate-900 text-slate-500 rounded-xl text-xs font-bold border border-slate-800 line-through opacity-50">{n}</span>)}
+                                                    {gradingResult.missingNumbers.map(n => <span key={n} className={`px-3.5 py-2 bg-slate-900 text-slate-500 rounded-xl text-xs font-bold border border-slate-800 line-through opacity-50`}>{n}</span>)}
                                                 </div>
                                             </div>
                                         </div>
@@ -582,58 +629,17 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             </div>
 
             {isOverlayMode && (
-                <div className="fixed inset-0 z-[100] pointer-events-none flex flex-col">
-                    <canvas 
-                        ref={overlayCanvasRef} 
-                        onPointerDown={startDrawing} 
-                        onPointerMove={draw} 
-                        onPointerUp={stopDrawing} 
-                        onPointerLeave={stopDrawing} 
-                        className="w-full h-full cursor-crosshair pointer-events-auto touch-none"
-                    />
-                    
-                    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md border border-slate-700 px-6 py-4 rounded-[2rem] flex gap-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] pointer-events-auto items-center animate-in slide-in-from-bottom-10">
-                        <div className="flex gap-3 border-r border-slate-700 pr-6">
-                            {['#ffffff', '#facc15', '#ef4444', '#3b82f6', '#10b981'].map(color => (
-                                <button 
-                                    key={color} 
-                                    onClick={() => {
-                                        setPenColor(color);
-                                        setIsEraserMode(false);
-                                    }}
-                                    className={`w-8 h-8 rounded-full border-2 transition-transform ${(!isEraserMode && penColor === color) ? 'border-amber-400 scale-125 shadow-lg' : 'border-slate-600 hover:scale-110'}`}
-                                    style={{ backgroundColor: color }}
-                                />
-                            ))}
-                        </div>
-                        
-                        <div className="flex gap-3 border-r border-slate-700 pr-6 items-center">
-                            {[2, 4, 8].map(weight => (
-                                <button 
-                                    key={weight}
-                                    onClick={() => setLineWidth(weight)}
-                                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${lineWidth === weight ? 'bg-slate-700' : 'hover:bg-slate-800'}`}
-                                >
-                                    <div className="bg-white rounded-full" style={{ width: weight * 2, height: weight * 2 }} />
-                                </button>
-                            ))}
-                        </div>
-                        
-                        <div className="flex gap-3">
-                            <button 
-                                onClick={() => setIsEraserMode(!isEraserMode)} 
-                                className={`px-4 py-3 rounded-xl transition-all flex items-center gap-2 text-sm font-black tracking-widest ${isEraserMode ? 'bg-amber-500 text-white shadow-lg' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'}`}
-                            >
-                                <Eraser size={18} /> 부분 지우개
-                            </button>
-                            <button onClick={clearCurrentCanvas} className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all flex items-center gap-2 text-sm font-black tracking-widest" title="전체 지우기">
-                                <RotateCcw size={18} /> 전체 삭제
-                            </button>
-                            <button onClick={() => setIsOverlayMode(false)} className="px-4 py-3 bg-red-500/80 hover:bg-red-500 text-white rounded-xl transition-all flex items-center gap-2 text-sm font-black tracking-widest shadow-lg">
-                                <X size={18} /> 닫기
-                            </button>
-                        </div>
+                <div className="fixed inset-0 z-[100] pointer-events-auto bg-black/50 backdrop-blur-sm animate-in fade-in">
+                    <div className="absolute inset-0">
+                        <SharedCanvas 
+                            ref={overlayCanvasRef} 
+                            penColor={penColor}
+                            lineWidth={lineWidth}
+                            isEraserMode={isEraserMode}
+                            className="bg-transparent"
+                        />
                     </div>
+                    <DrawingToolbar onClose={() => setIsOverlayMode(false)} />
                 </div>
             )}
 
