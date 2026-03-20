@@ -8,11 +8,13 @@ import {
     BookOpen, Maximize2, Trash2, X, ArrowLeft,
     Type, PenTool, Eraser, RotateCcw, StickyNote, Edit3, Save, ImageIcon,
     Check, Trophy, RefreshCcw, AlertTriangle, Pen, CheckCircle2 as OIcon,
-    RefreshCw, Plus, Link, Target, Calculator, Highlighter, Sparkles
+    RefreshCw, Plus, Link, Target, Calculator, Highlighter, Sparkles, EyeOff
 } from 'lucide-react';
 
 import { SUBJECT_LIST, PROBLEM_TYPES } from '/src/utils/constants';
 import SharedCanvas from '../SharedCanvas';
+import DrawingToolbar from './DrawingToolbar';
+import ImageCarousel from './ImageCarousel';
 
 export default function ProblemSolver({ problems, startIndex = 0, onBack, onComplete, onEditProblem }) {
     const [currentIndex, setCurrentIndex] = useState(startIndex);
@@ -123,22 +125,43 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         else if (!isOverlayMode && canvasRef.current) canvasRef.current.clear();
     };
 
-    const analyzeAnswer = (answerText = userAnswer) => { // 매개변수 추가됨!
+    const analyzeAnswer = (answerText = userAnswer) => { 
         if (!currentProblem) return null;
         const terms = currentProblem.gradingPoints?.mandatory_terms || [];
         const numbers = currentProblem.gradingPoints?.mandatory_numbers || [];
         if (inputMode === 'draw' || !answerText.trim()) {
             return { percentage: 0, matchedTerms: [], matchedNumbers: [], missingTerms: terms, missingNumbers: numbers, manualGradingRequired: true };
         }
-        const normalize = (text) => String(text).replace(/\s+/g, '').toLowerCase();
-        const normalizedInput = normalize(answerText);
-        const matchedTerms = terms.filter(t => normalizedInput.includes(normalize(t)));
-        const matchedNumbers = numbers.filter(n => normalizedInput.includes(normalize(n)));
+        
+        // 1. 공백 및 개행을 단일 공백으로 단순화
+        const normalizedInput = answerText.replace(/\s+/g, ' ');
+
+        // [고도화된 Regex 검사기] 키워드의 각 글자 사이에 최대 3자의 임의 문자(조사, 오타 제한적 허용) 허용
+        const buildRegex = (term) => {
+            const chars = Array.from(String(term).replace(/\s+/g, ''));
+            const escapedChars = chars.map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+            return new RegExp(escapedChars.join('.{0,3}?'), 'i');
+        };
+
+        const matchedTerms = terms.filter(t => buildRegex(t).test(normalizedInput));
+        
+        // 숫자는 단위 혼동 방지를 위해 오직 공백만 무시하고 스캔
+        const normalizedInputForNumbers = answerText.replace(/\s+/g, '').toLowerCase();
+        const matchedNumbers = numbers.filter(n => normalizedInputForNumbers.includes(String(n).replace(/\s+/g, '').toLowerCase()));
+        
         let finalScore = 0;
         if (terms.length > 0 && numbers.length > 0) finalScore = (matchedTerms.length/terms.length * 40) + (matchedNumbers.length/numbers.length * 60);
         else if (terms.length > 0) finalScore = (matchedTerms.length/terms.length * 100);
         else if (numbers.length > 0) finalScore = (matchedNumbers.length/numbers.length * 100);
-        return { percentage: Math.round(finalScore), matchedTerms, matchedNumbers, missingTerms: terms.filter(t => !matchedTerms.includes(t)), missingNumbers: numbers.filter(n => !matchedNumbers.includes(n)), manualGradingRequired: (terms.length === 0 && numbers.length === 0) };
+        
+        return { 
+            percentage: Math.round(finalScore), 
+            matchedTerms, 
+            matchedNumbers, 
+            missingTerms: terms.filter(t => !matchedTerms.includes(t)), 
+            missingNumbers: numbers.filter(n => !matchedNumbers.includes(n)), 
+            manualGradingRequired: (terms.length === 0 && numbers.length === 0) 
+        };
     };
 
     const handleNext = () => {
@@ -217,89 +240,20 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         }
     };
     
-    const DrawingToolbar = ({ onClose }) => (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-[#1e293b]/90 backdrop-blur-xl border border-white/10 px-4 py-2.5 rounded-full flex items-center gap-2 md:gap-3 shadow-[0_10px_40px_rgba(0,0,0,0.5)] pointer-events-auto animate-in slide-in-from-bottom-5 z-[200]">
-            
-            {/* 1. 색상 팔레트 */}
-            <div className="flex items-center gap-1.5 md:gap-2">
-                {['#000000', '#ffffff', '#facc15', '#ef4444', '#3b82f6', '#10b981'].map(color => (
-                    <button 
-                        key={color} 
-                        onClick={() => { setPenColor(color); setIsEraserMode(false); }}
-                        title={`${color} 색상`}
-                        className={`w-6 h-6 rounded-full border-2 transition-all duration-200 ${
-                            (!isEraserMode && penColor === color) 
-                            ? 'border-blue-400 scale-125 shadow-[0_0_12px_rgba(59,130,246,0.6)]' 
-                            : 'border-white/20 hover:scale-110'
-                        }`}
-                        style={{ backgroundColor: color }}
-                    />
-                ))}
-            </div>
-            
-            <div className="w-px h-5 bg-slate-600/50 mx-1 md:mx-2"></div>
-            
-            {/* 2. 선 굵기 조절 */}
-            <div className="flex items-center gap-1">
-                {[2, 4, 8].map(weight => (
-                    <button 
-                        key={weight}
-                        onClick={() => { setLineWidth(weight); setIsEraserMode(false); }}
-                        title={`굵기 ${weight}`}
-                        className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
-                            (!isEraserMode && lineWidth === weight) ? 'bg-slate-700/80 ring-1 ring-slate-500' : 'hover:bg-slate-800/50'
-                        }`}
-                    >
-                        <div className="bg-slate-300 rounded-full" style={{ width: weight * 1.5, height: weight * 1.5 }} />
-                    </button>
-                ))}
-            </div>
-            
-            <div className="w-px h-5 bg-slate-600/50 mx-1 md:mx-2"></div>
-            
-            {/* 3. 도구 액션 (텍스트 완전 제거, 아이콘만 남김!) */}
-            <div className="flex items-center gap-1">
-                <button 
-                    onClick={() => setIsEraserMode(!isEraserMode)} 
-                    title="부분 지우개"
-                    className={`p-2 rounded-full transition-all ${
-                        isEraserMode 
-                        ? 'bg-blue-600 text-white shadow-[0_0_10px_rgba(37,99,235,0.5)] scale-110' 
-                        : 'text-slate-400 hover:bg-slate-700 hover:text-white'
-                    }`}
-                >
-                    <Eraser size={18} strokeWidth={isEraserMode ? 2.5 : 2} />
-                </button>
-                <button 
-                    onClick={clearCurrentCanvas} 
-                    title="전체 삭제"
-                    className="p-2 rounded-full text-slate-400 hover:bg-red-500/20 hover:text-red-400 transition-all"
-                >
-                    <RotateCcw size={18} />
-                </button>
-                
-                {/* 오버레이(연습장) 모드일 때만 나오는 닫기 버튼 */}
-                {onClose && (
-                    <>
-                        <div className="w-px h-4 bg-slate-600/50 mx-1"></div>
-                        <button 
-                            onClick={onClose} 
-                            title="연습장 닫기"
-                            className="p-2 rounded-full text-slate-400 hover:bg-slate-700 hover:text-white transition-all"
-                        >
-                            <X size={18} />
-                        </button>
-                    </>
-                )}
-            </div>
-        </div>
-    );
+
 
     const handleDeleteImage = async (type, imageUrl) => {
         if (!window.confirm('삭제하시겠습니까?')) return;
         try {
-            const fileRef = ref(storage, imageUrl);
-            await deleteObject(fileRef);
+            // [에러 핸들링] Storage 삭제 시도 (실패해도 DB 정리는 강제 진행)
+            try {
+                const fileRef = ref(storage, imageUrl);
+                await deleteObject(fileRef);
+            } catch (storageError) {
+                console.warn('스토리지에서 이미지를 찾을 수 없거나 이미 삭제되었습니다. DB 정리를 계속 진행합니다.', storageError);
+            }
+
+            // DB 레코드 삭제 (좀비 이미지 링크 제거)
             const docRef = doc(db, 'workbook', currentProblem.id);
             if (type === 'problem') {
                 await updateDoc(docRef, { images: arrayRemove(imageUrl) });
@@ -308,7 +262,10 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 await updateDoc(docRef, { answerImages: arrayRemove(imageUrl) });
                 setLocalAnswerImages(prev => prev.filter(url => url !== imageUrl));
             }
-        } catch (e) { alert('삭제 실패'); }
+        } catch (e) { 
+            alert('삭제 처리에 실패했습니다. 다시 시도해주세요.'); 
+            console.error(e); 
+        }
     };
 
    
@@ -344,19 +301,40 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
     const HighlightedUserAnswer = () => {
         if (!gradingResult) return <p className="text-slate-700 whitespace-pre-wrap">{userAnswer}</p>;
-        const allMatched = [...gradingResult.matchedTerms, ...gradingResult.matchedNumbers];
-        if (allMatched.length === 0) return <p className="text-slate-700 whitespace-pre-wrap leading-relaxed text-lg">{userAnswer}</p>;
-        const pattern = new RegExp(`(${allMatched.map(k => k.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')).join('|')})`, 'g');
-        const parts = userAnswer.split(pattern);
+        
+        const allTerms = gradingResult.matchedTerms || [];
+        const allNums = gradingResult.matchedNumbers || [];
+        
+        if (allTerms.length === 0 && allNums.length === 0) {
+            return <p className="text-slate-700 whitespace-pre-wrap leading-relaxed text-lg">{userAnswer}</p>;
+        }
+        
+        // 태그 파괴 방지를 위해 HTML 이스케이프
+        const escapeHtml = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        let safeHtml = escapeHtml(userAnswer);
+        
+        // 긴 단어부터 매칭하여 태그 꼬임 방지
+        const sortedTerms = [...allTerms].sort((a,b) => b.length - a.length);
+        const sortedNums = [...allNums].sort((a,b) => String(b).length - String(a).length);
+
+        sortedTerms.forEach(t => {
+            const chars = Array.from(String(t).replace(/\s+/g, ''));
+            const escapedChars = chars.map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+            // 태그 내부 속성값 매칭 방지: (?![^<]*>)
+            const pattern = new RegExp(`(${escapedChars.join('.{0,3}?')})(?![^<]*>)`, 'gi');
+            safeHtml = safeHtml.replace(pattern, '<span class="font-black px-1.5 rounded mx-0.5 border text-emerald-700 bg-emerald-100 border-emerald-200">$&</span>');
+        });
+
+        sortedNums.forEach(n => {
+            const pattern = new RegExp(`(${String(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(?![^<]*>)`, 'gi');
+            safeHtml = safeHtml.replace(pattern, '<span class="font-black px-1.5 rounded mx-0.5 border text-blue-700 bg-blue-100 border-blue-200">$&</span>');
+        });
+
         return (
-            <p className="text-slate-700 whitespace-pre-wrap leading-relaxed text-lg font-medium">
-                {parts.map((part, i) => {
-                    const isTerm = gradingResult.matchedTerms.includes(part);
-                    const isNum = gradingResult.matchedNumbers.includes(part);
-                    if (isTerm || isNum) return <span key={i} className={`font-black px-1.5 rounded mx-0.5 border ${isTerm ? 'text-emerald-700 bg-emerald-100 border-emerald-200' : 'text-blue-700 bg-blue-100 border-blue-200'}`}>{part}</span>;
-                    return part;
-                })}
-            </p>
+            <p 
+                className="text-slate-700 whitespace-pre-wrap leading-relaxed text-lg font-medium"
+                dangerouslySetInnerHTML={{ __html: safeHtml }}
+            />
         );
     };
 
@@ -581,7 +559,15 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                         </div>
                                         
                                         {/* 🔴 아까 만든 예쁜 캡슐 툴바를 여기에 쏙! 집어넣습니다! */}
-                                        <DrawingToolbar />
+                                        <DrawingToolbar 
+                                            penColor={penColor} 
+                                            setPenColor={setPenColor} 
+                                            lineWidth={lineWidth} 
+                                            setLineWidth={setLineWidth} 
+                                            isEraserMode={isEraserMode} 
+                                            setIsEraserMode={setIsEraserMode} 
+                                            clearCurrentCanvas={clearCurrentCanvas} 
+                                        />
                                     </>
                                 )}
                                 
@@ -654,19 +640,31 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                 </div>
 
                                 <div className="space-y-8">
-                                    <div className="bg-emerald-950/20 rounded-[2.5rem] p-10 border border-emerald-900/50 shadow-2xl relative group/answer">
-                                        <h3 className="text-emerald-400 font-black text-xl mb-8 flex items-center gap-3"><BookOpen size={30} /> Model Answer</h3>
-                                        {localAnswerImages.length > 0 && (
-                                            <div className="grid grid-cols-2 gap-4 mb-8">
-                                                {localAnswerImages.map((url, idx) => (
-                                                    <div key={idx} className="relative aspect-[4/3] rounded-2xl overflow-hidden border-2 border-emerald-500/20 bg-black/40 group/img">
-                                                        <img src={url} alt="Answer" className="w-full h-full object-contain cursor-zoom-in group-hover:scale-105 transition-all duration-500" onClick={() => setZoomImage(url)} />
-                                                    </div>
-                                                ))}
+                                    <div className="bg-emerald-950/20 rounded-[2.5rem] p-10 border border-emerald-900/50 shadow-2xl relative group/answer overflow-hidden transition-all duration-500">
+                                        
+                                        {/* 블라인드 모드 가림막 (isRetrying일 때만 활성화) */}
+                                        {isRetrying && (
+                                            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-xl opacity-100 group-hover/answer:opacity-0 pointer-events-none transition-all duration-500">
+                                                <EyeOff size={48} className="text-emerald-500/40 mb-4 animate-pulse" />
+                                                <p className="text-emerald-400 font-black text-xl tracking-tight">Blind Typing Mode</p>
+                                                <p className="text-emerald-500/70 text-sm font-bold mt-3 bg-emerald-950/50 px-4 py-2 rounded-full shadow-lg">마우스를 올리면 잠깐 정답이 보입니다 💡</p>
                                             </div>
                                         )}
-                                        <div className="prose prose-invert max-w-none text-emerald-50/90 whitespace-pre-line leading-relaxed text-lg font-black tracking-tight select-text">
-                                            {currentProblem.modelAnswer || '해설이 등록되지 않았습니다.'}
+
+                                        <div className={`relative z-10 transition-all duration-500 ${isRetrying ? 'blur-md opacity-20 group-hover/answer:blur-none group-hover/answer:opacity-100 select-none' : ''}`}>
+                                            <h3 className="text-emerald-400 font-black text-xl mb-8 flex items-center gap-3"><BookOpen size={30} /> Model Answer</h3>
+                                            {localAnswerImages.length > 0 && (
+                                                <div className="grid grid-cols-2 gap-4 mb-8">
+                                                    {localAnswerImages.map((url, idx) => (
+                                                        <div key={idx} className="relative aspect-[4/3] rounded-2xl overflow-hidden border-2 border-emerald-500/20 bg-black/40 group/img">
+                                                            <img src={url} alt="Answer" className="w-full h-full object-contain cursor-zoom-in group-hover:scale-105 transition-all duration-500" onClick={() => setZoomImage(url)} />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            <div className="prose prose-invert max-w-none text-emerald-50/90 whitespace-pre-line leading-relaxed text-lg font-black tracking-tight select-text">
+                                                {currentProblem.modelAnswer || '해설이 등록되지 않았습니다.'}
+                                            </div>
                                         </div>
                                     </div>
                                     
@@ -706,7 +704,16 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                             className="bg-transparent"
                         />
                     </div>
-                    <DrawingToolbar onClose={() => setIsOverlayMode(false)} />
+                    <DrawingToolbar 
+                        penColor={penColor} 
+                        setPenColor={setPenColor} 
+                        lineWidth={lineWidth} 
+                        setLineWidth={setLineWidth} 
+                        isEraserMode={isEraserMode} 
+                        setIsEraserMode={setIsEraserMode} 
+                        clearCurrentCanvas={clearCurrentCanvas} 
+                        onClose={() => setIsOverlayMode(false)} 
+                    />
                 </div>
             )}
 
@@ -737,32 +744,4 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     );
 }
 
-function ImageCarousel({ images, onZoom, onDelete, isEditMode }) {
-    const [index, setIndex] = useState(0);
-    const next = () => setIndex((i) => (i + 1) % images.length);
-    const prev = () => setIndex((i) => (i - 1 + images.length) % images.length);
-    if (!images || images.length === 0) return null;
-    return (
-        <div className="relative w-full max-w-2xl mx-auto aspect-video bg-black/80 rounded-[2rem] overflow-hidden border-2 border-slate-800 group/carousel shadow-2xl select-none mb-6">
-            <img src={images[index]} alt="Problem" className="w-full h-full object-contain cursor-zoom-in" onClick={() => onZoom(images[index])} />
-            <div className="absolute top-6 left-6 bg-black/60 backdrop-blur px-4 py-2 rounded-xl text-white text-[10px] font-black tracking-widest flex items-center gap-2 pointer-events-none border border-white/10 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity"><Maximize2 size={14} /> TAP TO ENLARGE</div>
-            
-            {isEditMode && (
-                <button 
-                    onClick={(e) => { e.stopPropagation(); onDelete(images[index]); }}
-                    className="absolute top-6 right-6 bg-red-500/80 hover:bg-red-500 text-white p-3 rounded-xl shadow-xl z-50 transition-all"
-                >
-                    <Trash2 size={18} />
-                </button>
-            )}
 
-            {images.length > 1 && (
-                <>
-                    <button onClick={(e) => { e.stopPropagation(); prev(); }} className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-emerald-500 text-white p-4 rounded-full transition-all opacity-0 group-hover:opacity-100 border border-white/5"><ChevronLeft size={32} /></button>
-                    <button onClick={(e) => { e.stopPropagation(); next(); }} className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-emerald-500 text-white p-4 rounded-full transition-all opacity-0 group-hover:opacity-100 border border-white/5"><ChevronRight size={32} /></button>
-                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-2xl px-6 py-2 rounded-full text-emerald-400 text-xs font-black border border-emerald-500/20 shadow-2xl tracking-widest">{index + 1} / {images.length}</div>
-                </>
-            )}
-        </div>
-    );
-}

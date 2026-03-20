@@ -1,14 +1,14 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { 
-  Flame, Droplets, Zap, Eye, EyeOff, 
-  Wind, DoorOpen, Layers 
+import {
+  Flame, Droplets, Zap, Eye, EyeOff,
+  Wind, DoorOpen, Layers
 } from 'lucide-react'
 
 // 컴포넌트 임포트
 import SmartUpload from './components/SmartUpload'
 import Sidebar from './components/Sidebar'
 import VisualLearning from './components/VisualLearning'
-import Workbook from './components/Workbook' 
+import Workbook from './components/Workbook'
 import Reference from './components/Reference'
 import Dashboard from './components/Dashboard'
 import StrategyView from './components/StrategyView'
@@ -25,21 +25,21 @@ const THEME_CONFIG = {
   '공통': { bg: 'bg-slate-900', border: 'border-purple-500/30', activeTab: 'bg-purple-600 text-white shadow-purple-500/20', text: 'text-purple-400', icon: Layers }
 };
 
-const APP_VERSION = 'v3.0.0'; // 스마트업로드 오류개선
+const APP_VERSION = 'v3.1.2'; // 안티그래비티 이관
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const SCOPES = 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets.readonly';
 
 function App() {
   // --- 상태 관리 ---
-  const [accessToken, setAccessToken] = useState(null); 
-  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [accessToken, setAccessToken] = useState(null);
+  const [isUnlocked, setIsUnlocked] = useState(() => sessionStorage.getItem('isUnlocked') === 'true');
   const [pinInput, setPinInput] = useState('');
   const pinInputRef = useRef(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   // 네비게이션 & 뷰
   const [mode, setMode] = useState('dashboard');
-  const [subject, setSubject] = useState('수계'); 
+  const [subject, setSubject] = useState('수계');
   const [isExamMode, setIsExamMode] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -70,19 +70,19 @@ function App() {
     }
     try {
       const client = window.google.accounts.oauth2.initTokenClient({
-        client_id: CLIENT_ID, 
+        client_id: CLIENT_ID,
         scope: SCOPES,
         callback: (resp) => {
           if (resp.access_token) {
-              setAccessToken(resp.access_token);
-              setIsAuthenticated(true);
-              console.log("✅ 구글 인증 성공: 시스템 동기화 활성화");
+            setAccessToken(resp.access_token);
+            setIsAuthenticated(true);
+            console.log("✅ 구글 인증 성공: 시스템 동기화 활성화");
           }
         },
       });
       setTokenClient(client);
-    } catch (err) { 
-      console.error("GIS Init Error", err); 
+    } catch (err) {
+      console.error("GIS Init Error", err);
     }
   }, []);
 
@@ -120,8 +120,11 @@ function App() {
 
   const handlePinSubmit = (e) => {
     e.preventDefault();
-    if (pinInput === '2027') setIsUnlocked(true); // 2027년 합격 목표 PIN
-    else {
+    const correctPin = import.meta.env.VITE_APP_PIN || '2027';
+    if (pinInput === correctPin) {
+      setIsUnlocked(true);
+      sessionStorage.setItem('isUnlocked', 'true'); // 세션 유지 저장
+    } else {
       alert("암호가 일치하지 않습니다.");
       setPinInput('');
     }
@@ -129,9 +132,9 @@ function App() {
 
   // 🔴 수정 모드 트리거: Workbook에서 수정 버튼 클릭 시 호출됨
   const handleEditProblem = (problem) => {
-    setSharedData(problem); 
+    setSharedData(problem);
     setMode('smart-upload');
-    setIsExamMode(false);   
+    setIsExamMode(false);
   };
 
   const handleDataToss = (data) => {
@@ -141,12 +144,25 @@ function App() {
 
   const handleLogin = () => {
     if (tokenClient) {
-      tokenClient.requestAccessToken({ prompt: 'consent' });
+      // 이미 권한이 부여된 사용자라면 불필요한 동의 화면(prompt)을 건너뜁니다.
+      tokenClient.requestAccessToken({ prompt: '' });
     } else {
       initGis(); // 객체 유실 시 재초기화 시도
-      alert("인증 시스템을 재가동 중입니다. 잠시 후 다시 시도해주세요.");
+      alert("인증 시스템을 재가동 중입니다. 다시 시도해주세요.");
     }
   };
+
+  // 🔴 [에러 핸들링] 55분 간격으로 토큰 만료 전 조용히 자동 갱신
+  useEffect(() => {
+    if (isAuthenticated && tokenClient) {
+      const refreshTimer = setTimeout(() => {
+        console.log("⏳ 구글 안전 동기화 유지: 토큰 갱신 중...");
+        tokenClient.requestAccessToken({ prompt: '' });
+      }, 55 * 60 * 1000);
+
+      return () => clearTimeout(refreshTimer);
+    }
+  }, [isAuthenticated, tokenClient]);
 
   const handleLogout = () => {
     setAccessToken(null);
@@ -158,59 +174,59 @@ function App() {
   // --- Render Logic ---
 
   if (!isUnlocked) {
-      return (
-        <div className="flex flex-col items-center justify-center w-screen bg-slate-950 text-white p-4 fixed inset-0" style={{ height: '100dvh' }}>
-            <div className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-8 shadow-2xl animate-in zoom-in-95 duration-300">
-                <div className="flex justify-center mb-6">
-                    <div className="p-3 bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl shadow-lg">
-                        <Flame size={48} className="text-white fill-white" />
-                    </div>
-                </div>
-                <h2 className="text-2xl font-bold text-center mb-2 tracking-tight">Fire-Sight Access</h2>
-                <p className="text-slate-400 text-center text-sm mb-8">보안을 위해 접속 암호를 입력해주세요.</p>
-                <form onSubmit={handlePinSubmit} className="space-y-4">
-                    <input 
-                      type="password" 
-                      ref={pinInputRef}
-                      value={pinInput} 
-                      onChange={e=>setPinInput(e.target.value)} 
-                      className="w-full text-center text-3xl tracking-[1em] font-bold bg-slate-800 border border-slate-700 rounded-xl py-4 focus:ring-2 focus:ring-orange-500 outline-none transition-all" 
-                      placeholder="PIN" 
-                    />
-                    <button type="submit" className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl transition-all shadow-lg active:scale-95 uppercase tracking-widest">Unlock System</button>
-                </form>
+    return (
+      <div className="flex flex-col items-center justify-center w-screen bg-slate-950 text-white p-4 fixed inset-0" style={{ height: '100dvh' }}>
+        <div className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-8 shadow-2xl animate-in zoom-in-95 duration-300">
+          <div className="flex justify-center mb-6">
+            <div className="p-3 bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl shadow-lg">
+              <Flame size={48} className="text-white fill-white" />
             </div>
+          </div>
+          <h2 className="text-2xl font-bold text-center mb-2 tracking-tight">Fire-Sight Access</h2>
+          <p className="text-slate-400 text-center text-sm mb-8">보안을 위해 접속 암호를 입력해주세요.</p>
+          <form onSubmit={handlePinSubmit} className="space-y-4">
+            <input
+              type="password"
+              ref={pinInputRef}
+              value={pinInput}
+              onChange={e => setPinInput(e.target.value)}
+              className="w-full text-center text-3xl tracking-[1em] font-bold bg-slate-800 border border-slate-700 rounded-xl py-4 focus:ring-2 focus:ring-orange-500 outline-none transition-all"
+              placeholder="PIN"
+            />
+            <button type="submit" className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl transition-all shadow-lg active:scale-95 uppercase tracking-widest">Unlock System</button>
+          </form>
         </div>
-      );
+      </div>
+    );
   }
 
   const renderContent = () => {
     switch (mode) {
       case 'dashboard': return <Dashboard setMode={setMode} subject={subject} dDay={dDay} />;
-      
-      case 'smart-upload': 
+
+      case 'smart-upload':
         return (
-          <SmartUpload 
-            initialData={sharedData} 
+          <SmartUpload
+            initialData={sharedData}
             onSaveComplete={() => {
-              setSharedData(null); 
-              setMode('workbook');  
-            }} 
-            defaultCategory={subject} 
+              setSharedData(null);
+              setMode('workbook');
+            }}
+            defaultCategory={subject}
           />
         );
 
-      case 'workbook': 
+      case 'workbook':
         return (
-          <Workbook 
-            isExamMode={isExamMode} 
-            subject={subject} 
-            initialFilter={activeStrategy} 
+          <Workbook
+            isExamMode={isExamMode}
+            subject={subject}
+            initialFilter={activeStrategy}
             onEditProblem={handleEditProblem}
           />
         );
 
-      case 'reference': 
+      case 'reference':
         return <Reference
           subject={subject}
           isAuthenticated={isAuthenticated}
@@ -228,9 +244,9 @@ function App() {
   };
 
   return (
-    <div 
-        className={`fixed inset-0 flex flex-col w-screen overflow-hidden ${theme.bg} text-white font-sans transition-all duration-500 pt-[env(safe-area-inset-top)] ${isExamMode ? 'brightness-90 saturate-50' : ''}`}
-        style={{ height: '100dvh' }} 
+    <div
+      className={`fixed inset-0 flex flex-col w-screen overflow-hidden ${theme.bg} text-white font-sans transition-all duration-500 pt-[env(safe-area-inset-top)] ${isExamMode ? 'brightness-90 saturate-50' : ''}`}
+      style={{ height: '100dvh' }}
     >
       {!isOnline && (
         <div className="bg-red-600 text-white text-center py-1 text-[10px] font-black tracking-widest animate-pulse shrink-0 uppercase">
@@ -275,17 +291,17 @@ function App() {
           <EyeOff size={16} /> <span>Exit Exam Mode</span>
         </button>
       )}
-      
+
       <div className="flex-1 flex overflow-hidden">
         {!isExamMode && (
-          <Sidebar 
-            currentMode={mode} 
-            setMode={setMode} 
-            subject={subject} 
-            setSubject={setSubject} 
-            isCollapsed={isSidebarCollapsed} 
-            setIsCollapsed={setIsSidebarCollapsed} 
-            isAuthenticated={isAuthenticated} 
+          <Sidebar
+            currentMode={mode}
+            setMode={setMode}
+            subject={subject}
+            setSubject={setSubject}
+            isCollapsed={isSidebarCollapsed}
+            setIsCollapsed={setIsSidebarCollapsed}
+            isAuthenticated={isAuthenticated}
             handleLogout={handleLogout}
           />
         )}

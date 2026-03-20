@@ -4,14 +4,13 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage"; // [필수] Storage 임포트
 
 const firebaseConfig = {
-
-  apiKey: "AIzaSyCVyPVC8MIQRiuIajxzx2A5If9rldUtEoo",
-  authDomain: "fire-sight-dc376.firebaseapp.com",
-  projectId: "fire-sight-dc376",
-  storageBucket: "fire-sight-dc376.firebasestorage.app",
-  messagingSenderId: "46911392890",
-  appId: "1:46911392890:web:4d3ecdc4300ec209513fc3",
-  measurementId: "G-LQ9Y4THJH5"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 const app = initializeApp(firebaseConfig);

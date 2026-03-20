@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "deploy": "npx rimraf node_modules/.vite && npm run build && npx firebase deploy",
     "lint": "eslint .",
     "preview": "vite preview"
   },
