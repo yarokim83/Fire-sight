@@ -138,7 +138,7 @@ export default function Dashboard({ setMode, dDay }) {
     useEffect(() => { setQuote(quotes[Math.floor(Math.random() * quotes.length)]); }, [quotes]);
 
     return (
-        <div className="flex flex-col h-full bg-black text-white p-6 md:p-10 overflow-hidden w-full animate-in fade-in duration-1000">
+        <div className="flex flex-col h-full bg-black text-white p-6 md:p-10 overflow-y-auto w-full animate-in fade-in duration-1000">
             
             {/* 1. Header (고정 높이) */}
             <header className="mb-8 max-w-7xl mx-auto w-full flex justify-between items-end shrink-0">
@@ -158,7 +158,7 @@ export default function Dashboard({ setMode, dDay }) {
             </header>
 
             {/* 2. Main Bento Workspace (Flex-1로 남은 공간 전체 활용) */}
-            <div className="grid grid-cols-1 md:grid-cols-4 md:grid-rows-3 gap-5 max-w-7xl mx-auto w-full flex-1 min-h-0">
+            <div className="grid grid-cols-1 md:grid-cols-4 md:grid-rows-4 gap-5 max-w-7xl mx-auto w-full flex-1 min-h-[600px] xl:min-h-[700px]">
                 
                 {/* [Total Mastery] - 2행을 차지하되 내부 패딩 최적화 */}
                 <div className="md:col-span-2 md:row-span-2 bg-white/[0.03] backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-8 flex flex-col justify-between group hover:bg-white/[0.05] transition-all duration-700 shadow-2xl overflow-hidden relative">
@@ -223,7 +223,7 @@ export default function Dashboard({ setMode, dDay }) {
                 </div>
 
                 {/* [Subject Intelligence] - 2열로 확장하여 시인성 확보 */}
-                <div className="md:col-span-2 bg-white/[0.03] backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-8 flex flex-col min-h-0 shadow-xl">
+                <div className="md:col-span-2 md:row-span-2 bg-white/[0.03] backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-8 flex flex-col min-h-0 shadow-xl">
                     <h3 className="text-[10px] font-bold text-white/30 uppercase tracking-[0.3em] mb-4 flex items-center gap-2 shrink-0">
                         <Layers size={14} /> Subject Intelligence (6-Systems)
                     </h3>
@@ -243,7 +243,7 @@ export default function Dashboard({ setMode, dDay }) {
                 </div>
 
                 {/* [Activity Stream] - 스크롤 가능 구역 */}
-                <div className="md:col-span-2 bg-white/[0.03] backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-8 flex flex-col min-h-0 shadow-xl">
+                <div className="md:col-span-2 md:row-span-2 bg-white/[0.03] backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-8 flex flex-col min-h-0 shadow-xl">
                     <h3 className="text-[10px] font-black text-white/30 uppercase tracking-[0.3em] mb-4 flex items-center gap-2 shrink-0">
                         <Clock size={14} /> System Activity Stream
                     </h3>

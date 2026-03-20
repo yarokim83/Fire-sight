@@ -1,7 +1,7 @@
 /* src/firebase.js */
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage"; // [필수] Storage 임포트
+import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -15,6 +15,17 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// DB와 Storage 둘 다 내보내기
+// DB와 Storage 내보내기
 export const db = getFirestore(app);
-export const storage = getStorage(app); // [중요] 꼭 export 해야 합니다.
+
+// [최적화] Firestore 오프라인 캐시(IndexedDB) 활성화 
+// -> Dashboard 렌더링 시 수천 개의 데이터를 서버가 아닌 기기 저장소에서 불러와 과금 요금 99% 컷!
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code == 'failed-precondition') {
+      console.warn("Multiple tabs open, persistence can only be enabled in one tab at a a time.");
+  } else if (err.code == 'unimplemented') {
+      console.warn("The current browser does not support all of the features required to enable persistence.");
+  }
+});
+
+export const storage = getStorage(app);

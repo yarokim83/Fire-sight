@@ -180,15 +180,27 @@ export default function VisualLearning({ isExamMode, setIsExamMode, setMode, sub
     const [deletedDefaultIds, setDeletedDefaultIds] = useState([]);
 
     useEffect(() => {
-        const savedCustom = localStorage.getItem('fireSight_customData');
-        if (savedCustom) {
-            const parsed = JSON.parse(savedCustom);
-            const visuals = parsed.filter(item => item.type === 'visual');
-            setCustomData(visuals);
+        try {
+            const savedCustom = localStorage.getItem('fireSight_customData');
+            if (savedCustom) {
+                const parsed = JSON.parse(savedCustom);
+                const visuals = Array.isArray(parsed) ? parsed.filter(item => item?.type === 'visual') : [];
+                setCustomData(visuals);
+            }
+        } catch (error) {
+            console.error("Failed to parse custom visual data:", error);
+            localStorage.removeItem('fireSight_customData'); // 데이터 오염 감지 시 초기화
+            setCustomData([]);
         }
 
-        const savedDeleted = JSON.parse(localStorage.getItem('fireSight_deletedDefault') || '[]');
-        setDeletedDefaultIds(savedDeleted);
+        try {
+            const savedDeleted = JSON.parse(localStorage.getItem('fireSight_deletedDefault') || '[]');
+            setDeletedDefaultIds(Array.isArray(savedDeleted) ? savedDeleted : []);
+        } catch (error) {
+            console.error("Failed to parse deleted default IDs:", error);
+            localStorage.removeItem('fireSight_deletedDefault');
+            setDeletedDefaultIds([]);
+        }
     }, []);
 
     // Merge built-in and custom data, then filter out soft-deleted default items
@@ -239,17 +251,26 @@ export default function VisualLearning({ isExamMode, setIsExamMode, setMode, sub
         e.stopPropagation(); // prevent card click
 
         if (window.confirm("이 학습 자료를 정말 삭제하시겠습니까? (삭제 후 복구 불가)")) {
-            if (item.isCustom) {
-                // Custom Data: Hard Delete
-                const saved = JSON.parse(localStorage.getItem('fireSight_customData') || '[]');
-                const updated = saved.filter(d => d.id !== item.id);
-                localStorage.setItem('fireSight_customData', JSON.stringify(updated));
-                setCustomData(prev => prev.filter(d => d.id !== item.id));
-            } else {
-                // Default Data: Soft Delete
-                const updated = [...deletedDefaultIds, item.id];
-                localStorage.setItem('fireSight_deletedDefault', JSON.stringify(updated));
-                setDeletedDefaultIds(updated);
+            try {
+                if (item.isCustom) {
+                    // Custom Data: Hard Delete
+                    const saved = JSON.parse(localStorage.getItem('fireSight_customData') || '[]');
+                    const updated = Array.isArray(saved) ? saved.filter(d => d.id !== item.id) : [];
+                    localStorage.setItem('fireSight_customData', JSON.stringify(updated));
+                    setCustomData(prev => prev.filter(d => d.id !== item.id));
+                } else {
+                    // Default Data: Soft Delete
+                    const savedDeleted = JSON.parse(localStorage.getItem('fireSight_deletedDefault') || '[]');
+                    const updated = Array.isArray(savedDeleted) ? [...savedDeleted, item.id] : [item.id];
+                    localStorage.setItem('fireSight_deletedDefault', JSON.stringify(updated));
+                    setDeletedDefaultIds(updated);
+                }
+            } catch (error) {
+                console.error("삭제 동기화 중 에러 발생:", error);
+                alert("데이터 삭제 중 오류가 발생했습니다. 저장소를 초기화합니다.");
+                localStorage.removeItem('fireSight_customData');
+                localStorage.removeItem('fireSight_deletedDefault');
+                window.location.reload();
             }
         }
     };
