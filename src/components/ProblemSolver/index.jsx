@@ -37,7 +37,8 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const [isOverlayMode, setIsOverlayMode] = useState(false);
     const [localProblemImages, setLocalProblemImages] = useState([]);
     const [localAnswerImages, setLocalAnswerImages] = useState([]);
-
+     // 🔴 [신규 추가] 해설 이미지 업로드 상태 및 함수
+    const [isUploading, setIsUploading] = useState(false);
     const canvasRef = useRef(null);        
     const overlayCanvasRef = useRef(null); 
     
@@ -310,6 +311,37 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         } catch (e) { alert('삭제 실패'); }
     };
 
+   
+
+    const handleAddAnswerImages = async (e) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        setIsUploading(true);
+        try {
+            const newUrls = [];
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const fileRef = ref(storage, `answers/${Date.now()}_${file.name}`);
+                await uploadBytes(fileRef, file);
+                const url = await getDownloadURL(fileRef);
+                newUrls.push(url);
+            }
+
+            const docRef = doc(db, 'workbook', currentProblem.id);
+            await updateDoc(docRef, { answerImages: arrayUnion(...newUrls) });
+
+            setLocalAnswerImages(prev => [...prev, ...newUrls]);
+            alert('이미지가 성공적으로 추가되었습니다! ✅');
+        } catch (error) {
+            console.error('Upload error:', error);
+            alert('이미지 업로드에 실패했습니다.');
+        } finally {
+            setIsUploading(false);
+            e.target.value = null; 
+        }
+    };
+
     const HighlightedUserAnswer = () => {
         if (!gradingResult) return <p className="text-slate-700 whitespace-pre-wrap">{userAnswer}</p>;
         const allMatched = [...gradingResult.matchedTerms, ...gradingResult.matchedNumbers];
@@ -419,13 +451,35 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                 <BookOpen size={24} /> 해설 및 채점 기준 수정
                             </h3>
                             
-                            {localAnswerImages.length > 0 && (
-                                <div className="mb-6">
-                                    <label className="text-sm font-bold text-slate-400 mb-3 block">Answer Images (해설 이미지)</label>
+                            {/* 🔴 [업그레이드된 UI] 해설 이미지 추가 버튼과 이미지 목록 통합 */}
+                            <div className="mb-6">
+                                <div className="flex items-center justify-between mb-3">
+                                    <label className="text-sm font-bold text-slate-400">Answer Images (해설 이미지)</label>
+                                    <div>
+                                        <input 
+                                            type="file" 
+                                            id="add-answer-image" 
+                                            multiple 
+                                            accept="image/*" 
+                                            className="hidden" 
+                                            onChange={handleAddAnswerImages} 
+                                            disabled={isUploading}
+                                        />
+                                        <label 
+                                            htmlFor="add-answer-image" 
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg cursor-pointer transition-all shadow-lg ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        >
+                                            {isUploading ? <RefreshCw className="animate-spin" size={14} /> : <Plus size={14} />}
+                                            {isUploading ? '업로드 중...' : '이미지 추가'}
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                {localAnswerImages.length > 0 ? (
                                     <div className="grid grid-cols-2 gap-4">
                                         {localAnswerImages.map((url, idx) => (
                                             <div key={idx} className="relative aspect-[4/3] rounded-2xl overflow-hidden border-2 border-emerald-500/20 bg-black/40 group/img">
-                                                <img src={url} alt="Answer" className="w-full h-full object-contain cursor-zoom-in" onClick={() => setZoomImage(url)} />
+                                                <img src={url} alt="Answer" className="w-full h-full object-contain cursor-zoom-in hover:scale-105 transition-all duration-300" onClick={() => setZoomImage(url)} />
                                                 <button 
                                                     onClick={(e) => { e.stopPropagation(); handleDeleteImage('answer', url); }}
                                                     className="absolute top-3 right-3 bg-red-500/90 hover:bg-red-500 text-white p-2.5 rounded-xl shadow-xl transition-all"
@@ -435,8 +489,12 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                             </div>
                                         ))}
                                     </div>
-                                </div>
-                            )}
+                                ) : (
+                                    <div className="text-center py-8 bg-black/20 rounded-2xl border border-dashed border-slate-700 text-slate-500 text-sm font-bold">
+                                        등록된 해설 이미지가 없습니다. 우측 상단의 버튼을 눌러 추가하세요.
+                                    </div>
+                                )}
+                            </div>
 
                             <div>
                                 <label className="text-sm font-bold text-slate-400 mb-2 block">Model Answer (정답 해설)</label>

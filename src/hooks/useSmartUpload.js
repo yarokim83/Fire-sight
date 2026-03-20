@@ -279,7 +279,7 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
                 ...formData,
                 tags: formData.searchTags || [], 
                 keywords: formData.searchTags && formData.searchTags.length > 0 ? formData.searchTags.join(', ') : '', 
-                problemImages: finalProblemUrls,
+                images: finalProblemUrls,
                 answerImages: finalAnswerUrls,
                 updatedAt: serverTimestamp()
             };
