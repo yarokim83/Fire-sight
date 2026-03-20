@@ -662,7 +662,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                                     ))}
                                                 </div>
                                             )}
-                                            <div className="prose prose-invert max-w-none text-emerald-50/90 whitespace-pre-line leading-relaxed text-lg font-black tracking-tight select-text">
+                                            <div className="prose prose-invert max-w-none text-slate-100 whitespace-pre-line leading-[1.8] text-[17px] font-medium tracking-wide select-text mt-4">
                                                 {currentProblem.modelAnswer || '해설이 등록되지 않았습니다.'}
                                             </div>
                                         </div>
