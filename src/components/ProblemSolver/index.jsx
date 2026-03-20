@@ -24,6 +24,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const [userAnswer, setUserAnswer] = useState('');
     const [gradingResult, setGradingResult] = useState(null);
     const [isRetrying, setIsRetrying] = useState(false);
+    const [isPeek, setIsPeek] = useState(false); // 터치 기기용 정답 강제 표시 상태
 
     const [isEditMode, setIsEditMode] = useState(false);
     const [editedQuestion, setEditedQuestion] = useState('');
@@ -93,6 +94,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             setIsOverlayMode(false);
             setGradingResult(null);
             setIsRetrying(false); 
+            setIsPeek(false);
             
             setInputMode(p.problemType === 'drawing' || p.problemType === 'calculation' ? 'draw' : 'text');
             document.querySelector('.problem-container')?.scrollTo(0, 0);
@@ -365,7 +367,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             </div>
 
             {showMemo && (
-                <div className="max-w-4xl mx-auto w-full px-4 md:px-8 mt-4 animate-in slide-in-from-top-4 duration-500 z-20">
+                <div className={`${(!isEditMode && showAnswer && gradingResult) ? 'max-w-[1500px]' : 'max-w-4xl'} mx-auto w-full px-4 md:px-8 mt-4 animate-in slide-in-from-top-4 duration-500 z-20 transition-all duration-700`}>
                     <div className="bg-amber-500/10 backdrop-blur-2xl border border-amber-500/30 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/5 blur-3xl rounded-full" />
                         <div className="flex justify-between items-center mb-6 relative z-10">
@@ -393,7 +395,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             )}
 
             <div className="problem-container flex-1 overflow-y-auto p-4 md:p-8 pb-40 scroll-smooth">
-                <div className="max-w-4xl mx-auto space-y-8">
+                <div className={`${(!isEditMode && showAnswer && gradingResult) ? 'max-w-[1500px]' : 'max-w-4xl'} mx-auto space-y-8 transition-all duration-700`}>
                     
                     <div className="bg-slate-900/50 backdrop-blur-sm rounded-[2rem] p-8 border border-slate-800 shadow-2xl relative overflow-hidden group">
                         <div className="flex justify-between items-start mb-8">
@@ -640,24 +642,27 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                 </div>
 
                                 <div className="space-y-8">
-                                    <div className="bg-emerald-950/20 rounded-[2.5rem] p-10 border border-emerald-900/50 shadow-2xl relative group/answer overflow-hidden transition-all duration-500">
+                                    <div 
+                                        className="bg-emerald-950/20 rounded-[2.5rem] p-10 border border-emerald-900/50 shadow-2xl relative group/answer overflow-hidden transition-all duration-500 cursor-pointer"
+                                        onClick={() => isRetrying && setIsPeek(!isPeek)}
+                                    >
                                         
                                         {/* 블라인드 모드 가림막 (isRetrying일 때만 활성화) */}
                                         {isRetrying && (
-                                            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-xl opacity-100 group-hover/answer:opacity-0 pointer-events-none transition-all duration-500">
+                                            <div className={`absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-xl transition-all duration-500 pointer-events-none ${isPeek ? 'opacity-0' : 'opacity-100 group-hover/answer:opacity-0'}`}>
                                                 <EyeOff size={48} className="text-emerald-500/40 mb-4 animate-pulse" />
                                                 <p className="text-emerald-400 font-black text-xl tracking-tight">Blind Typing Mode</p>
-                                                <p className="text-emerald-500/70 text-sm font-bold mt-3 bg-emerald-950/50 px-4 py-2 rounded-full shadow-lg">마우스를 올리면 잠깐 정답이 보입니다 💡</p>
+                                                <p className="text-emerald-500/70 text-sm font-bold mt-3 bg-emerald-950/50 px-4 py-2 rounded-full shadow-lg">가볍게 터치하거나 마우스를 올리면 정답이 보입니다 💡</p>
                                             </div>
                                         )}
 
-                                        <div className={`relative z-10 transition-all duration-500 ${isRetrying ? 'blur-md opacity-20 group-hover/answer:blur-none group-hover/answer:opacity-100 select-none' : ''}`}>
+                                        <div className={`relative z-10 transition-all duration-500 ${isRetrying ? (isPeek ? 'blur-none opacity-100 select-text' : 'blur-md opacity-20 group-hover/answer:blur-none group-hover/answer:opacity-100 select-none') : ''}`}>
                                             <h3 className="text-emerald-400 font-black text-xl mb-8 flex items-center gap-3"><BookOpen size={30} /> Model Answer</h3>
                                             {localAnswerImages.length > 0 && (
                                                 <div className="grid grid-cols-2 gap-4 mb-8">
                                                     {localAnswerImages.map((url, idx) => (
                                                         <div key={idx} className="relative aspect-[4/3] rounded-2xl overflow-hidden border-2 border-emerald-500/20 bg-black/40 group/img">
-                                                            <img src={url} alt="Answer" className="w-full h-full object-contain cursor-zoom-in group-hover:scale-105 transition-all duration-500" onClick={() => setZoomImage(url)} />
+                                                            <img src={url} alt="Answer" className="w-full h-full object-contain cursor-zoom-in group-hover:scale-105 transition-all duration-500" onClick={(e) => { e.stopPropagation(); setZoomImage(url); }} />
                                                         </div>
                                                     ))}
                                                 </div>

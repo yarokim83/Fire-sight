@@ -304,19 +304,19 @@ export const ProblemForm = ({ formData, setFormData, isAnalyzingAnswer, updateGr
                 </div>
             </div>
             
-            <div className="shrink-0">
+            <div className="flex flex-col shrink-0 mt-2">
                 <label className={labelStyle}>Original Content</label>
-                <textarea value={formData.description || ''} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className={`${inputStyle} h-24 resize-none leading-relaxed text-slate-300 font-normal`} placeholder="소방 지문 원문" />
+                <textarea value={formData.description || ''} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className={`${inputStyle} min-h-[140px] resize-y leading-[1.8] text-slate-200 font-medium tracking-wide`} placeholder="소방 지문 원문" />
             </div>
 
-            <div className="flex-1 flex flex-col min-h-[140px] space-y-2">
+            <div className="flex-1 flex flex-col min-h-[220px] space-y-2 mt-2">
                 <div className="flex justify-between items-center px-1">
                     <span className="text-[10px] font-black text-white/20 uppercase tracking-widest flex items-center gap-2 font-bold">
                         <CheckCircle2 size={10} /> Model Solution
                     </span>
                     {isAnalyzingAnswer && <Sparkles size={11} className="text-emerald-400 animate-pulse" />}
                 </div>
-                <textarea value={formData.modelAnswer || ''} onChange={(e) => setFormData({ ...formData, modelAnswer: e.target.value })} className={`${inputStyle} h-full resize-none border-white/5 bg-white/[0.02] text-emerald-50/70 font-semibold`} placeholder="정답 모델" />
+                <textarea value={formData.modelAnswer || ''} onChange={(e) => setFormData({ ...formData, modelAnswer: e.target.value })} className={`${inputStyle} min-h-[280px] resize-y overflow-y-auto border-white/20 bg-white/[0.02] text-emerald-100 font-medium leading-[1.8] tracking-wide shadow-xl relative z-50`} placeholder="정답 모델" />
             </div>
 
             {/* 채점 매트릭스 (Emerald) */}

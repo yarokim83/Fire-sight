@@ -7,8 +7,14 @@ import { analyzeImage } from '../utils/gemini';
 import { getCroppedImg } from '../utils/canvasUtils'; 
 
 export const useSmartUpload = (initialData, onSaveComplete) => {
-    // 🔴 AI 모델 선택 상태 (최신 3.1 Pro 기본값)
-    const [aiModel, setAiModel] = useState('gemini-3.1-pro-preview');
+    // 🔴 AI 모델 선택 상태 (로컬 스토리지 유지)
+    const [aiModel, setAiModel] = useState(() => localStorage.getItem('firesight_aimodel') || 'gemini-3.1-pro-preview');
+
+    useEffect(() => {
+        if (aiModel) {
+            localStorage.setItem('firesight_aimodel', aiModel);
+        }
+    }, [aiModel]);
 
     // --- [1. 시스템 제어 및 하드웨어 배선] ---
     const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -143,17 +149,28 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
 
         if (isManualMode) { setStep(3); setIsAnalyzing(false); return; }
 
+        addLog(`⚡ 다중 이미지 병렬 분석 시퀀스 가동... (총 ${files.length}장 / 모델: ${aiModel})`);
         const batchResults = [];
-        for (let i = 0; i < files.length; i++) {
-            addLog(`🔍 지문 페이지(${i + 1}/${files.length}) 분석 중... (모델: ${aiModel})`);
-            try {
-                const res = await analyzeImage(files[i], formData.type, 'problem', aiModel);
-                if (res) batchResults.push(res);
-            } catch (error) {
-                console.error(`지문 ${i + 1}번째 장 실패:`, error);
-                addLog(`⚠️ 지문 ${i + 1}쪽 분석 실패`);
-            }
-            if (i < files.length - 1) await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        try {
+            const promises = files.map((file, i) => 
+                analyzeImage(file, formData.type, 'problem', aiModel)
+                    .then(res => {
+                        addLog(`✅ 지문 ${i + 1}쪽 추출 완료`);
+                        return res;
+                    })
+                    .catch(err => {
+                        console.error(`지문 ${i + 1}번째 장 실패:`, err);
+                        addLog(`⚠️ 지문 ${i + 1}쪽 분석 실패`);
+                        return null;
+                    })
+            );
+            
+            const results = await Promise.all(promises);
+            results.forEach(res => { if (res) batchResults.push(res); });
+        } catch (error) {
+            console.error("전체 병렬 분석 실패:", error);
+            addLog(`⚠️ 지문 병렬 분석 중 치명적 오류`);
         }
 
         if (isMounted.current && batchResults.length > 0) {
@@ -190,17 +207,28 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         setViewMode('answer');
         if (isManualMode) { setIsAnalyzingAnswer(false); return; }
 
+        addLog(`⚡ 다중 해설 병렬 분석 시퀀스 가동... (총 ${files.length}장 / 모델: ${aiModel})`);
         const batchResults = [];
-        for (let i = 0; i < files.length; i++) {
-            addLog(`📄 해설 페이지(${i + 1}/${files.length}) 분석 중... (모델: ${aiModel})`);
-            try {
-                const res = await analyzeImage(files[i], formData.type, 'answer', aiModel);
-                if (res) batchResults.push(res);
-            } catch (error) {
-                console.error(`해설 ${i + 1}번째 장 실패:`, error);
-                addLog(`⚠️ 해설 ${i + 1}쪽 분석 실패`);
-            }
-            if (i < files.length - 1) await new Promise(resolve => setTimeout(resolve, 1500));
+
+        try {
+            const promises = files.map((file, i) => 
+                analyzeImage(file, formData.type, 'answer', aiModel)
+                    .then(res => {
+                        addLog(`✅ 해설 ${i + 1}쪽 추출 완료`);
+                        return res;
+                    })
+                    .catch(err => {
+                        console.error(`해설 ${i + 1}번째 장 실패:`, err);
+                        addLog(`⚠️ 해설 ${i + 1}쪽 분석 실패`);
+                        return null;
+                    })
+            );
+            
+            const results = await Promise.all(promises);
+            results.forEach(res => { if (res) batchResults.push(res); });
+        } catch (error) {
+            console.error("해설 전체 병렬 분석 실패:", error);
+            addLog(`⚠️ 해설 병렬 분석 중 치명적 오류`);
         }
         
         if (isMounted.current && batchResults.length > 0) {
@@ -237,7 +265,8 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
             if (file.size === 0) continue; 
 
             try {
-                const options = { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true };
+                // 🔴 텍스트 가독성을 위해 1MB에서 2MB로 압축 상한선 확장
+                const options = { maxSizeMB: 2, maxWidthOrHeight: 1920, useWebWorker: true };
                 const compressedFile = await imageCompression(file, options);
                 const fileRef = ref(storage, `${folderPath}/${Date.now()}_${i}.jpg`);
                 const snapshot = await uploadBytesResumable(fileRef, compressedFile);
