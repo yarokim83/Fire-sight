@@ -302,13 +302,13 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     };
 
     const HighlightedUserAnswer = () => {
-        if (!gradingResult) return <p className="text-slate-700 whitespace-pre-wrap">{userAnswer}</p>;
+        if (!gradingResult) return <p className="text-slate-300 whitespace-pre-wrap">{userAnswer}</p>;
         
         const allTerms = gradingResult.matchedTerms || [];
         const allNums = gradingResult.matchedNumbers || [];
         
         if (allTerms.length === 0 && allNums.length === 0) {
-            return <p className="text-slate-700 whitespace-pre-wrap leading-relaxed text-lg">{userAnswer}</p>;
+            return <p className="text-white/80 whitespace-pre-wrap leading-relaxed text-lg">{userAnswer}</p>;
         }
         
         // 태그 파괴 방지를 위해 HTML 이스케이프
@@ -324,17 +324,17 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             const escapedChars = chars.map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
             // 태그 내부 속성값 매칭 방지: (?![^<]*>)
             const pattern = new RegExp(`(${escapedChars.join('.{0,3}?')})(?![^<]*>)`, 'gi');
-            safeHtml = safeHtml.replace(pattern, '<span class="font-black px-1.5 rounded mx-0.5 border text-emerald-700 bg-emerald-100 border-emerald-200">$&</span>');
+            safeHtml = safeHtml.replace(pattern, '<span class="font-black px-1.5 py-0.5 rounded mx-0.5 border text-emerald-400 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_10px_rgba(52,211,153,0.1)]">$&</span>');
         });
 
         sortedNums.forEach(n => {
             const pattern = new RegExp(`(${String(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(?![^<]*>)`, 'gi');
-            safeHtml = safeHtml.replace(pattern, '<span class="font-black px-1.5 rounded mx-0.5 border text-blue-700 bg-blue-100 border-blue-200">$&</span>');
+            safeHtml = safeHtml.replace(pattern, '<span class="font-black px-1.5 py-0.5 rounded mx-0.5 border text-blue-400 bg-blue-500/10 border-blue-500/20 shadow-[0_0_10px_rgba(96,165,250,0.1)]">$&</span>');
         });
 
         return (
             <p 
-                className="text-slate-700 whitespace-pre-wrap leading-relaxed text-lg font-medium"
+                className="text-slate-200 whitespace-pre-wrap leading-relaxed text-lg font-medium"
                 dangerouslySetInnerHTML={{ __html: safeHtml }}
             />
         );
@@ -541,26 +541,24 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                     )}
 
                     {!isEditMode && !showAnswer && !isOverlayMode && (
-                        <div className="bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border-2 border-slate-800 focus-within:border-blue-500 transition-all relative group animate-in fade-in">
-                            <div className="bg-slate-100 px-6 py-3 border-b border-slate-200 flex items-center justify-between">
+                        <div className="bg-slate-950/80 backdrop-blur-3xl rounded-[2.5rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden border border-white/10 focus-within:border-blue-500/50 transition-all relative group animate-in fade-in">
+                            <div className="bg-black/40 px-6 py-3 border-b border-white/5 flex items-center justify-between">
                                 <div className="flex gap-3">
-                                    <button onClick={() => { setInputMode('text'); }} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${inputMode === 'text' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200'}`}><Type size={14} /> TEXT</button>
-                                    {/* 🔴 DRAW 버튼 클릭 시 기본 펜 색상을 검은색으로 설정 */}
-                                    <button onClick={() => { setInputMode('draw'); setPenColor('#000000'); }} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${inputMode === 'draw' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200'}`}><PenTool size={14} /> DRAW</button>
+                                    <button onClick={() => { setInputMode('text'); }} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${inputMode === 'text' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><Type size={14} /> TEXT</button>
+                                    <button onClick={() => { setInputMode('draw'); setPenColor('#FFFFFF'); }} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${inputMode === 'draw' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><PenTool size={14} /> DRAW</button>
                                 </div>
                             </div>
                             
-                            <div className="relative w-full h-[500px] bg-slate-50 overflow-hidden"> 
+                            <div className="relative w-full h-[500px] bg-slate-900 overflow-hidden"> 
+                                <div className="absolute inset-0 z-0 bg-grid-white/[0.02]" style={{ backgroundSize: '20px 20px', backgroundImage: 'linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px)' }} />
                                 {inputMode === 'text' ? (
-                                    <textarea value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} placeholder="답안을 서술하세요..." className="w-full h-full p-8 text-slate-900 text-xl font-bold leading-relaxed outline-none resize-none border-none placeholder:text-slate-300 shadow-inner bg-transparent relative z-10" spellCheck="false" />
+                                    <textarea value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} placeholder="답안을 서술하세요..." className="w-full h-full p-8 text-white text-xl font-bold leading-relaxed outline-none resize-none border-none placeholder:text-white/20 shadow-inner bg-transparent relative z-10" spellCheck="false" />
                                 ) : (
                                     <>
-                                        {/* 🔴 정답 입력창 캔버스 */}
                                         <div className="absolute inset-0 z-10">
                                             <SharedCanvas ref={canvasRef} penColor={penColor} lineWidth={lineWidth} isEraserMode={isEraserMode} />
                                         </div>
                                         
-                                        {/* 🔴 아까 만든 예쁜 캡슐 툴바를 여기에 쏙! 집어넣습니다! */}
                                         <DrawingToolbar 
                                             penColor={penColor} 
                                             setPenColor={setPenColor} 
@@ -574,7 +572,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                 )}
                                 
                                 <div className="absolute bottom-8 right-8 z-[300]">
-                                    <button onClick={handleSubmit} className="flex items-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-10 py-4 rounded-[1.5rem] font-black shadow-2xl transition-all transform active:scale-95 pointer-events-auto"><Check size={24} /> {inputMode === 'draw' ? '정답 확인' : '제출하기'}</button>
+                                    <button onClick={handleSubmit} className="flex items-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-10 py-4 rounded-[1.5rem] font-black shadow-[0_10px_30px_rgba(37,99,235,0.3)] transition-all transform active:scale-95 pointer-events-auto"><Check size={24} /> {inputMode === 'draw' ? '정답 확인' : '제출하기'}</button>
                                 </div>
                             </div>
                         </div>
@@ -598,41 +596,40 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                             </div>
 
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                <div className="bg-white rounded-[2.5rem] p-10 border border-slate-200 shadow-2xl h-full flex flex-col min-h-[500px]">
+                                <div className="bg-slate-900/50 backdrop-blur-xl rounded-[2.5rem] p-10 border border-white/5 shadow-2xl h-full flex flex-col min-h-[500px]">
                                     <div className="flex justify-between items-center mb-8">
-                                        <h3 className="text-slate-900 font-black flex items-center gap-3 text-xl"><CheckCircle2 size={28} className="text-blue-600" /> 나의 답안 분석</h3>
+                                        <h3 className="text-white font-black flex items-center gap-3 text-xl"><CheckCircle2 size={28} className="text-blue-500" /> 나의 답안 분석</h3>
                                         {!isRetrying && inputMode === 'text' && (
                                             <button 
                                                 onClick={() => setIsRetrying(true)}
-                                                className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-blue-50 text-blue-600 text-xs font-black rounded-xl transition-all"
+                                                className="flex items-center gap-1.5 px-4 py-2 bg-white/5 hover:bg-blue-500/20 text-blue-400 text-xs font-black rounded-xl transition-all border border-white/5"
                                             >
                                                 <Edit3 size={14} /> 수정하기
                                             </button>
                                         )}
                                     </div>
                                     
-                                    <div className="flex-1 p-8 bg-slate-50 rounded-3xl border border-slate-100 shadow-inner relative">
+                                    <div className="flex-1 p-8 bg-black/40 rounded-3xl border border-white/5 shadow-inner relative">
                                         {isRetrying ? (
                                             <div className="flex flex-col h-full gap-5">
                                                 <textarea 
                                                     ref={textareaRef} 
                                                     value={userAnswer} 
                                                     onChange={(e) => setUserAnswer(e.target.value)} 
-                                                    className="w-full flex-1 bg-white p-6 rounded-2xl border-2 border-blue-500/30 outline-none resize-none text-slate-900 text-lg font-bold shadow-xl" 
+                                                    className="w-full flex-1 bg-slate-900 p-6 rounded-2xl border-2 border-blue-500/30 outline-none resize-none text-white text-lg font-bold shadow-xl" 
                                                     autoFocus 
                                                 />
                                                 <div className="flex gap-3">
-                                                    <button onClick={() => setIsRetrying(false)} className="flex-1 py-4 bg-slate-200 text-slate-600 font-black rounded-2xl transition-all active:scale-95">취소</button>
-                                                    <button onClick={handleRetrySubmit} className="flex-[2] py-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-2xl shadow-xl transition-all transform active:scale-95 flex items-center justify-center gap-2">
+                                                    <button onClick={() => setIsRetrying(false)} className="flex-1 py-4 bg-white/10 hover:bg-white/20 text-white font-black rounded-2xl transition-all active:scale-95 border border-white/5">취소</button>
+                                                    <button onClick={handleRetrySubmit} className="flex-[2] py-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-2xl shadow-[0_10px_30px_rgba(37,99,235,0.3)] transition-all transform active:scale-95 flex items-center justify-center gap-2">
                                                         <RefreshCw size={18} /> 재채점 실시
                                                     </button>
                                                 </div>
                                             </div>
                                         ) : (
-                                            /* 🔴 추가된 부분: 데이터가 이미지면 <img>태그로, 텍스트면 기존 방식으로 렌더링! */
                                             userAnswer?.startsWith('data:image') ? (
-                                                <div className="w-full h-full min-h-[300px] flex items-center justify-center bg-white rounded-2xl border-2 border-slate-200 p-2 shadow-sm">
-                                                    <img src={userAnswer} alt="나의 답안 이미지" className="max-w-full max-h-[400px] object-contain rounded-xl" />
+                                                <div className="w-full h-full min-h-[300px] flex items-center justify-center bg-transparent rounded-2xl border border-white/10 p-2 shadow-sm">
+                                                    <img src={userAnswer} alt="나의 답안 이미지" className="max-w-full max-h-[400px] object-contain rounded-xl drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]" />
                                                 </div>
                                             ) : (
                                                 <HighlightedUserAnswer />

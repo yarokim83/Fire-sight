@@ -42,10 +42,10 @@ const SubjectAccordion = ({ subject, problems, onSelectProblem, onDeleteProblem,
   };
 
   return (
-    <div className="border border-slate-700/50 bg-slate-800/20 rounded-xl overflow-hidden transition-all duration-300">
+    <div className="border border-white/10 bg-white/[0.01] backdrop-blur-xl rounded-2xl overflow-hidden transition-all duration-300 shadow-lg">
       <button 
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between p-4 bg-slate-800 hover:bg-slate-700/50 transition-colors"
+        className="w-full flex items-center justify-between p-5 bg-white/[0.01] hover:bg-white/[0.04] active:bg-white/[0.02] transition-colors"
       >
         <div className="flex items-center gap-3">
           <Folder className="text-blue-400" size={20} />
@@ -70,7 +70,7 @@ const SubjectAccordion = ({ subject, problems, onSelectProblem, onDeleteProblem,
             <div 
               key={item.id}
               onClick={() => onSelectProblem(item)}
-              className="relative flex items-center gap-4 p-3 rounded-lg cursor-pointer hover:bg-blue-500/10 group transition-colors"
+              className="relative flex items-center gap-4 p-3 rounded-xl cursor-pointer hover:bg-white/[0.05] group transition-all duration-300"
             >
               {getStatusIcon(item)}
               

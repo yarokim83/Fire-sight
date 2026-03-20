@@ -55,7 +55,7 @@ const ProblemCard = ({ data, onSelect, onDelete, showSubjectBadge = false }) => 
     return (
         <div 
             onClick={onSelect}
-            className="relative w-full flex items-center gap-4 p-3 rounded-lg cursor-pointer bg-slate-800/40 border border-slate-700/50 hover:bg-blue-500/10 hover:border-blue-500/30 group transition-all"
+            className="relative w-full flex items-center gap-4 p-4 rounded-xl cursor-pointer bg-white/[0.02] backdrop-blur-xl border border-white/10 hover:bg-white/[0.05] hover:border-white/20 hover:shadow-[0_0_25px_rgba(255,255,255,0.03)] group transition-all duration-300"
         >
             <div className="shrink-0">
                 {getStatusIcon(data)}

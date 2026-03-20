@@ -106,8 +106,8 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem }) => {
     <div className="flex-shrink-0 z-20 bg-slate-900/95 backdrop-blur-sm border-b border-slate-800 shadow-xl sticky top-0">
       <div className="py-1.5 px-4 md:px-6 max-w-5xl mx-auto">
         
-        <header className="flex items-center justify-between gap-4 mb-1.5">
-            <h2 className="text-sm font-bold text-white flex items-center gap-1.5 whitespace-nowrap">
+        <header className="flex items-center justify-between gap-4 mb-2">
+            <h2 className="text-sm font-black text-white flex items-center gap-1.5 whitespace-nowrap drop-shadow-md">
               <BookCopy size={16} className="text-blue-500" /> 단권화 문제집
             </h2>
             <div className="flex-grow flex justify-end overflow-hidden">
@@ -121,23 +121,23 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem }) => {
             </div>
         </header>
 
-        <div className="flex bg-slate-800/40 rounded-t-md border-x border-t border-slate-700/50">
+        <div className="flex bg-white/[0.02] rounded-t-2xl border-x border-t border-white/10 overflow-hidden shadow-inner">
             <TabButton id="ALL" label="전체" icon={Book} activeTab={activeTab} onClick={setActiveTab} />
             <TabButton id="NEW" label="미학습" icon={Sparkles} activeTab={activeTab} onClick={setActiveTab} />
             <TabButton id="REVIEW" label="복습" icon={RefreshCcw} activeTab={activeTab} onClick={setActiveTab} />
             <TabButton id="MASTERED" label="완료" icon={CheckCircle2} activeTab={activeTab} onClick={setActiveTab} />
         </div>
 
-        <div className="p-1 bg-slate-800/20 rounded-b-md border border-slate-700/50 flex flex-col gap-1">
-            <div className="flex items-center gap-1.5">
+        <div className="p-2 bg-white/[0.03] backdrop-blur-xl rounded-b-2xl border border-white/10 flex flex-col gap-2 shadow-2xl">
+            <div className="flex items-center gap-2">
                 <div className="relative flex-grow">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" size={13} />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                     <input 
                         type="text"
                         placeholder="제목, 내용 검색..."
                         value={searchTerm || ''}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full bg-slate-900/40 border border-slate-700/50 rounded px-8 py-1 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
+                        className="w-full bg-black/40 border border-white/10 rounded-xl px-9 py-2 text-xs font-bold text-white focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-white/20 shadow-inner"
                     />
                     {searchTerm && (
                         <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
@@ -146,22 +146,22 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem }) => {
                     )}
                 </div>
                 
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5">
                     <button 
                         onClick={() => setIsTagsExpanded(!isTagsExpanded)}
-                        className={`p-1 rounded border transition-all ${isTagsExpanded || selectedTags?.length > 0 ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-900/50 border-slate-700 text-slate-400'}`}
+                        className={`p-2 rounded-xl transition-all shadow-lg ${isTagsExpanded || selectedTags?.length > 0 ? 'bg-blue-600 border border-blue-500 text-white' : 'bg-black/50 border border-white/10 text-white/50 hover:bg-white/5 hover:text-white'}`}
                     >
-                        <Tag size={13} />
+                        <Tag size={14} />
                     </button>
 
-                    <div className="flex bg-slate-900/50 rounded p-0.5 border border-slate-700">
-                        <button onClick={() => setViewType('group')} className={`p-1 rounded ${viewType === 'group' ? 'bg-slate-700 text-white' : 'text-slate-500'}`}><AlignJustify size={13} /></button>
-                        <button onClick={() => setViewType('list')} className={`p-1 rounded ${viewType === 'list' ? 'bg-slate-700 text-white' : 'text-slate-500'}`}><LayoutList size={13} /></button>
+                    <div className="flex bg-black/50 rounded-xl p-0.5 border border-white/10 shadow-inner">
+                        <button onClick={() => setViewType('group')} className={`p-1.5 rounded-lg transition-all ${viewType === 'group' ? 'bg-white/10 text-white shadow' : 'text-white/40 hover:text-white/80'}`}><AlignJustify size={14} /></button>
+                        <button onClick={() => setViewType('list')} className={`p-1.5 rounded-lg transition-all ${viewType === 'list' ? 'bg-white/10 text-white shadow' : 'text-white/40 hover:text-white/80'}`}><LayoutList size={14} /></button>
                     </div>
 
-                    <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-slate-900/50 border border-slate-700 rounded px-1 py-0.5 text-[10px] text-white focus:outline-none">
-                        <option value="latest">최신</option>
-                        <option value="wrong">오답</option>
+                    <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-black/50 border border-white/10 rounded-xl px-2 py-2 text-xs font-bold text-white focus:outline-none shadow-inner cursor-pointer appearance-none text-center">
+                        <option value="latest">최신순</option>
+                        <option value="wrong">오답순</option>
                         <option value="random">랜덤</option>
                     </select>
                 </div>
@@ -235,7 +235,11 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem }) => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#0f172a] text-white overflow-hidden">
+    <div className="flex flex-col h-full bg-black text-white overflow-hidden animate-in fade-in duration-500 relative">
+      {/* Background Ambience Layer */}
+      <div className="absolute top-[-20%] left-0 w-[500px] h-[500px] bg-blue-600/10 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-600/5 blur-[150px] rounded-full pointer-events-none" />
+
       {renderHeader()}
       <main className="flex-grow w-full max-w-5xl mx-auto p-2 md:p-4 pt-1.5 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800">
         {renderMainContent()}
@@ -247,9 +251,9 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem }) => {
 const TabButton = ({ id, label, icon: Icon, activeTab, onClick }) => (
     <button 
       onClick={() => onClick(id)}
-      className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2 text-[11px] font-bold border-b transition-all ${activeTab === id ? 'border-blue-500 text-white bg-blue-500/5' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+      className={`flex-1 flex items-center justify-center gap-2 py-3 px-3 text-xs font-black border-b-2 transition-all duration-300 ${activeTab === id ? 'border-blue-500 text-white bg-blue-500/10 shadow-[inset_0_-20px_30px_-20px_rgba(59,130,246,0.3)]' : 'border-transparent text-white/40 hover:text-white hover:bg-white/[0.02]'}`}
     >
-      <Icon size={12} /> <span>{label}</span>
+      <Icon size={14} /> <span>{label}</span>
     </button>
   );
 
