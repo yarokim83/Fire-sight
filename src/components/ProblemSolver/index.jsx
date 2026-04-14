@@ -31,6 +31,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const [editedAnswer, setEditedAnswer] = useState('');
     const [editedTerms, setEditedTerms] = useState([]);
     const [editedNumbers, setEditedNumbers] = useState([]);
+    const [editedSubject, setEditedSubject] = useState('');
     const [newTerm, setNewTerm] = useState('');
     const [newNumber, setNewNumber] = useState('');
 
@@ -83,6 +84,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             setEditedAnswer(formattedAnswer);
             setEditedTerms(mergedTerms);
             setEditedNumbers(mergedNumbers);
+            setEditedSubject(p.subject || p.category || '');
 
             setLocalProblemImages(p.images || []);
             setLocalAnswerImages(p.answerImages || []);
@@ -212,6 +214,8 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 answer: editedAnswer,
                 keywords: finalTerms,
                 numbers: finalNumbers,
+                subject: editedSubject,
+                category: editedSubject,
                 gradingPoints: {
                     mandatory_terms: finalTerms,
                     mandatory_numbers: finalNumbers
@@ -224,6 +228,8 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 modelAnswer: editedAnswer,
                 keywords: finalTerms,
                 numbers: finalNumbers,
+                subject: editedSubject,
+                category: editedSubject,
                 gradingPoints: {
                     mandatory_terms: finalTerms,
                     mandatory_numbers: finalNumbers
@@ -398,11 +404,30 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 <div className={`${(!isEditMode && showAnswer && gradingResult) ? 'max-w-[1500px]' : 'max-w-4xl'} mx-auto space-y-8 transition-all duration-700`}>
                     
                     <div className="bg-slate-900/50 backdrop-blur-sm rounded-[2rem] p-8 border border-slate-800 shadow-2xl relative overflow-hidden group">
-                        <div className="flex justify-between items-start mb-8">
-                            <h1 className="text-2xl md:text-3xl font-black text-white leading-tight tracking-tight break-keep">{currentProblem.title}</h1>
+                        <div className="flex justify-between items-start mb-8 gap-4">
+                            {isEditMode ? (
+                                <div className="flex-1">
+                                    <h1 className="text-2xl md:text-3xl font-black text-white/50 leading-tight tracking-tight break-keep mb-4">{currentProblem.title}</h1>
+                                    <div className="flex items-center gap-3 bg-black/40 p-3 rounded-2xl border border-white/5 w-fit">
+                                        <label className="text-sm font-bold text-slate-400 pl-2">카테고리(과목) 변경:</label>
+                                        <select 
+                                            value={editedSubject} 
+                                            onChange={(e) => setEditedSubject(e.target.value)}
+                                            className="bg-slate-800 border-2 border-slate-700 rounded-xl px-4 py-2 text-white font-bold outline-none focus:border-blue-500 transition-all cursor-pointer"
+                                        >
+                                            {SUBJECT_LIST.map(sub => (
+                                                <option key={sub} value={sub}>{sub}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                            ) : (
+                                <h1 className="text-2xl md:text-3xl font-black text-white leading-tight tracking-tight break-keep">{currentProblem.title}</h1>
+                            )}
+                            
                             {isEditMode && (
-                                <button onClick={handleQuickUpdate} className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-black rounded-xl transition-all active:scale-95 shadow-lg shadow-blue-500/20">
-                                    <Save size={16} /> 전체 저장
+                                <button onClick={handleQuickUpdate} className="flex flex-shrink-0 items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-black rounded-xl transition-all active:scale-95 shadow-[0_10px_30px_rgba(37,99,235,0.3)]">
+                                    <Save size={16} /> 수정 완료
                                 </button>
                             )}
                         </div>
@@ -696,7 +721,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             </div>
 
             {isOverlayMode && (
-                <div className="fixed inset-0 z-[100] pointer-events-auto bg-black/50 backdrop-blur-sm animate-in fade-in">
+                <div className="fixed inset-0 z-[100] pointer-events-auto bg-transparent border-4 border-amber-500/30 animate-in fade-in">
                     <div className="absolute inset-0">
                         <SharedCanvas 
                             ref={overlayCanvasRef} 

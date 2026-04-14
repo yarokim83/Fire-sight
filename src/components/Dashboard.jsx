@@ -92,18 +92,7 @@ export default function Dashboard({ setMode, dDay }) {
                 accuracy: targetAccuracy
             });
 
-            let start = 0;
-            const duration = 1500;
-            const increment = targetAccuracy / (duration / 16);
-            const timer = setInterval(() => {
-                start += increment;
-                if (start >= targetAccuracy) {
-                    setDisplayAccuracy(targetAccuracy);
-                    clearInterval(timer);
-                } else {
-                    setDisplayAccuracy(Math.floor(start));
-                }
-            }, 16);
+            // 애니메이션 로직은 하단의 별도 useEffect로 분리됨
 
             const subjMap = {};
             Object.keys(SUBJECT_CONFIG).forEach(key => { subjMap[key] = { total: 0, scoreSum: 0 }; });
@@ -136,6 +125,32 @@ export default function Dashboard({ setMode, dDay }) {
     }, []);
 
     useEffect(() => { setQuote(quotes[Math.floor(Math.random() * quotes.length)]); }, [quotes]);
+
+    // 🔴 [수정됨] 타이머 메모리 누수 방지 로직 (useEffect 분리 및 Cleanup 추가)
+    useEffect(() => {
+        let start = 0;
+        const targetAccuracy = stats.accuracy || 0;
+        
+        if (targetAccuracy === 0) {
+            setDisplayAccuracy(0);
+            return;
+        }
+
+        const duration = 1500;
+        const increment = targetAccuracy / (duration / 16);
+        const timer = setInterval(() => {
+            start += increment;
+            if (start >= targetAccuracy) {
+                setDisplayAccuracy(targetAccuracy);
+                clearInterval(timer);
+            } else {
+                setDisplayAccuracy(Math.floor(start));
+            }
+        }, 16);
+
+        // 컴포넌트 언마운트 시 타이머 클리어 (메모리 릭 방지)
+        return () => clearInterval(timer);
+    }, [stats.accuracy]);
 
     return (
         <div className="flex flex-col h-full bg-black text-white p-6 md:p-10 overflow-y-auto w-full animate-in fade-in duration-1000">

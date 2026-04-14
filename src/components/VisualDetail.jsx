@@ -23,16 +23,22 @@ const VisualDetail = ({ data, onBack }) => {
         if (!window.confirm(`'${data.title}' 자료를 정말 삭제하시겠습니까?`)) return;
 
         // 2. 삭제 로직
-        if (data.isCustom) {
-            // Hard Delete
-            const storedData = JSON.parse(localStorage.getItem('fireSight_customData') || '[]');
-            const updatedData = storedData.filter(item => item.id !== data.id);
-            localStorage.setItem('fireSight_customData', JSON.stringify(updatedData));
-        } else {
-            // Soft Delete (Hide Default)
-            const deletedDefaults = JSON.parse(localStorage.getItem('fireSight_deletedDefault') || '[]');
-            const updated = [...deletedDefaults, data.id];
-            localStorage.setItem('fireSight_deletedDefault', JSON.stringify(updated));
+        try {
+            if (data.isCustom) {
+                // Hard Delete
+                const storedData = JSON.parse(localStorage.getItem('fireSight_customData') || '[]');
+                const updatedData = storedData.filter(item => item.id !== data.id);
+                localStorage.setItem('fireSight_customData', JSON.stringify(updatedData));
+            } else {
+                // Soft Delete (Hide Default)
+                const deletedDefaults = JSON.parse(localStorage.getItem('fireSight_deletedDefault') || '[]');
+                const updated = [...deletedDefaults, data.id];
+                localStorage.setItem('fireSight_deletedDefault', JSON.stringify(updated));
+            }
+        } catch (err) {
+            console.error("Local data parse error during deletion:", err);
+            alert("로컬 캐시 오류가 발생하여 삭제에 실패했습니다.");
+            return;
         }
 
         alert("삭제되었습니다.");
