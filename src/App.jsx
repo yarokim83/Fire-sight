@@ -14,6 +14,7 @@ import Dashboard from './components/Dashboard'
 import StrategyView from './components/StrategyView'
 import StudyManager from './components/StudyManager'
 import CanvasWidget from './components/CanvasWidget'
+import { useFirestoreSync } from './hooks/useFirestoreSync'
 
 // [NFTC 6대 분류 테마 설정]
 const THEME_CONFIG = {
@@ -50,6 +51,15 @@ function App() {
   // 인증 상태
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [tokenClient, setTokenClient] = useState(null);
+
+  // 🔴 [리팩토링] 데이터 Fetch 상단 끌어올리기 (Zero Latency)
+  const globalData = useFirestoreSync();
+  const [workbookFilters, setWorkbookFilters] = useState({
+     activeTab: 'ALL',
+     sortBy: 'latest',
+     searchTerm: '',
+     selectedTags: []
+  });
 
   const theme = THEME_CONFIG[subject] || THEME_CONFIG['수계'];
 
@@ -202,7 +212,7 @@ function App() {
 
   const renderContent = () => {
     switch (mode) {
-      case 'dashboard': return <Dashboard setMode={setMode} subject={subject} dDay={dDay} />;
+      case 'dashboard': return <Dashboard setMode={setMode} subject={subject} dDay={dDay} globalData={globalData} />;
 
       case 'smart-upload':
         return (
@@ -223,6 +233,9 @@ function App() {
             subject={subject}
             initialFilter={activeStrategy}
             onEditProblem={handleEditProblem}
+            globalData={globalData}
+            filterState={workbookFilters}
+            setFilterState={setWorkbookFilters}
           />
         );
 

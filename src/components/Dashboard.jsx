@@ -16,8 +16,9 @@ const SUBJECT_CONFIG = {
     '소방시설 공통': { color: 'text-purple-400', barColor: 'bg-purple-500', icon: Layers, keywords: ['공통', '법령', '기타'] }
 };
 
-export default function Dashboard({ setMode, dDay }) {
-    const [loading, setLoading] = useState(true);
+export default function Dashboard({ setMode, dDay, globalData }) {
+    const { problems, loading: isGlobalLoading } = globalData || { problems: [], loading: false };
+    const [loading, setLoading] = useState(isGlobalLoading);
     const [quote, setQuote] = useState("");
     const [stats, setStats] = useState({ totalProblems: 0, mastered: 0, reviewNeeded: 0, accuracy: 0 });
     const [displayAccuracy, setDisplayAccuracy] = useState(0); 
@@ -77,11 +78,12 @@ export default function Dashboard({ setMode, dDay }) {
         "2027년 합격, 당신은 반드시 해낸다. 이미 그렇게 정해져 있다."
     ], []);
 
+    // 🔴 [리팩토링] 로컬 onSnapshot 삭제 및 globalData 계산으로 대체
     useEffect(() => {
-        const q = query(collection(db, "workbook"), orderBy("createdAt", "desc"));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const problems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            const total = problems.length;
+        setLoading(isGlobalLoading);
+        if (isGlobalLoading || !problems) return;
+
+        const total = problems.length;
             const masteredCount = problems.filter(p => (p.recentScore || p.lastScore) >= 100).length;
             const targetAccuracy = total > 0 ? Math.round((masteredCount / total) * 100) : 0;
             
@@ -113,18 +115,15 @@ export default function Dashboard({ setMode, dDay }) {
                 total: data.total, ...SUBJECT_CONFIG[name]
             })).sort((a, b) => b.total - a.total));
 
-            setRecentActivities(problems.slice(0, 4).map(p => ({
+            const sortedProblems = [...problems].sort((a, b) => b.createdAt - a.createdAt);
+            setRecentActivities(sortedProblems.slice(0, 4).map(p => ({
                 id: p.id, title: p.title || "제목 없음",
                 desc: p.studyCount > 0 ? `최근 ${p.recentScore || p.lastScore}점` : "신규 등록",
                 icon: p.studyCount > 0 ? Activity : Plus,
                 color: (p.recentScore || p.lastScore) === 100 ? 'text-emerald-400' : 'text-blue-400',
             })));
             setLoading(false);
-        });
-        return () => unsubscribe();
-    }, []);
-
-    useEffect(() => { setQuote(quotes[Math.floor(Math.random() * quotes.length)]); }, [quotes]);
+    }, [problems, isGlobalLoading]);
 
     // 🔴 [수정됨] 타이머 메모리 누수 방지 로직 (useEffect 분리 및 Cleanup 추가)
     useEffect(() => {

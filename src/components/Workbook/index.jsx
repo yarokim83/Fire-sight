@@ -7,19 +7,20 @@ import {
 import DashboardWidget from './DashboardWidget';
 import SubjectAccordion from './SubjectAccordion';
 import ProblemCard from './ProblemCard'; 
-import { useWorkbookData } from './useWorkbookData';
+import { useWorkbookFilter } from './useWorkbookFilter';
 import ProblemSolver from '../ProblemSolver'; 
 import { deleteProblem } from '../../utils/db'; 
 
-const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem }) => {
-  const { problems, loading, processedProblems, filterState, allTags } = useWorkbookData();
+const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem, globalData, filterState, setFilterState }) => {
+  const { problems, loading } = globalData || { problems: [], loading: false };
+  const { processedProblems, filterStateHandlers, allTags } = useWorkbookFilter(problems, filterState, setFilterState);
   
   const { 
     activeTab, setActiveTab, 
     sortBy, setSortBy, 
     searchTerm, setSearchTerm,
     selectedTags, setSelectedTags
-  } = filterState || {};
+  } = filterStateHandlers;
 
   const [solveSession, setSolveSession] = useState(null);
   const [isTagsExpanded, setIsTagsExpanded] = useState(false);
