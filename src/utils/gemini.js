@@ -1,6 +1,8 @@
 /* src/utils/gemini.js */
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const genAI = new GoogleGenerativeAI(API_KEY);
 
 /**
  * [정밀 분류 지식베이스]
@@ -15,12 +17,19 @@ const CLASSIFICATION_SYSTEM = `
 6. 소방시설 공통: 비상전원, 내진설계, 소방기본법, 공통 화재안전성능기준(NFPC).
 `;
 
-async function fileToBase64(file) {
+async function fileToGenerativePart(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
             if (!reader.result) reject(new Error("파일 읽기 실패"));
-            else resolve(reader.result.split(',')[1]);
+            else {
+                resolve({
+                    inlineData: {
+                        data: reader.result.split(',')[1],
+                        mimeType: file.type
+                    }
+                });
+            }
         };
         reader.onerror = reject;
         reader.readAsDataURL(file);
@@ -28,15 +37,25 @@ async function fileToBase64(file) {
 }
 
 /**
- * Gemini 이미지 분석 함수
- * 🔴 [개선] 인자로 넘어오는 modelName을 우선하되, 기본값을 최신 3.1 Pro Preview로 설정
+ * Gemini 이미지 분석 함수 (SDK 공식 라이브러리 사용)
+ * 🔴 [개선] 직접 fetch 대신 SDK를 사용하여 v1/v1beta 버전 및 모델 가용성 이슈 해결
  */
 export async function analyzeImage(file, type = 'workbook', mode = 'problem', modelName = 'gemini-1.5-pro') {
     try {
         if (!API_KEY) throw new Error("API Key가 없습니다.");
-        const base64Data = await fileToBase64(file);
+
+        // SDK 모델 인스턴스 생성
+        const model = genAI.getGenerativeModel({ 
+            model: modelName,
+            generationConfig: {
+                responseMimeType: "application/json",
+                temperature: 0,
+                maxOutputTokens: 8192 
+            }
+        });
+
+        const imagePart = await fileToGenerativePart(file);
         
-        // 🔴 [개선] 구조적 줄바꿈 및 문맥 병합 인스트럭션 강화
         const smartInstruction = `
             당신은 소방시설관리사 전문 OCR 스캐너이자 채점 설계자입니다.
             [원문 보존] 이미지의 텍스트를 절대 요약하지 말고 '원본 그대로' 추출하세요.
@@ -48,7 +67,6 @@ export async function analyzeImage(file, type = 'workbook', mode = 'problem', mo
 
         let promptText = "";
 
-        // 🔴 [핵심 개선] AI에게 결과물을 줄 때부터 UI 폼 변수명(description, modelAnswer)에 맞춰서 달라고 강제합니다.
         if (mode === 'problem') {
             promptText = `${smartInstruction}
                 이미지의 지문을 OCR 하고 검색용 'tags'를 5개 이내로 추출하세요. 
@@ -73,36 +91,13 @@ export async function analyzeImage(file, type = 'workbook', mode = 'problem', mo
                 }`;
         }
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${API_KEY}`;
-
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [
-                        { text: promptText },
-                        { inline_data: { mime_type: file.type, data: base64Data } }
-                    ]
-                }],
-                generationConfig: {
-                    response_mime_type: "application/json",
-                    temperature: 0,
-                    max_output_tokens: 8192 
-                }
-            })
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(`API 오류: ${errorData.error?.message || response.statusText}`);
-        }
-
-        const data = await response.json();
-        const textRes = data.candidates[0].content.parts[0].text;
+        const result = await model.generateContent([promptText, imagePart]);
+        const response = await result.response;
+        const textRes = response.text();
         
         let parsedData = {};
         try {
+            // JSON 마크다운 태그가 포함되어 있을 수 있으므로 정제 후 파싱
             parsedData = JSON.parse(textRes.replace(/```json|```/g, '').trim());
         } catch (e) {
             console.error("JSON 파싱 오류:", textRes);
@@ -112,7 +107,6 @@ export async function analyzeImage(file, type = 'workbook', mode = 'problem', mo
         const extractedTags = parsedData.tags || [];
         const keywordsString = extractedTags.join(', ');
 
-        // 🔴 [최종 매핑] AI가 과거 프롬프트 습관대로 content나 answer를 뱉어도, 강제로 화면 변수명(description, modelAnswer)으로 연결
         return { 
             ...parsedData,
             type: type,
@@ -127,7 +121,11 @@ export async function analyzeImage(file, type = 'workbook', mode = 'problem', mo
         };
 
     } catch (error) {
-        console.error("🔥 Gemini 분석 실패:", error);
+        console.error("🔥 Gemini SDK 분석 실패:", error);
+        // 에러 메시지가 'Not found'인 경우 사용자가 알기 쉽게 가공
+        if (error.message.includes('not found')) {
+            throw new Error(`선택하신 모델(${modelName})을 현재 API 버전에서 사용할 수 없습니다. 다른 모델로 변경해 보세요.`);
+        }
         throw error;
     }
 }
