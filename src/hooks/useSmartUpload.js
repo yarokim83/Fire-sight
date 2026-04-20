@@ -8,7 +8,7 @@ import { getCroppedImg } from '../utils/canvasUtils';
 
 export const useSmartUpload = (initialData, onSaveComplete) => {
     // 🔴 AI 모델 선택 상태 (로컬 스토리지 유지)
-    const [aiModel, setAiModel] = useState(() => localStorage.getItem('firesight_aimodel') || 'gemini-3.1-pro-preview');
+    const [aiModel, setAiModel] = useState(() => localStorage.getItem('firesight_aimodel') || 'gemini-1.5-pro');
 
     useEffect(() => {
         if (aiModel) {
@@ -161,7 +161,8 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
                     })
                     .catch(err => {
                         console.error(`지문 ${i + 1}번째 장 실패:`, err);
-                        addLog(`⚠️ 지문 ${i + 1}쪽 분석 실패`);
+                        const errorMsg = err.message || "알 수 없는 오류";
+                        addLog(`⚠️ 지문 ${i + 1}쪽 분석 실패: ${errorMsg}`);
                         return null;
                     })
             );
@@ -219,7 +220,8 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
                     })
                     .catch(err => {
                         console.error(`해설 ${i + 1}번째 장 실패:`, err);
-                        addLog(`⚠️ 해설 ${i + 1}쪽 분석 실패`);
+                        const errorMsg = err.message || "알 수 없는 오류";
+                        addLog(`⚠️ 해설 ${i + 1}쪽 분석 실패: ${errorMsg}`);
                         return null;
                     })
             );

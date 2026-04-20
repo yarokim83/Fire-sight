@@ -31,7 +31,7 @@ async function fileToBase64(file) {
  * Gemini 이미지 분석 함수
  * 🔴 [개선] 인자로 넘어오는 modelName을 우선하되, 기본값을 최신 3.1 Pro Preview로 설정
  */
-export async function analyzeImage(file, type = 'workbook', mode = 'problem', modelName = 'gemini-3.1-pro-preview') {
+export async function analyzeImage(file, type = 'workbook', mode = 'problem', modelName = 'gemini-1.5-pro') {
     try {
         if (!API_KEY) throw new Error("API Key가 없습니다.");
         const base64Data = await fileToBase64(file);
