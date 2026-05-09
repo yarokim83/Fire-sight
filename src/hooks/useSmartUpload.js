@@ -8,7 +8,7 @@ import { getCroppedImg } from '../utils/canvasUtils';
 
 export const useSmartUpload = (initialData, onSaveComplete) => {
     // 🔴 AI 모델 선택 상태 (로컬 스토리지 유지)
-    const [aiModel, setAiModel] = useState(() => localStorage.getItem('firesight_aimodel') || 'gemini-1.5-pro');
+    const [aiModel, setAiModel] = useState(() => localStorage.getItem('firesight_aimodel') || 'gemini-3.1-pro-preview');
 
     useEffect(() => {
         if (aiModel) {

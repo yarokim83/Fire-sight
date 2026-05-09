@@ -40,7 +40,7 @@ async function fileToGenerativePart(file) {
  * Gemini 이미지 분석 함수 (SDK 공식 라이브러리 사용)
  * 🔴 [개선] 직접 fetch 대신 SDK를 사용하여 v1/v1beta 버전 및 모델 가용성 이슈 해결
  */
-export async function analyzeImage(file, type = 'workbook', mode = 'problem', modelName = 'gemini-1.5-pro') {
+export async function analyzeImage(file, type = 'workbook', mode = 'problem', modelName = 'gemini-3.1-pro-preview') {
     try {
         if (!API_KEY) throw new Error("API Key가 없습니다.");
 
