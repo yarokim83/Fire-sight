@@ -129,7 +129,7 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
                     <div className="flex-1 overflow-y-auto scrollbar-hide py-12 px-8">
                         <UploadIntro
                             formData={formData} setFormData={setFormData}
-                            isManualMode={isManualMode} setIsManualMode={setIsManualMode} inputFileRef={inputFileRef}
+                            isManualMode={isManualMode} inputFileRef={inputFileRef}
                             onUpload={handleInitialUpload} onViewMode={setViewMode} setStep={setStep}
                         />
                     </div>
