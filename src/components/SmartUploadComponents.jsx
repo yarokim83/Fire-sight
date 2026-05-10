@@ -124,11 +124,28 @@ export const CropModal = ({
 /** ---------------------------------------------------------
  * Step 1: 업로드 인트로 (콤팩트 중앙 정렬)
  --------------------------------------------------------- */
-export const UploadIntro = ({ formData, setFormData, inputFileRef, onUpload }) => (
+export const UploadIntro = ({ formData, setFormData, isManualMode, setIsManualMode, inputFileRef, onUpload }) => (
     <div className="h-full flex flex-col items-center justify-center animate-in fade-in duration-500 py-6">
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
             <h3 className="text-2xl font-bold text-white mb-1 tracking-tight">자료 등록 방식 선택</h3>
             <p className="text-white/20 text-[10px] uppercase tracking-[0.3em] font-black">Data Ingestion System</p>
+        </div>
+
+        {/* AI 분석 건너뛰기 토글 */}
+        <div className="mb-6 flex items-center justify-center">
+            <button 
+                onClick={() => setIsManualMode(!isManualMode)}
+                className={`flex items-center gap-3 px-5 py-2.5 rounded-2xl border transition-all ${
+                    isManualMode 
+                    ? 'bg-amber-500/20 border-amber-500/50 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.2)]' 
+                    : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10'
+                }`}
+            >
+                <div className={`w-3 h-3 rounded-full ${isManualMode ? 'bg-amber-400 animate-pulse' : 'bg-white/20'}`} />
+                <span className="text-xs font-black uppercase tracking-widest">
+                    {isManualMode ? 'MANUAL MODE ON (AI SKIP)' : 'MANUAL MODE OFF'}
+                </span>
+            </button>
         </div>
 
         <div className="grid grid-cols-2 gap-4 w-full max-w-lg mb-8 px-4">
@@ -153,14 +170,16 @@ export const UploadIntro = ({ formData, setFormData, inputFileRef, onUpload }) =
         </div>
         
         <div 
-            className="w-full max-w-sm h-40 border-2 border-dashed border-white/10 rounded-[3rem] flex flex-col items-center justify-center hover:border-blue-500/50 hover:bg-blue-500/5 transition-all cursor-pointer group"
+            className="w-full max-w-sm h-40 border-2 border-dashed border-white/10 rounded-[3rem] flex flex-col items-center justify-center hover:border-blue-500/50 hover:bg-blue-500/5 transition-all cursor-pointer group relative overflow-hidden"
             onClick={() => inputFileRef.current.click()}
         >
             <input type="file" accept="image/*" multiple onChange={onUpload} className="hidden" ref={inputFileRef} />
-            <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mb-3 group-hover:bg-blue-600 transition-all shadow-xl">
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-all shadow-xl ${isManualMode ? 'bg-amber-500/10 group-hover:bg-amber-600' : 'bg-white/5 group-hover:bg-blue-600'}`}>
                 <Upload size={20} className="text-white/40 group-hover:text-white" />
             </div>
-            <p className="text-white/80 font-black text-[11px] tracking-widest uppercase text-center px-4">Tap to Upload Problem Image</p>
+            <p className="text-white/80 font-black text-[11px] tracking-widest uppercase text-center px-4">
+                {isManualMode ? 'Tap to Upload (AI Skipped)' : 'Tap to Upload Problem Image'}
+            </p>
         </div>
     </div>
 );
