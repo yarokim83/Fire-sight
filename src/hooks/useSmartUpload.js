@@ -153,8 +153,10 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         const batchResults = [];
         
         try {
-            const promises = files.map((file, i) => 
-                analyzeImage(file, formData.type, 'problem', aiModel)
+            const promises = files.map(async (file, i) => {
+                // 🔴 [최적화] AI 판독 전용 초경량 압축 (토큰 95% 절약)
+                const compressedFile = await imageCompression(file, { maxSizeMB: 0.5, maxWidthOrHeight: 1024, useWebWorker: true }).catch(() => file);
+                return analyzeImage(compressedFile, formData.type, 'problem', aiModel)
                     .then(res => {
                         addLog(`✅ 지문 ${i + 1}쪽 추출 완료`);
                         return res;
@@ -164,8 +166,8 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
                         const errorMsg = err.message || "알 수 없는 오류";
                         addLog(`⚠️ 지문 ${i + 1}쪽 분석 실패: ${errorMsg}`);
                         return null;
-                    })
-            );
+                    });
+            });
             
             const results = await Promise.all(promises);
             results.forEach(res => { if (res) batchResults.push(res); });
@@ -212,8 +214,10 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         const batchResults = [];
 
         try {
-            const promises = files.map((file, i) => 
-                analyzeImage(file, formData.type, 'answer', aiModel)
+            const promises = files.map(async (file, i) => {
+                // 🔴 [최적화] AI 판독 전용 초경량 압축 (토큰 95% 절약)
+                const compressedFile = await imageCompression(file, { maxSizeMB: 0.5, maxWidthOrHeight: 1024, useWebWorker: true }).catch(() => file);
+                return analyzeImage(compressedFile, formData.type, 'answer', aiModel)
                     .then(res => {
                         addLog(`✅ 해설 ${i + 1}쪽 추출 완료`);
                         return res;
@@ -223,8 +227,8 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
                         const errorMsg = err.message || "알 수 없는 오류";
                         addLog(`⚠️ 해설 ${i + 1}쪽 분석 실패: ${errorMsg}`);
                         return null;
-                    })
-            );
+                    });
+            });
             
             const results = await Promise.all(promises);
             results.forEach(res => { if (res) batchResults.push(res); });
