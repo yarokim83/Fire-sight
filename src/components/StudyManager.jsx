@@ -1,133 +1,130 @@
 import React, { useState, useRef } from 'react';
 import { 
-    Database, Download, Upload, FileArchive, AlertTriangle, 
-    CheckCircle2, Loader2, ShieldCheck, RefreshCw, CloudUpload
+    Database, Download, Upload, FileJson, AlertTriangle, 
+    CheckCircle2, Loader2, ShieldCheck, RefreshCw, Cloud, Save
 } from 'lucide-react';
 import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
-import { db } from '../firebase'; 
+import { ref, getBlob } from 'firebase/storage';
+import { db, storage } from '../firebase'; 
 import JSZip from 'jszip';
-import { saveAs } from 'file-saver';
 
-export default function StudyManager({ accessToken, tokenClient, isAuthenticated }) {
+export default function StudyManager({ isAuthenticated, accessToken, handleLogin }) {
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState(null); 
-    const [progress, setProgress] = useState(''); // 진행 상태 텍스트
-    
     const fileInputRef = useRef(null);
 
-    // 이미지 Fetch 헬퍼 (CORS 우회 및 Blob 변환)
-    const fetchImageToBlob = async (url) => {
-        try {
-            const response = await fetch(url);
-            if (!response.ok) throw new Error('Network response was not ok');
-            return await response.blob();
-        } catch (e) {
-            console.warn('Image fetch failed:', url, e);
-            return null;
-        }
-    };
-
-    // 1. [통합 백업] ZIP 아카이브 생성
-    const createZipArchive = async () => {
-        setStatus(null);
-        setProgress('데이터베이스에서 문서를 읽어오는 중...');
-        
+    // 내부 공통 백업 생성 함수 (JSON 데이터 추출 및 이미지 ZIP 패키징)
+    const generateBackupZip = async () => {
         const querySnapshot = await getDocs(collection(db, "workbook"));
         if (querySnapshot.empty) {
             throw new Error("저장된 데이터가 없습니다.");
         }
 
-        const data = [];
-        let imageUrls = new Set();
-
-        querySnapshot.forEach(doc => {
+        const data = querySnapshot.docs.map(doc => {
             const docData = doc.data();
-            const item = {
+            return {
                 _id: doc.id,
                 ...docData,
                 createdAt: docData.createdAt?.toDate ? docData.createdAt.toDate().toISOString() : docData.createdAt,
                 lastStudiedAt: docData.lastStudiedAt?.toDate ? docData.lastStudiedAt.toDate().toISOString() : docData.lastStudiedAt
             };
-            data.push(item);
-            if (item.images) item.images.forEach(url => imageUrls.add(url));
-            if (item.answerImages) item.answerImages.forEach(url => imageUrls.add(url));
         });
 
         const zip = new JSZip();
-        zip.file("data.json", JSON.stringify(data, null, 2));
+        zip.file("FireSight_Backup.json", JSON.stringify(data, null, 2));
 
-        const imageFolder = zip.folder("images");
-        const urlsArray = Array.from(imageUrls);
+        const imgFolder = zip.folder("images");
         
-        for (let i = 0; i < urlsArray.length; i++) {
-            setProgress(`원본 이미지 다운로드 및 압축 중... (${i + 1}/${urlsArray.length})`);
-            const url = urlsArray[i];
-            const blob = await fetchImageToBlob(url);
-            if (blob) {
-                // Firebase URL에서 고유 파일명 추출 (대략적인 추측)
-                const urlObj = new URL(url);
-                const pathParts = urlObj.pathname.split('/');
-                const filename = decodeURIComponent(pathParts[pathParts.length - 1]).replace(/[^a-zA-Z0-9.-]/g, '_') || `image_${i}.jpg`;
-                imageFolder.file(filename, blob);
+        let urls = new Set();
+        data.forEach(item => {
+            if(item.images) item.images.forEach(u => urls.add(u));
+            if(item.answerImages) item.answerImages.forEach(u => urls.add(u));
+        });
+        
+        const urlArray = Array.from(urls);
+        let downloadedCount = 0;
+
+        // Blob 파일 다운로드
+        for (const url of urlArray) {
+            try {
+                // Firebase Storage URL 인 경우에만
+                if (url.includes('firebasestorage')) {
+                    const imageRef = ref(storage, url);
+                    const blob = await getBlob(imageRef);
+                    
+                    const urlObj = new URL(url);
+                    const pathParts = urlObj.pathname.split('/');
+                    const fileName = decodeURIComponent(pathParts[pathParts.length - 1]).replace(/[^a-zA-Z0-9.\-_]/g, '_');
+                    
+                    imgFolder.file(fileName, blob);
+                }
+            } catch (e) {
+                console.warn("Failed to download image:", url, e);
             }
+            downloadedCount++;
+            setStatus({ type: 'info', message: `이미지 원본 추출 중... (${downloadedCount}/${urlArray.length})` });
         }
 
-        setProgress('ZIP 파일 패키징 중... (기기 성능에 따라 다소 시간이 소요될 수 있습니다)');
+        setStatus({ type: 'info', message: 'ZIP 압축 파일을 생성하고 있습니다...' });
         const zipBlob = await zip.generateAsync({ type: "blob" });
         return { zipBlob, dataLength: data.length };
     };
 
-    // 1-1. 로컬(아이패드) ZIP 저장
+    // 1. [백업] 로컬 다운로드 (ZIP)
     const handleLocalBackup = async () => {
         if (loading) return;
         setLoading(true);
+        setStatus(null);
+
         try {
-            const { zipBlob, dataLength } = await createZipArchive();
-            const dateStr = new Date().toISOString().slice(0, 10);
-            saveAs(zipBlob, `FireSight_Integrated_Backup_${dateStr}.zip`);
+            const { zipBlob, dataLength } = await generateBackupZip();
+            const url = URL.createObjectURL(zipBlob);
+            const link = document.createElement('a');
             
-            setStatus({ type: 'success', message: `✅ 총 ${dataLength}개의 문서 및 이미지가 통합 압축되었습니다.` });
+            const dateStr = new Date().toISOString().slice(0, 10);
+            link.href = url;
+            link.download = `FireSight_Backup_${dateStr}.zip`;
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            setStatus({
+                type: 'success',
+                message: `✅ 총 ${dataLength}개의 데이터와 이미지가 압축 저장되었습니다.`
+            });
         } catch (error) {
-            console.error(error);
-            setStatus({ type: 'error', message: `❌ 백업 실패: ${error.message}` });
+            console.error("Backup Failed:", error);
+            setStatus({ type: 'error', message: `❌ 로컬 백업 실패: ${error.message}` });
         } finally {
             setLoading(false);
-            setProgress('');
         }
     };
 
-    // 1-2. 구글 드라이브 동기화 업로드
-    const handleDriveUpload = async () => {
-        if (loading) return;
-
-        // 인증 체크
+    // 2. [백업] 구글 드라이브 업로드
+    const handleDriveBackup = async () => {
         if (!isAuthenticated || !accessToken) {
-            if (tokenClient) {
-                tokenClient.requestAccessToken({ prompt: 'consent' });
-            } else {
-                alert("구글 연동이 준비되지 않았습니다. 앱을 껐다가 다시 켜주세요.");
-            }
+            alert("구글 드라이브 연결을 위해 구글 계정 인증이 필요합니다.");
+            if (handleLogin) handleLogin();
             return;
         }
 
-        const FOLDER_ID = import.meta.env.VITE_GOOGLE_DRIVE_FOLDER_ID;
-        if (!FOLDER_ID) {
-            alert(".env에 VITE_GOOGLE_DRIVE_FOLDER_ID가 없습니다.");
-            return;
-        }
-
+        if (loading) return;
         setLoading(true);
+        setStatus(null);
+
         try {
-            const { zipBlob, dataLength } = await createZipArchive();
-            setProgress('구글 드라이브로 업로드 전송 중...');
+            const { zipBlob, dataLength } = await generateBackupZip();
+            setStatus({ type: 'info', message: '☁️ 구글 드라이브에 업로드하고 있습니다...' });
 
             const dateStr = new Date().toISOString().slice(0, 10);
-            const fileName = `FireSight_CloudSync_${dateStr}.zip`;
+            const folderId = import.meta.env.VITE_GOOGLE_DRIVE_FOLDER_ID;
 
-            // Google Drive Multipart Upload
             const metadata = {
-                name: fileName,
-                parents: [FOLDER_ID]
+                name: `FireSight_Backup_${dateStr}.zip`,
+                mimeType: 'application/zip',
+                ...(folderId ? { parents: [folderId] } : {})
             };
 
             const form = new FormData();
@@ -142,29 +139,29 @@ export default function StudyManager({ accessToken, tokenClient, isAuthenticated
                 body: form
             });
 
-            if (!res.ok) {
-                throw new Error(`Drive Upload Failed: ${res.statusText}`);
+            if (res.ok) {
+                setStatus({ type: 'success', message: `🎉 드라이브 업로드 완료! (${dataLength}개 문제 보존됨)` });
+            } else {
+                const err = await res.json();
+                throw new Error(err.error?.message || '구글 API 오류');
             }
-
-            setStatus({ type: 'success', message: `☁️ 구글 드라이브 동기화 완료! (${dataLength}건)` });
         } catch (error) {
-            console.error(error);
-            setStatus({ type: 'error', message: `❌ 드라이브 업로드 실패: ${error.message}` });
+            console.error("Drive upload error", error);
+            setStatus({ type: 'error', message: `❌ 구글 드라이브 업로드 실패: ${error.message}` });
         } finally {
             setLoading(false);
-            setProgress('');
         }
     };
 
-    // 2. [복구] 파일 선택 핸들러
+    // 3. [복구] 파일 선택 핸들러
     const handleFileSelect = (e) => {
         const file = e.target.files[0];
         if (!file) return;
         
-        // ZIP 파일을 올렸을지 JSON을 올렸을지에 대한 분기 처리 필요
+        // 만약 ZIP 파일인 경우와 JSON 파일인 경우를 분기 (향후 ZIP 복구 지원 가능)
         if (file.name.endsWith('.zip')) {
-            alert("통합 복원(ZIP 해제 및 DB 인서트)은 현재 준비 중입니다. 압축 해제 후 data.json 파일만 선택해 주세요.");
-            e.target.value = '';
+            alert("현재 ZIP 파일 복구는 준비 중입니다. JSON 파일로 선택해 주세요.");
+            e.target.value = ''; 
             return;
         }
 
@@ -178,7 +175,7 @@ export default function StudyManager({ accessToken, tokenClient, isAuthenticated
         e.target.value = ''; 
     };
 
-    // 3. [복구] 실제 복원 로직
+    // 4. [복구] 실제 복원 로직 (기존 유지)
     const processRestore = async (jsonContent) => {
         if (!window.confirm("⚠️ 주의: 데이터를 복구하면 기존 데이터와 합쳐지거나 덮어쓰여집니다.\n진행하시겠습니까?")) return;
 
@@ -199,14 +196,13 @@ export default function StudyManager({ accessToken, tokenClient, isAuthenticated
                 chunk.forEach((item) => {
                     const docRef = item._id ? doc(db, "workbook", item._id) : doc(collection(db, "workbook"));
                     const { _id, ...rest } = item;
-
                     const restoreData = {
                         ...rest,
                         createdAt: rest.createdAt ? new Date(rest.createdAt) : new Date(),
                         lastStudiedAt: rest.lastStudiedAt ? new Date(rest.lastStudiedAt) : null
                     };
 
-                    batch.set(docRef, restoreData, { merge: true }); 
+                    batch.set(docRef, restoreData, { merge: true });
                 });
 
                 await batch.commit();
@@ -227,68 +223,59 @@ export default function StudyManager({ accessToken, tokenClient, isAuthenticated
             <header className="mb-8">
                 <h2 className="text-3xl font-bold flex items-center gap-3 mb-2">
                     <Database className="text-blue-500" size={32} />
-                    데이터 관리 및 통합 백업
+                    서버 독립 백업 센터
                 </h2>
                 <p className="text-slate-400">
-                    클라우드에 분산된 텍스트와 모든 실물 이미지를 하나로 묶어 독립적으로 저장하거나 구글 드라이브와 동기화할 수 있습니다.
+                    파이어베이스 서버 없이도 모든 데이터를 보존할 수 있도록 실물 이미지가 포함된 통합 ZIP 백업을 제공합니다.
                 </p>
             </header>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-5xl">
                 
-                {/* 1. 백업 카드 */}
+                {/* 1. 백업 카드 (구글 드라이브 + 로컬 ZIP) */}
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-xl flex flex-col justify-between">
                     <div>
                         <div className="flex items-start gap-4 mb-6">
                             <div className="p-3 bg-blue-500/10 rounded-xl border border-blue-500/20">
-                                <FileArchive size={32} className="text-blue-400" />
+                                <Download size={32} className="text-blue-400" />
                             </div>
                             <div>
-                                <h3 className="text-xl font-bold text-white mb-1">독립형 통합 백업 (.zip)</h3>
+                                <h3 className="text-xl font-bold text-white mb-1">통합 데이터 백업 (ZIP)</h3>
                                 <p className="text-slate-400 text-sm">
-                                    서버의 모든 텍스트와 실물 이미지를 하나로 묶어냅니다.
+                                    이미지 파일 원본과 JSON 데이터를 하나로 압축합니다.
                                 </p>
                             </div>
                         </div>
                         <ul className="text-xs text-slate-500 space-y-2 list-disc list-inside bg-slate-950/50 p-4 rounded-xl border border-slate-800 mb-6">
-                            <li>문제, 정답 텍스트 및 메타데이터 (data.json)</li>
-                            <li>실물 이미지 원본 파일 포함 (images/ 폴더)</li>
-                            <li>서버 종료 시에도 100% 안전한 영구 보존 방식</li>
+                            <li>텍스트 및 파이어베이스 저장소의 <strong className="text-rose-400">모든 실물 이미지 다운로드</strong></li>
+                            <li><strong>FireSight_Backup.zip</strong> 형식으로 생성 (인터넷 영구 독립)</li>
                         </ul>
                     </div>
 
-                    <div className="flex flex-col gap-3">
-                        {/* 로컬 아이패드 다운로드 */}
+                    <div className="space-y-3">
                         <button
                             onClick={handleLocalBackup}
                             disabled={loading}
-                            className={`w-full py-3.5 rounded-xl font-bold text-[15px] flex items-center justify-center gap-2 transition-all shadow-lg
-                                ${loading ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-slate-800 border border-slate-700 hover:bg-slate-700 text-white shadow-black/20 active:scale-95'}`}
+                            className={`w-full py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg
+                                ${loading ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 active:scale-95'}`}
                         >
-                            {loading ? <Loader2 className="animate-spin" /> : <Download size={18} />}
-                            기기(iPad/PC)에 압축 파일 다운로드
+                            {loading ? <Loader2 className="animate-spin" /> : <Save size={18} />}
+                            내 기기(아이패드)에 압축파일 저장
                         </button>
-
-                        {/* 구글 드라이브 동기화 */}
+                        
                         <button
-                            onClick={handleDriveUpload}
+                            onClick={handleDriveBackup}
                             disabled={loading}
-                            className={`w-full py-3.5 rounded-xl font-bold text-[15px] flex items-center justify-center gap-2 transition-all shadow-lg
-                                ${loading ? 'bg-blue-900/20 text-blue-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/20 active:scale-95'}`}
+                            className={`w-full py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg
+                                ${loading ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/20 active:scale-95'}`}
                         >
-                            {loading ? <Loader2 className="animate-spin" /> : <CloudUpload size={18} />}
-                            개인 구글 드라이브에 안전하게 동기화
+                            {loading ? <Loader2 className="animate-spin" /> : <Cloud size={18} />}
+                            Google 드라이브로 직접 보내기
                         </button>
                     </div>
-
-                    {progress && (
-                        <p className="text-center text-xs text-blue-400 mt-4 font-bold animate-pulse">
-                            {progress}
-                        </p>
-                    )}
                 </div>
 
-                {/* 2. 복구 카드 */}
+                {/* 2. 복구 카드 (동일) */}
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-xl flex flex-col justify-between">
                     <div>
                         <div className="flex items-start gap-4 mb-6">
@@ -298,20 +285,19 @@ export default function StudyManager({ accessToken, tokenClient, isAuthenticated
                             <div>
                                 <h3 className="text-xl font-bold text-white mb-1">데이터 복구 (Import)</h3>
                                 <p className="text-slate-400 text-sm">
-                                    추출된 데이터 파일을 업로드하여 되살립니다.
+                                    백업 파일(JSON)을 업로드하여 데이터를 되살립니다.
                                 </p>
                             </div>
                         </div>
                         <ul className="text-xs text-slate-500 space-y-2 list-disc list-inside bg-slate-950/50 p-4 rounded-xl border border-slate-800 mb-6">
-                            <li>압축 해제 후 <strong>data.json</strong> 파일만 선택하세요</li>
-                            <li>기존 ID가 같으면 내용을 덮어씁니다 (업데이트)</li>
-                            <li>없는 ID는 새로 추가됩니다</li>
+                            <li>현재는 압축을 푼 <strong className="text-emerald-400">JSON 파일</strong> 복구만 지원합니다</li>
+                            <li>기존 ID가 같으면 업데이트, 없으면 새 문서를 생성합니다</li>
                         </ul>
                     </div>
 
                     <input 
                         type="file" 
-                        accept=".json" 
+                        accept=".json,.zip" 
                         ref={fileInputRef} 
                         onChange={handleFileSelect} 
                         className="hidden" 
@@ -320,23 +306,29 @@ export default function StudyManager({ accessToken, tokenClient, isAuthenticated
                     <button
                         onClick={() => fileInputRef.current.click()}
                         disabled={loading}
-                        className={`w-full py-3.5 rounded-xl font-bold text-[15px] flex items-center justify-center gap-2 transition-all shadow-lg mt-auto
+                        className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all shadow-lg
                             ${loading ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/20 active:scale-95'}`}
                     >
-                        {loading ? <Loader2 className="animate-spin" /> : <RefreshCw size={18} />}
-                        JSON 파일 선택 및 복구
+                        {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                        복구 파일(JSON) 선택
                     </button>
                 </div>
 
             </div>
 
             {status && (
-                <div className={`mt-6 p-4 rounded-xl flex items-start gap-3 border animate-in slide-in-from-bottom-2 max-w-5xl
-                    ${status.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}
-                >
-                    {status.type === 'success' ? <CheckCircle2 className="shrink-0" /> : <AlertTriangle className="shrink-0" />}
+                <div className={`mt-6 p-4 rounded-xl flex items-center gap-3 border animate-in slide-in-from-bottom-2 max-w-5xl
+                    ${status.type === 'info' ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' : ''}
+                    ${status.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : ''}
+                    ${status.type === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-400' : ''}
+                `}>
+                    {status.type === 'success' && <CheckCircle2 className="shrink-0" />}
+                    {status.type === 'error' && <AlertTriangle className="shrink-0" />}
+                    {status.type === 'info' && <Loader2 className="shrink-0 animate-spin" />}
                     <div>
-                        <h4 className="font-bold text-sm mb-1">{status.type === 'success' ? '작업 완료' : '오류 발생'}</h4>
+                        <h4 className="font-bold text-sm mb-0.5">
+                            {status.type === 'success' ? '작업 완료' : status.type === 'error' ? '오류 발생' : '처리 중...'}
+                        </h4>
                         <p className="text-sm opacity-90">{status.message}</p>
                     </div>
                 </div>
@@ -344,7 +336,7 @@ export default function StudyManager({ accessToken, tokenClient, isAuthenticated
 
             <div className="mt-8 flex items-center justify-center gap-2 text-xs text-slate-600">
                 <ShieldCheck size={14} />
-                <span>파이어베이스가 종료되어도 기기와 구글 드라이브의 백업 파일은 영구적으로 보존됩니다.</span>
+                <span>백업 시 구글 드라이브 연동은 Firebase 서버를 완전히 우회하는 로컬 직접 통신입니다.</span>
             </div>
         </div>
     );
