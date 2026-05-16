@@ -105,9 +105,12 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
                 const croppedBlob = await getCroppedImg(imgRef.current, completedCrop);
                 const fileExt = cropQueueRef.current[currentCropIndex].name.split('.').pop();
                 const croppedFile = new File([croppedBlob], `cropped_${Date.now()}.${fileExt}`, { type: `image/${fileExt}` });
+                croppedFile.isCropped = true;
                 processedFilesRef.current.push(croppedFile);
             } else {
-                processedFilesRef.current.push(cropQueueRef.current[currentCropIndex]);
+                const originalFile = cropQueueRef.current[currentCropIndex];
+                originalFile.isCropped = false;
+                processedFilesRef.current.push(originalFile);
             }
 
             const nextIndex = currentCropIndex + 1;
@@ -154,7 +157,12 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         
         try {
             const promises = files.map(async (file, i) => {
-                // 🔴 [최적화] AI 판독 전용 초경량 압축 (토큰 95% 절약)
+                // 🔴 [최적화] 크롭을 하지 않은 전체 이미지는 텍스트 추출 건너뛰기
+                if (file.isCropped === false) {
+                    addLog(`⏩ 지문 ${i + 1}쪽: 크롭 영역 미지정으로 텍스트 추출 건너뜀`);
+                    return null;
+                }
+
                 const compressedFile = await imageCompression(file, { maxSizeMB: 0.5, maxWidthOrHeight: 1024, useWebWorker: true }).catch(() => file);
                 return analyzeImage(compressedFile, formData.type, 'problem', aiModel)
                     .then(res => {
@@ -215,7 +223,12 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
 
         try {
             const promises = files.map(async (file, i) => {
-                // 🔴 [최적화] AI 판독 전용 초경량 압축 (토큰 95% 절약)
+                // 🔴 [최적화] 크롭을 하지 않은 전체 이미지는 텍스트 추출 건너뛰기
+                if (file.isCropped === false) {
+                    addLog(`⏩ 해설 ${i + 1}쪽: 크롭 영역 미지정으로 텍스트 추출 건너뜀`);
+                    return null;
+                }
+
                 const compressedFile = await imageCompression(file, { maxSizeMB: 0.5, maxWidthOrHeight: 1024, useWebWorker: true }).catch(() => file);
                 return analyzeImage(compressedFile, formData.type, 'answer', aiModel)
                     .then(res => {
