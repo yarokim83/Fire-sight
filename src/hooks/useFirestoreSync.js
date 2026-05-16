@@ -60,7 +60,7 @@ export const useFirestoreSync = () => {
                     mandatory_numbers: extractNumbers() 
                   },
                   tags: Array.isArray(data.tags) ? data.tags : [],
-                  subject: data.category || data.subject || '기타',
+                  subject: data.category || data.subject || data.type || '기타',
                   problemType: data.problemType || 'descriptive',
                   studyCount: Number(data.studyCount || 0),
                   wrongCount: Number(data.wrongCount || 0),

@@ -312,6 +312,7 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
             // 🔴 [핵심 보완] tags와 keywords 속성을 추가하여 Workbook 리스트에서 정상 노출/검색 되도록 매핑
             const finalData = {
                 ...formData,
+                subject: formData.type,
                 tags: formData.searchTags || [], 
                 keywords: formData.searchTags && formData.searchTags.length > 0 ? formData.searchTags.join(', ') : '', 
                 images: finalProblemUrls,
