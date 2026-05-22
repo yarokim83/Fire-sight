@@ -9,10 +9,17 @@ export default function Sidebar({
     isAuthenticated, handleLogout 
 }) {
     
-    // 🔴 애플 프로 라인업의 정제된 액티브 컬러
-    const theme = subject === 'mechanical'
-        ? { activeBg: 'bg-blue-600', activeText: 'text-white', glow: 'shadow-[0_0_15px_rgba(37,99,235,0.4)]' }
-        : { activeBg: 'bg-orange-600', activeText: 'text-white', glow: 'shadow-[0_0_15px_rgba(234,88,12,0.4)]' };
+    // 🔴 [리팩토링] NFTC 6대 테마별 시그니처 컬러 및 글로우 효과 매핑
+    const THEME_STYLES = {
+        '수계': { activeBg: 'bg-blue-600', activeText: 'text-white', glow: 'shadow-[0_0_15px_rgba(37,99,235,0.4)]' },
+        '가스계': { activeBg: 'bg-emerald-600', activeText: 'text-white', glow: 'shadow-[0_0_15px_rgba(16,185,129,0.4)]' },
+        '경보': { activeBg: 'bg-amber-600', activeText: 'text-white', glow: 'shadow-[0_0_15px_rgba(245,158,11,0.4)]' },
+        '피난': { activeBg: 'bg-lime-600', activeText: 'text-white', glow: 'shadow-[0_0_15px_rgba(132,204,22,0.4)]' },
+        '소화활동': { activeBg: 'bg-red-600', activeText: 'text-white', glow: 'shadow-[0_0_15px_rgba(239,68,68,0.4)]' },
+        '공통': { activeBg: 'bg-purple-600', activeText: 'text-white', glow: 'shadow-[0_0_15px_rgba(168,85,247,0.4)]' }
+    };
+
+    const theme = THEME_STYLES[subject] || THEME_STYLES['수계'];
 
     const navItems = [
         { mode: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },

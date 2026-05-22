@@ -80,6 +80,7 @@ export async function analyzeImage(file, type = 'workbook', mode = 'problem', mo
         } else if (mode === 'answer') {
             promptText = `${smartInstruction}
                 이미지의 해설을 OCR 하고, 채점 기준이 될 '필수 요소'를 분리하세요.
+                [지문 제외] 해설 이미지의 상단이나 주변에 문제 지문(질문 본문, 발문 등)이 함께 포함되어 있더라도, 지문 부분은 절대 추출하지 말고 오직 순수 해설, 풀이 및 답안 본문만 'modelAnswer'에 담아 반환하세요.
                 해설 문장이 물리적 폭 때문에 끊기지 않도록 문맥 위주로 통합하되, 단계별 설명은 줄바꿈을 유지하세요.
                 결과 JSON: { 
                     "modelAnswer": "가독성 있게 줄바꿈이 정제된 해설 원문 전체", 

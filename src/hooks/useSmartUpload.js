@@ -17,7 +17,6 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
     }, [aiModel]);
 
     // --- [1. 시스템 제어 및 하드웨어 배선] ---
-    const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [isManualMode, setIsManualMode] = useState(!navigator.onLine);
     const [isSaving, setIsSaving] = useState(false);
     const [debugLogs, setDebugLogs] = useState([]);
@@ -32,10 +31,16 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
     const imgRef = useRef(null); 
     const isMounted = useRef(true);
 
+    useEffect(() => {
+        isMounted.current = true;
+        return () => {
+            isMounted.current = false;
+        };
+    }, []);
+
     // --- [2. 데이터 생명주기 제어] ---
     const cropQueueRef = useRef([]);      
     const processedFilesRef = useRef([]); 
-    const currentIndexRef = useRef(0);    
 
     // --- [3. UI 상태 관리] ---
     const [problemPreviewUrls, setProblemPreviewUrls] = useState([]);
@@ -50,6 +55,7 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
     const [isCropModalOpen, setIsCropModalOpen] = useState(false);
     const [cropTarget, setCropTarget] = useState('problem'); 
     const [currentCropIndex, setCurrentCropIndex] = useState(0); 
+    const [extractText, setExtractText] = useState(true);
 
     // --- [4. 데이터 수화 (수정 모드 진입 시)] ---
     const [formData, setFormData] = useState({
@@ -79,43 +85,55 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
     }, []);
 
     // --- [5. 통합 크롭 및 시퀀스 제어 엔진] ---
-    const onSelectFile = (e, target = 'problem') => {
-        if (e.target.files && e.target.files.length > 0) {
+    const processIncomingFiles = useCallback((files, target = 'problem') => {
+        if (files && files.length > 0) {
             setCropTarget(target);
-            const filesArray = Array.from(e.target.files);
+            const filesArray = Array.from(files);
             cropQueueRef.current = filesArray;
             setCurrentCropIndex(0);
             processedFilesRef.current = [];
+            setExtractText(true);
 
             const reader = new FileReader();
             reader.onload = () => {
-                setCropSrc(reader.result?.toString() || '');
-                setIsCropModalOpen(true);
-                addLog(`📸 이미지 로드 완료: ${filesArray.length}장 선택됨`);
+                if (isMounted.current) {
+                    setCropSrc(reader.result?.toString() || '');
+                    setIsCropModalOpen(true);
+                    addLog(`📸 이미지 로드 완료: ${filesArray.length}장 유입됨 (대상: ${target})`);
+                }
             };
             reader.readAsDataURL(filesArray[0]);
+        }
+    }, [addLog]);
+
+    const onSelectFile = (e, target = 'problem') => {
+        if (e.target.files && e.target.files.length > 0) {
+            processIncomingFiles(e.target.files, target);
             e.target.value = null; 
         }
     };
 
     const onCropConfirm = async () => {
         try {
+            const originalFile = cropQueueRef.current[currentCropIndex];
             if (completedCrop?.width && completedCrop?.height && imgRef.current) {
                 addLog(`✂️ 영역 정밀 타격 완료...`);
                 const croppedBlob = await getCroppedImg(imgRef.current, completedCrop);
-                const fileExt = cropQueueRef.current[currentCropIndex].name.split('.').pop();
+                const fileExt = originalFile.name.split('.').pop();
                 const croppedFile = new File([croppedBlob], `cropped_${Date.now()}.${fileExt}`, { type: `image/${fileExt}` });
                 croppedFile.isCropped = true;
+                croppedFile.skipExtraction = !extractText;
                 processedFilesRef.current.push(croppedFile);
             } else {
-                const originalFile = cropQueueRef.current[currentCropIndex];
                 originalFile.isCropped = false;
+                originalFile.skipExtraction = !extractText;
                 processedFilesRef.current.push(originalFile);
             }
 
             const nextIndex = currentCropIndex + 1;
             if (nextIndex < cropQueueRef.current.length) {
                 setCurrentCropIndex(nextIndex);
+                setExtractText(true);
                 const reader = new FileReader();
                 reader.onload = () => {
                     setCropSrc(reader.result?.toString() || '');
@@ -157,9 +175,9 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         
         try {
             const promises = files.map(async (file, i) => {
-                // 🔴 [최적화] 크롭을 하지 않은 전체 이미지는 텍스트 추출 건너뛰기
-                if (file.isCropped === false) {
-                    addLog(`⏩ 지문 ${i + 1}쪽: 크롭 영역 미지정으로 텍스트 추출 건너뜀`);
+                // 🔴 [최적화] 사용자가 명시적으로 텍스트 추출을 제외한 경우만 건너뛰기
+                if (file.skipExtraction) {
+                    addLog(`⏩ 지문 ${i + 1}쪽: 텍스트 추출 제외 선택으로 건너뜀`);
                     return null;
                 }
 
@@ -223,9 +241,9 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
 
         try {
             const promises = files.map(async (file, i) => {
-                // 🔴 [최적화] 크롭을 하지 않은 전체 이미지는 텍스트 추출 건너뛰기
-                if (file.isCropped === false) {
-                    addLog(`⏩ 해설 ${i + 1}쪽: 크롭 영역 미지정으로 텍스트 추출 건너뜀`);
+                // 🔴 [최적화] 사용자가 명시적으로 텍스트 추출을 제외한 경우만 건너뛰기
+                if (file.skipExtraction) {
+                    addLog(`⏩ 해설 ${i + 1}쪽: 텍스트 추출 제외 선택으로 건너뜀`);
                     return null;
                 }
 
@@ -256,9 +274,6 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
                 batchResults.forEach(res => {
                     if (res.modelAnswer) {
                         merged.modelAnswer = merged.modelAnswer ? merged.modelAnswer + '\n\n' + res.modelAnswer : res.modelAnswer;
-                    }
-                    if (res.description) {
-                         merged.description = merged.description ? merged.description + '\n\n' + res.description : res.description;
                     }
                     
                     if (res.gradingPoints) {
@@ -389,9 +404,10 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
 
     return {
         aiModel, setAiModel, 
-        isOnline, isManualMode, setIsManualMode, isSaving, step, setStep, viewMode, setViewMode, formData, setFormData,
+        isManualMode, setIsManualMode, isSaving, step, setStep, viewMode, setViewMode, formData, setFormData,
         problemPreviewUrls, answerPreviewUrls, currentImageIndex, setCurrentImageIndex, isAnalyzing, isAnalyzingAnswer, 
         debugLogs, showDebug, setShowDebug, setDebugLogs, inputFileRef, inputAddRef,
+        processIncomingFiles,
         handleInitialUpload: (e) => onSelectFile(e, 'problem'), 
         handleAddImages: (e) => onSelectFile(e, 'answer'), 
         handleRemoveImage, handleSave, resetState, updateGradingPoint: (type, action, value, index) => {
@@ -409,7 +425,8 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
             });
         },
         cropSrc, crop, setCrop, completedCrop, setCompletedCrop, isCropModalOpen, imgRef, onCropConfirm, 
-        onCropCancel: () => { setIsCropModalOpen(false); setCropSrc(null); cropQueueRef.current = []; },
-        currentCropTotal: cropQueueRef.current.length, currentCropIndex: currentCropIndex + 1
+        onCropCancel: () => { setIsCropModalOpen(false); setCropSrc(null); cropQueueRef.current = []; setExtractText(true); },
+        currentCropTotal: cropQueueRef.current.length, currentCropIndex: currentCropIndex + 1,
+        extractText, setExtractText
     };
 };

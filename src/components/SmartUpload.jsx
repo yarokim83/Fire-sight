@@ -10,20 +10,50 @@ import {
 export default function SmartUpload({ onSaveComplete, initialData }) {
     const {
         aiModel, setAiModel,
-        isOnline, isManualMode, setIsManualMode, isSaving, step, setStep,
+        isManualMode, isSaving, step, setStep,
         viewMode, setViewMode, formData, setFormData,
         problemPreviewUrls, answerPreviewUrls, currentImageIndex, setCurrentImageIndex,
-        isAnalyzing, isAnalyzingAnswer, debugLogs, showDebug, setShowDebug,
+        isAnalyzingAnswer, debugLogs, showDebug, setShowDebug,
         inputFileRef, inputAddRef,
+        processIncomingFiles,
         handleInitialUpload, handleAddImages, handleRemoveImage, handleSave, resetState,
         updateGradingPoint, updateSearchTag,
-        cropSrc, crop, setCrop, completedCrop, setCompletedCrop,
+        cropSrc, crop, setCrop, setCompletedCrop,
         isCropModalOpen, imgRef, onCropConfirm, onCropCancel,
-        currentCropTotal, currentCropIndex
+        currentCropTotal, currentCropIndex,
+        extractText, setExtractText
     } = useSmartUpload(initialData, onSaveComplete);
 
     const [showModelSettings, setShowModelSettings] = useState(false);
     const [tempModelName, setTempModelName] = useState(aiModel || '');
+
+    // 🔴 [아이패드 대응 및 단축키 지원] 전역 클립보드 붙여넣기 이벤트 감지
+    React.useEffect(() => {
+        const handlePaste = (e) => {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+
+            let imageFile = null;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    imageFile = items[i].getAsFile();
+                    break;
+                }
+            }
+
+            if (imageFile) {
+                // 붙여넣은 아이템이 이미지 파일인 경우, 기본 동작을 막고 업로드 시퀀스 작동
+                e.preventDefault();
+                const target = step === 3 ? viewMode : 'problem';
+                processIncomingFiles([imageFile], target);
+            }
+        };
+
+        window.addEventListener('paste', handlePaste);
+        return () => {
+            window.removeEventListener('paste', handlePaste);
+        };
+    }, [step, viewMode, processIncomingFiles]);
     
     const activeUrls = viewMode === 'problem' ? problemPreviewUrls : answerPreviewUrls;
 
@@ -109,18 +139,22 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
             <DebugConsole logs={debugLogs} show={showDebug} onClose={() => setShowDebug(false)} />
 
             {/* 🔴 [위치 이동] CropModal을 main 밖으로 빼내서 무조건 최상단에 뜨게 만듭니다! */}
-            <CropModal
-                isOpen={isCropModalOpen}
-                src={cropSrc}
-                crop={crop}
-                setCrop={setCrop}
-                setCompletedCrop={setCompletedCrop}
-                imgRef={imgRef}
-                onConfirm={onCropConfirm}
-                onCancel={onCropCancel}
-                totalCount={currentCropTotal}
-                currentIndex={currentCropIndex}
-            />
+            {isCropModalOpen && (
+                <CropModal
+                    isOpen={isCropModalOpen}
+                    src={cropSrc}
+                    crop={crop}
+                    setCrop={setCrop}
+                    setCompletedCrop={setCompletedCrop}
+                    imgRef={imgRef}
+                    onConfirm={onCropConfirm}
+                    onCancel={onCropCancel}
+                    totalCount={currentCropTotal}
+                    currentIndex={currentCropIndex}
+                    extractText={extractText}
+                    setExtractText={setExtractText}
+                />
+            )}
 
             {/* --- [기존 업로드 메인 영역] --- */}
             <main className="flex-1 w-full max-w-[1600px] mx-auto bg-white/[0.02] backdrop-blur-3xl rounded-[3rem] border border-white/10 shadow-[0_0_100px_rgba(0,0,0,0.5)] relative overflow-hidden flex flex-col min-h-0 mt-8">
@@ -131,6 +165,7 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
                             formData={formData} setFormData={setFormData}
                             isManualMode={isManualMode} inputFileRef={inputFileRef}
                             onUpload={handleInitialUpload} onViewMode={setViewMode} setStep={setStep}
+                            processIncomingFiles={processIncomingFiles}
                         />
                     </div>
                 )}
@@ -165,6 +200,7 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
                                     onRemove={handleRemoveImage}
                                     onAdd={handleAddImages}
                                     inputAddRef={inputAddRef}
+                                    processIncomingFiles={processIncomingFiles}
                                 />
                             </div>
                             <div className="flex-1 flex flex-col min-w-0">

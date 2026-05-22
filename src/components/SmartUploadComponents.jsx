@@ -4,12 +4,14 @@ import {
     Plus, Sparkles, Terminal, BookOpen, X,
     Target, Calculator, Database, Maximize2,
     CheckCircle2, Hash, Tags, Crop, Check,
-    ZoomIn, ZoomOut, RotateCcw, Maximize, Minimize 
+    ZoomIn, ZoomOut, RotateCcw, Maximize, Minimize,
+    ClipboardPaste
 } from 'lucide-react';
 
 import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { SUBJECT_LIST, PROBLEM_TYPES } from '../utils/constants';
+import { detectContentBounds } from '../utils/canvasUtils';
 
 /** ---------------------------------------------------------
  * Step 1.5: 이미지 영역 지정 모달 (Crop Modal - Full View & Zoom)
@@ -17,20 +19,24 @@ import { SUBJECT_LIST, PROBLEM_TYPES } from '../utils/constants';
  --------------------------------------------------------- */
 export const CropModal = ({ 
     isOpen, src, crop, setCrop, setCompletedCrop, imgRef, 
-    onConfirm, onCancel, totalCount, currentIndex 
+    onConfirm, onCancel, totalCount, currentIndex,
+    extractText, setExtractText
 }) => {
     const [zoom, setZoom] = useState(100); // 초기값 100% (전체 보기)
     
-    // 모달이 열릴 때마다 줌 상태 초기화하여 전체 보기 보장
-    useEffect(() => {
-        if (isOpen) setZoom(100);
-    }, [isOpen]);
-
     if (!isOpen || !src) return null;
 
     const handleZoomIn = () => setZoom(prev => Math.min(prev + 20, 300));
     const handleZoomOut = () => setZoom(prev => Math.max(prev - 20, 50));
     const handleResetZoom = () => setZoom(100);
+
+    const handleAutoFit = () => {
+        if (imgRef.current) {
+            const detected = detectContentBounds(imgRef.current);
+            setCrop(detected);
+            setCompletedCrop(detected);
+        }
+    };
 
     return (
         <div className="fixed inset-0 z-[10000] bg-black/98 backdrop-blur-2xl flex flex-col animate-in fade-in duration-300 font-sans">
@@ -73,6 +79,34 @@ export const CropModal = ({
                 </div>
 
                 <div className="flex gap-4">
+                    <button
+                        onClick={() => setExtractText(!extractText)}
+                        className={`px-6 py-3 rounded-2xl text-sm font-black border transition-all flex items-center gap-2 uppercase tracking-widest active:scale-95 shadow-lg ${
+                            extractText
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500 hover:text-white shadow-emerald-500/5'
+                            : 'bg-white/5 text-white/40 border-white/5 hover:bg-rose-500/20 hover:text-rose-400 hover:border-rose-500/20'
+                        }`}
+                        title={extractText ? "이 페이지의 텍스트를 추출합니다" : "이 페이지의 텍스트 추출을 제외합니다"}
+                    >
+                        {extractText ? (
+                            <>
+                                <ScanLine size={16} />
+                                <span>OCR Extract: ON ✨</span>
+                            </>
+                        ) : (
+                            <>
+                                <X size={16} />
+                                <span>OCR Extract: SKIP ⏩</span>
+                            </>
+                        )}
+                    </button>
+                    <button 
+                        onClick={handleAutoFit}
+                        className="px-6 py-3 rounded-2xl bg-amber-500/10 text-amber-400 hover:bg-amber-500 hover:text-white transition-all text-sm font-black border border-amber-500/20 flex items-center gap-2 uppercase tracking-widest active:scale-95 shadow-lg shadow-amber-500/5"
+                        title="AI 스마트 자동 콘텐츠 경계 맞춤"
+                    >
+                        <Sparkles size={16} /> Smart Fit 🪄
+                    </button>
                     <button onClick={onCancel} className="px-6 py-3 rounded-2xl bg-white/5 text-white/50 hover:bg-rose-500/20 hover:text-rose-400 transition-all text-sm font-bold border border-white/5 uppercase tracking-widest">Cancel</button>
                     <button onClick={onConfirm} className="px-8 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-500 transition-all shadow-2xl text-sm font-black flex items-center gap-2 uppercase tracking-widest">
                         <Check size={18} strokeWidth={3} /> {currentIndex < totalCount ? "Next Image" : "Confirm Area"}
@@ -122,9 +156,119 @@ export const CropModal = ({
 };
 
 /** ---------------------------------------------------------
- * Step 1: 업로드 인트로 (콤팩트 중앙 정렬)
+ * DropZoneItem (아이패드 Split View 터치 드롭 및 드래그 피드백 대응)
  --------------------------------------------------------- */
-export const UploadIntro = ({ formData, setFormData, inputFileRef, onUpload }) => (
+const DropZoneItem = ({ title, subtitle, target, accept, onDropFiles, icon, themeColor }) => {
+    const Icon = icon;
+    const [isDragOver, setIsDragOver] = useState(false);
+    const fileInputRef = useRef(null);
+
+    const handlePasteFromClipboard = async (e) => {
+        e.stopPropagation();
+        try {
+            if (!navigator.clipboard || !navigator.clipboard.read) {
+                alert("이 브라우저/환경에서는 클립보드 읽기 API를 지원하지 않습니다. 최신 Safari 또는 Chrome 브라우저를 사용해 주세요.");
+                return;
+            }
+            const clipboardItems = await navigator.clipboard.read();
+            let imageBlob = null;
+            for (const item of clipboardItems) {
+                for (const type of item.types) {
+                    if (type.startsWith('image/')) {
+                        imageBlob = await item.getType(type);
+                        break;
+                    }
+                }
+                if (imageBlob) break;
+            }
+
+            if (imageBlob) {
+                const file = new File([imageBlob], `clipboard-${Date.now()}.png`, { type: imageBlob.type });
+                onDropFiles([file], target);
+            } else {
+                alert("클립보드에 복사된 이미지가 없습니다. 이미지를 캡처 후 '복사'한 다음 눌러주세요.");
+            }
+        } catch (err) {
+            console.error("클립보드 이미지 붙여넣기 실패:", err);
+            alert("클립보드 읽기 권한이 거부되었거나 이미지를 가져올 수 없습니다. 브라우저의 클립보드 접근 권한 설정을 확인해 주세요.");
+        }
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        setIsDragOver(true);
+    };
+
+    const handleDragLeave = () => {
+        setIsDragOver(false);
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+            if (files.length > 0) {
+                onDropFiles(files, target);
+            }
+        }
+    };
+
+    const handleFileChange = (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+            onDropFiles(e.target.files, target);
+        }
+    };
+
+    const activeTheme = themeColor === 'blue' 
+        ? {
+            border: isDragOver ? 'border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.3)] bg-blue-500/10 scale-[1.02]' : 'border-white/10 hover:border-blue-500/50 hover:bg-blue-500/5',
+            iconBg: 'bg-blue-600',
+            textColor: 'text-blue-400'
+          }
+        : {
+            border: isDragOver ? 'border-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.3)] bg-emerald-500/10 scale-[1.02]' : 'border-white/10 hover:border-emerald-500/50 hover:bg-emerald-500/5',
+            iconBg: 'bg-emerald-600',
+            textColor: 'text-emerald-400'
+          };
+
+    return (
+        <div 
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`flex-1 h-44 border-2 border-dashed rounded-[2.5rem] flex flex-col items-center justify-center transition-all duration-300 cursor-pointer group active:scale-[0.98] ${activeTheme.border}`}
+        >
+            <input 
+                type="file" 
+                multiple 
+                accept={accept} 
+                onChange={handleFileChange} 
+                className="hidden" 
+                ref={fileInputRef} 
+            />
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-xl ${activeTheme.iconBg}`}>
+                <Icon size={24} className="text-white" />
+            </div>
+            <p className="text-white font-bold text-sm tracking-tight">{title}</p>
+            <p className={`text-[10px] uppercase font-black tracking-widest mt-1 ${activeTheme.textColor}`}>{subtitle}</p>
+            <button 
+                type="button"
+                onClick={handlePasteFromClipboard}
+                className="mt-3 px-3 py-1 bg-white/10 hover:bg-white/20 active:scale-95 rounded-lg text-[10px] font-black text-white/80 border border-white/10 flex items-center gap-1.5 transition-all shadow-md z-[50]"
+            >
+                <ClipboardPaste size={12} className={activeTheme.textColor} />
+                클립보드 붙여넣기 📋
+            </button>
+        </div>
+    );
+};
+
+/** ---------------------------------------------------------
+ * Step 1: 업로드 인트로 (콤팩트 중앙 정렬 & 2분할 드롭존)
+ --------------------------------------------------------- */
+export const UploadIntro = ({ formData, setFormData, processIncomingFiles }) => (
     <div className="h-full flex flex-col items-center justify-center animate-in fade-in duration-500 py-6">
         <div className="text-center mb-8">
             <h3 className="text-2xl font-bold text-white mb-1 tracking-tight">자료 등록 방식 선택</h3>
@@ -152,15 +296,26 @@ export const UploadIntro = ({ formData, setFormData, inputFileRef, onUpload }) =
             </button>
         </div>
         
-        <div 
-            className="w-full max-w-sm h-40 border-2 border-dashed border-white/10 rounded-[3rem] flex flex-col items-center justify-center hover:border-blue-500/50 hover:bg-blue-500/5 transition-all cursor-pointer group"
-            onClick={() => inputFileRef.current.click()}
-        >
-            <input type="file" accept="image/*" multiple onChange={onUpload} className="hidden" ref={inputFileRef} />
-            <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mb-3 group-hover:bg-blue-600 transition-all shadow-xl">
-                <Upload size={20} className="text-white/40 group-hover:text-white" />
-            </div>
-            <p className="text-white/80 font-black text-[11px] tracking-widest uppercase text-center px-4">Tap to Upload Problem Image</p>
+        {/* 2분할 프리미엄 드롭존 (지문용 / 해설용) */}
+        <div className="flex gap-6 w-full max-w-2xl px-4">
+            <DropZoneItem 
+                title="지문 드래그 또는 탭" 
+                subtitle="Problem Dropzone" 
+                target="problem" 
+                accept="image/*"
+                onDropFiles={processIncomingFiles}
+                icon={Upload}
+                themeColor="blue"
+            />
+            <DropZoneItem 
+                title="해설 드래그 또는 탭" 
+                subtitle="Solution Dropzone" 
+                target="answer" 
+                accept="image/*"
+                onDropFiles={processIncomingFiles}
+                icon={Plus}
+                themeColor="emerald"
+            />
         </div>
     </div>
 );
@@ -187,10 +342,42 @@ export const AnalysisLoading = ({ previewUrl }) => (
  --------------------------------------------------------- */
 export const ImageViewer = ({ 
     viewMode, setViewMode, activeUrls, currentIndex, setIndex, 
-    problemCount, answerCount, onRemove, onAdd, inputAddRef 
+    problemCount, answerCount, onRemove, onAdd, inputAddRef,
+    processIncomingFiles
 }) => {
     const [isZoomed, setIsZoomed] = useState(false);
     const hasImages = Array.isArray(activeUrls) && activeUrls.length > 0;
+
+    const handlePasteFromClipboard = async (e) => {
+        e.stopPropagation();
+        try {
+            if (!navigator.clipboard || !navigator.clipboard.read) {
+                alert("이 브라우저/환경에서는 클립보드 읽기 API를 지원하지 않습니다. 최신 Safari 또는 Chrome 브라우저를 사용해 주세요.");
+                return;
+            }
+            const clipboardItems = await navigator.clipboard.read();
+            let imageBlob = null;
+            for (const item of clipboardItems) {
+                for (const type of item.types) {
+                    if (type.startsWith('image/')) {
+                        imageBlob = await item.getType(type);
+                        break;
+                    }
+                }
+                if (imageBlob) break;
+            }
+
+            if (imageBlob) {
+                const file = new File([imageBlob], `clipboard-${Date.now()}.png`, { type: imageBlob.type });
+                processIncomingFiles([file], viewMode);
+            } else {
+                alert("클립보드에 복사된 이미지가 없습니다. 이미지를 캡처 후 '복사'한 다음 눌러주세요.");
+            }
+        } catch (err) {
+            console.error("클립보드 이미지 붙여넣기 실패:", err);
+            alert("클립보드 읽기 권한이 거부되었거나 이미지를 가져올 수 없습니다. 브라우저의 클립보드 접근 권한 설정을 확인해 주세요.");
+        }
+    };
 
     return (
         <div className="flex-1 h-full flex flex-col gap-3 animate-in fade-in min-h-0">
@@ -218,11 +405,24 @@ export const ImageViewer = ({
                         )}
                     </>
                 ) : (
-                    <div className="flex flex-col items-center justify-center gap-4 cursor-pointer group/upload p-10" onClick={() => inputAddRef.current.click()}>
-                        <div className="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(37,99,235,0.3)] group-hover/upload:scale-105 transition-all border-4 border-white/5">
-                            <Plus size={40} className="text-white" strokeWidth={3} />
+                    <div className="flex flex-col items-center justify-center gap-4 p-10">
+                        <div 
+                            className="flex flex-col items-center justify-center gap-3 cursor-pointer group/upload" 
+                            onClick={() => inputAddRef.current.click()}
+                        >
+                            <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(37,99,235,0.3)] group-hover/upload:scale-105 transition-all border-4 border-white/5">
+                                <Plus size={32} className="text-white" strokeWidth={3} />
+                            </div>
+                            <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest font-bold">Add {viewMode} Asset</p>
                         </div>
-                        <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest font-bold">Add {viewMode} Asset</p>
+                        <button 
+                            type="button"
+                            onClick={handlePasteFromClipboard}
+                            className="px-4 py-2 bg-white/10 hover:bg-white/20 active:scale-95 rounded-xl text-[10px] font-black text-white/80 border border-white/10 flex items-center gap-1.5 transition-all shadow-md mt-2"
+                        >
+                            <ClipboardPaste size={12} className="text-blue-400" />
+                            클립보드 붙여넣기 📋
+                        </button>
                     </div>
                 )}
             </div>
@@ -231,6 +431,9 @@ export const ImageViewer = ({
                 <div onClick={() => inputAddRef.current.click()} className="w-14 h-14 shrink-0 rounded-xl border-2 border-dashed border-white/10 flex items-center justify-center cursor-pointer hover:bg-blue-500/10 text-white/20 transition-all">
                     <input type="file" accept="image/*" multiple onChange={onAdd} className="hidden" ref={inputAddRef} />
                     <Plus size={20} />
+                </div>
+                <div onClick={handlePasteFromClipboard} className="w-14 h-14 shrink-0 rounded-xl border-2 border-dashed border-white/10 flex items-center justify-center cursor-pointer hover:bg-blue-500/10 text-white/20 transition-all" title="클립보드 붙여넣기">
+                    <ClipboardPaste size={20} />
                 </div>
                 {hasImages && activeUrls.map((url, idx) => (
                     <button key={idx} onClick={() => setIndex(idx)} className={`w-14 h-14 shrink-0 rounded-xl overflow-hidden border-2 transition-all snap-start ${idx === currentIndex ? 'border-blue-500 scale-95 shadow-md' : 'border-transparent opacity-40 hover:opacity-100'}`}>
@@ -250,8 +453,51 @@ export const ImageViewer = ({
 };
 
 /** ---------------------------------------------------------
- * Step 3 (Right): 입력 폼 (검색 태그 및 채점 매트릭스)
+ * FormItemInput (로컬 상태를 유지하여 리렌더링 및 포커스 유실 방지)
+ * 🔴 [최적화] 타이핑할 때마다 부모 상태를 리렌더링하지 않고 Blur/Enter 시점에 동기화
  --------------------------------------------------------- */
+const FormItemInput = ({ initialValue, onUpdate, onRemove, className, inputClassName, placeholder, deleteBtnClassName, deleteIconSize = 14 }) => {
+    const [value, setValue] = useState(initialValue || '');
+    const [prevInitialValue, setPrevInitialValue] = useState(initialValue);
+
+    if (initialValue !== prevInitialValue) {
+        setValue(initialValue || '');
+        setPrevInitialValue(initialValue);
+    }
+
+    const handleBlur = () => {
+        if (value !== initialValue) {
+            onUpdate(value);
+        }
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            e.target.blur();
+        }
+    };
+
+    return (
+        <div className={className}>
+            <input 
+                value={value} 
+                onChange={(e) => setValue(e.target.value)}
+                onBlur={handleBlur}
+                onKeyDown={handleKeyDown}
+                className={inputClassName}
+                placeholder={placeholder}
+            />
+            <button type="button" onClick={onRemove} className={deleteBtnClassName}>
+                <X size={deleteIconSize} />
+            </button>
+        </div>
+    );
+};
+
+/** ---------------------------------------------------------
+ * Step 3 (Right): 입력 폼 (검색 태그 및 채점 매트릭스)
+ * --------------------------------------------------------- */
 export const ProblemForm = ({ formData, setFormData, isAnalyzingAnswer, updateGradingPoint, updateSearchTag }) => {
     
     const searchTags = formData.searchTags || [];
@@ -288,17 +534,17 @@ export const ProblemForm = ({ formData, setFormData, isAnalyzingAnswer, updateGr
                 </div>
                 <div className="flex flex-wrap gap-2">
                     {searchTags.map((tag, i) => (
-                        <div key={i} className="flex items-center gap-1.5 bg-indigo-500/10 px-2.5 py-1.5 rounded-lg border border-indigo-500/20 group/tag hover:bg-indigo-500/20 transition-all shadow-sm">
-                            <input 
-                                value={tag} 
-                                onChange={(e) => updateSearchTag('update', e.target.value, i)}
-                                className="bg-transparent border-none outline-none text-[11px] text-indigo-100/90 w-16 font-black"
-                                placeholder="태그"
-                            />
-                            <button onClick={() => updateSearchTag('remove', null, i)}>
-                                <X size={12} className="text-indigo-900 group-hover/tag:text-rose-400 transition-colors" />
-                            </button>
-                        </div>
+                        <FormItemInput 
+                            key={i}
+                            initialValue={tag}
+                            onUpdate={(val) => updateSearchTag('update', val, i)}
+                            onRemove={() => updateSearchTag('remove', null, i)}
+                            className="flex items-center gap-1.5 bg-indigo-500/10 px-2.5 py-1.5 rounded-lg border border-indigo-500/20 group/tag hover:bg-indigo-500/20 transition-all shadow-sm"
+                            inputClassName="bg-transparent border-none outline-none text-[11px] text-indigo-100/90 w-16 font-black"
+                            placeholder="태그"
+                            deleteBtnClassName="group-hover/tag:text-rose-400 text-indigo-900 transition-colors"
+                            deleteIconSize={12}
+                        />
                     ))}
                     {searchTags.length === 0 && <p className="text-[10px] text-white/5 italic ml-1">No metadata Tags.</p>}
                 </div>
@@ -332,18 +578,32 @@ export const ProblemForm = ({ formData, setFormData, isAnalyzingAnswer, updateGr
                 <div className="flex flex-col gap-4 font-bold">
                     <div className="flex flex-wrap gap-2">
                         {terms.map((term, i) => (
-                            <div key={i} className="flex items-center gap-2 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20 group/chip hover:bg-emerald-500/20 transition-all shadow-md">
-                                <input value={term} onChange={(e) => updateGradingPoint('mandatory_terms', 'update', e.target.value, i)} className="bg-transparent border-none outline-none text-[13px] text-emerald-100/90 w-24 font-bold" placeholder="용어 입력" />
-                                <button type="button" onClick={() => updateGradingPoint('mandatory_terms', 'remove', null, i)} className="text-emerald-900 group-hover/chip:text-rose-500 transition-colors"><X size={14} /></button>
-                            </div>
+                            <FormItemInput 
+                                key={i}
+                                initialValue={term}
+                                onUpdate={(val) => updateGradingPoint('mandatory_terms', 'update', val, i)}
+                                onRemove={() => updateGradingPoint('mandatory_terms', 'remove', null, i)}
+                                className="flex items-center gap-2 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20 group/chip hover:bg-emerald-500/20 transition-all shadow-md"
+                                inputClassName="bg-transparent border-none outline-none text-[13px] text-emerald-100/90 w-24 font-bold"
+                                placeholder="용어 입력"
+                                deleteBtnClassName="text-emerald-900 group-hover/chip:text-rose-500 transition-colors"
+                                deleteIconSize={14}
+                            />
                         ))}
                     </div>
                     <div className="flex flex-wrap gap-2">
                         {numbers.map((num, i) => (
-                            <div key={i} className="flex items-center gap-2 bg-blue-500/10 px-3 py-1.5 rounded-xl border border-blue-500/20 group/chip hover:bg-blue-500/20 transition-all shadow-lg">
-                                <input value={num} onChange={(e) => updateGradingPoint('mandatory_numbers', 'update', e.target.value, i)} className="bg-transparent border-none outline-none text-[13px] text-blue-100 w-20 font-black" placeholder="수치" />
-                                <button type="button" onClick={() => updateGradingPoint('mandatory_numbers', 'remove', null, i)} className="text-blue-900 group-hover/chip:text-rose-500 transition-colors"><X size={14} /></button>
-                            </div>
+                            <FormItemInput 
+                                key={i}
+                                initialValue={num}
+                                onUpdate={(val) => updateGradingPoint('mandatory_numbers', 'update', val, i)}
+                                onRemove={() => updateGradingPoint('mandatory_numbers', 'remove', null, i)}
+                                className="flex items-center gap-2 bg-blue-500/10 px-3 py-1.5 rounded-xl border border-blue-500/20 group/chip hover:bg-blue-500/20 transition-all shadow-lg"
+                                inputClassName="bg-transparent border-none outline-none text-[13px] text-blue-100 w-20 font-black"
+                                placeholder="수치"
+                                deleteBtnClassName="text-blue-900 group-hover/chip:text-rose-500 transition-colors"
+                                deleteIconSize={14}
+                            />
                         ))}
                     </div>
                 </div>

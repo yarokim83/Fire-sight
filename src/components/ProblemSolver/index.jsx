@@ -17,6 +17,78 @@ import DrawingToolbar from './DrawingToolbar';
 import ImageCarousel from './ImageCarousel';
 
 export default function ProblemSolver({ problems, startIndex = 0, onBack, onComplete, onEditProblem }) {
+    const [splitRatio, setSplitRatio] = useState(50);
+    const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 1024);
+    const containerRef = useRef(null);
+    const isDragging = useRef(false);
+
+    useEffect(() => {
+        const handleResize = () => {
+            setIsLargeScreen(window.innerWidth >= 1024);
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    const handleSplitStart = (clientX) => {
+        isDragging.current = true;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+    };
+
+    const handleSplitMove = (clientX) => {
+        if (!isDragging.current || !containerRef.current) return;
+        
+        const containerRect = containerRef.current.getBoundingClientRect();
+        const relativeX = clientX - containerRect.left;
+        let percentage = (relativeX / containerRect.width) * 100;
+        
+        if (percentage < 25) percentage = 25;
+        if (percentage > 75) percentage = 75;
+        
+        setSplitRatio(percentage);
+    };
+
+    const handleSplitEnd = () => {
+        if (isDragging.current) {
+            isDragging.current = false;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        }
+    };
+
+    const handleSplitMouseDown = (e) => {
+        handleSplitStart(e.clientX);
+    };
+
+    const handleSplitTouchStart = (e) => {
+        if (e.touches && e.touches[0]) {
+            handleSplitStart(e.touches[0].clientX);
+        }
+    };
+
+    useEffect(() => {
+        const handleMouseMove = (e) => handleSplitMove(e.clientX);
+        const handleTouchMove = (e) => {
+            if (e.touches && e.touches[0]) {
+                handleSplitMove(e.touches[0].clientX);
+            }
+        };
+        const handleMouseUp = () => handleSplitEnd();
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('touchmove', handleTouchMove, { passive: false });
+        window.addEventListener('mouseup', handleMouseUp);
+        window.addEventListener('touchend', handleMouseUp);
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('touchmove', handleTouchMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+            window.removeEventListener('touchend', handleMouseUp);
+        };
+    }, []);
+
     const [currentIndex, setCurrentIndex] = useState(startIndex);
     const [currentProblem, setCurrentProblem] = useState(null);
     const [showAnswer, setShowAnswer] = useState(false);
@@ -620,8 +692,14 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                 <button onClick={handleNext} className="w-full sm:w-auto bg-slate-800 hover:bg-slate-700 text-white px-10 py-5 rounded-2xl font-black flex items-center justify-center gap-3 transition-all border border-slate-700 shadow-xl active:scale-95">다음 학습 <ChevronRight size={24} /></button>
                             </div>
 
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                <div className="bg-slate-900/50 backdrop-blur-xl rounded-[2.5rem] p-10 border border-white/5 shadow-2xl h-full flex flex-col min-h-[500px]">
+                            <div 
+                                ref={containerRef}
+                                className="flex flex-col lg:flex-row gap-4 lg:gap-0 lg:relative items-stretch min-h-[500px]"
+                            >
+                                <div 
+                                    style={{ flexBasis: isLargeScreen ? `${splitRatio}%` : 'auto' }}
+                                    className="bg-slate-900/50 backdrop-blur-xl rounded-[2.5rem] p-10 border border-white/5 shadow-2xl flex flex-col transition-all duration-75"
+                                >
                                     <div className="flex justify-between items-center mb-8">
                                         <h3 className="text-white font-black flex items-center gap-3 text-xl"><CheckCircle2 size={28} className="text-blue-500" /> 나의 답안 분석</h3>
                                         {!isRetrying && inputMode === 'text' && (
@@ -663,7 +741,24 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                     </div>
                                 </div>
 
-                                <div className="space-y-8">
+                                {/* 세로 조절 스플리터 바 */}
+                                <div 
+                                    onMouseDown={handleSplitMouseDown}
+                                    onTouchStart={handleSplitTouchStart}
+                                    className="hidden lg:flex items-center justify-center w-6 cursor-col-resize group/splitter select-none relative z-30 flex-shrink-0"
+                                >
+                                    <div className="w-1 h-32 rounded-full bg-slate-800 group-hover/splitter:bg-blue-500/50 transition-colors" />
+                                    <div className="absolute w-2 h-6 flex flex-col justify-between items-center pointer-events-none">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-600 group-hover/splitter:bg-blue-400" />
+                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-600 group-hover/splitter:bg-blue-400" />
+                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-600 group-hover/splitter:bg-blue-400" />
+                                    </div>
+                                </div>
+
+                                <div 
+                                    style={{ flexBasis: isLargeScreen ? `${100 - splitRatio}%` : 'auto', flexGrow: 1 }}
+                                    className="space-y-8 flex flex-col transition-all duration-75"
+                                >
                                     <div 
                                         className="bg-emerald-950/20 rounded-[2.5rem] p-10 border border-emerald-900/50 shadow-2xl relative group/answer overflow-hidden transition-all duration-500 cursor-pointer"
                                         onClick={() => isRetrying && setIsPeek(!isPeek)}
