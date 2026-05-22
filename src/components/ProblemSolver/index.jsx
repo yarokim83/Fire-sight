@@ -20,7 +20,10 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const [splitRatio, setSplitRatio] = useState(50);
     const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 1024);
     const containerRef = useRef(null);
+    const leftPanelRef = useRef(null);
+    const rightPanelRef = useRef(null);
     const isDragging = useRef(false);
+    const currentRatioRef = useRef(50);
 
     useEffect(() => {
         const handleResize = () => {
@@ -34,6 +37,10 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         isDragging.current = true;
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
+        if (leftPanelRef.current && rightPanelRef.current) {
+            leftPanelRef.current.style.transition = 'none';
+            rightPanelRef.current.style.transition = 'none';
+        }
     };
 
     const handleSplitMove = (clientX) => {
@@ -46,7 +53,11 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         if (percentage < 25) percentage = 25;
         if (percentage > 75) percentage = 75;
         
-        setSplitRatio(percentage);
+        currentRatioRef.current = percentage;
+        if (leftPanelRef.current && rightPanelRef.current) {
+            leftPanelRef.current.style.flexBasis = `${percentage}%`;
+            rightPanelRef.current.style.flexBasis = `${100 - percentage}%`;
+        }
     };
 
     const handleSplitEnd = () => {
@@ -54,6 +65,11 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             isDragging.current = false;
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
+            if (leftPanelRef.current && rightPanelRef.current) {
+                leftPanelRef.current.style.transition = '';
+                rightPanelRef.current.style.transition = '';
+            }
+            setSplitRatio(currentRatioRef.current);
         }
     };
 
@@ -697,6 +713,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                 className="flex flex-col lg:flex-row gap-4 lg:gap-0 lg:relative items-stretch min-h-[500px]"
                             >
                                 <div 
+                                    ref={leftPanelRef}
                                     style={{ flexBasis: isLargeScreen ? `${splitRatio}%` : 'auto' }}
                                     className="bg-slate-900/50 backdrop-blur-xl rounded-[2.5rem] p-10 border border-white/5 shadow-2xl flex flex-col transition-all duration-75"
                                 >
@@ -756,6 +773,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                 </div>
 
                                 <div 
+                                    ref={rightPanelRef}
                                     style={{ flexBasis: isLargeScreen ? `${100 - splitRatio}%` : 'auto', flexGrow: 1 }}
                                     className="space-y-8 flex flex-col transition-all duration-75"
                                 >
