@@ -154,6 +154,7 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
                     currentIndex={currentCropIndex}
                     extractText={extractText}
                     setExtractText={setExtractText}
+                    mode={viewMode}
                 />
             )}
 

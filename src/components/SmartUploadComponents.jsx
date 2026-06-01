@@ -20,7 +20,7 @@ import { detectContentBounds } from '../utils/canvasUtils';
 export const CropModal = ({ 
     isOpen, src, crop, setCrop, setCompletedCrop, imgRef, 
     onConfirm, onSkip, onCancel, totalCount, currentIndex,
-    extractText, setExtractText
+    extractText, setExtractText, mode = 'problem'
 }) => {
     const [zoom, setZoom] = useState(100); // 초기값 100% (전체 보기)
     
@@ -32,7 +32,7 @@ export const CropModal = ({
 
     const handleAutoFit = () => {
         if (imgRef.current) {
-            const detected = detectContentBounds(imgRef.current);
+            const detected = detectContentBounds(imgRef.current, mode);
             setCrop(detected);
             setCompletedCrop(detected);
         }

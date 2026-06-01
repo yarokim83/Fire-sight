@@ -68,7 +68,7 @@ export const getCroppedImg = (image, crop, fileName) => {
  * @param {HTMLImageElement} image - 원본 이미지 엘리먼트
  * @returns {Object} - 퍼센트(%) 기준의 Crop 영역 객체 { x, y, width, height }
  */
-export const detectContentBounds = (image) => {
+export const detectContentBounds = (image, mode = 'problem') => {
   if (!image || !image.naturalWidth || !image.naturalHeight) {
     return { unit: '%', x: 5, y: 5, width: 90, height: 90 };
   }
@@ -97,11 +97,15 @@ export const detectContentBounds = (image) => {
     let maxX = 0;
     let minY = scanHeight;
     let maxY = 0;
-
     let detectedCount = 0;
 
-    // 스캔한 밝기 임계값 (텍스트/도면 등 어두운 콘텐츠 감지용)
-    const threshold = 240; 
+    // 1. 회색 배경 박스 영역 검출 (Answer 모드이거나 Problem 모드에서 경계선 잡을 때 사용)
+    // 연한 회색 조건: R, G, B가 모두 230 이상 250 이하이며, RGB 간의 편차가 매우 작음 (채도가 0에 수렴)
+    let grayMinX = scanWidth;
+    let grayMaxX = 0;
+    let grayMinY = scanHeight;
+    let grayMaxY = 0;
+    let grayDetectedCount = 0;
 
     for (let y = marginY; y < scanHeight - marginY; y++) {
       for (let x = marginX; x < scanWidth - marginX; x++) {
@@ -111,9 +115,65 @@ export const detectContentBounds = (image) => {
         const b = data[idx + 2];
         const a = data[idx + 3];
 
-        if (a < 50) continue; // 투명 픽셀 패스
+        if (a < 50) continue; // 투명 패스
 
-        // Luminance 계산
+        const diffRG = Math.abs(r - g);
+        const diffGB = Math.abs(g - b);
+        const diffBR = Math.abs(b - r);
+        const isGrayTone = (r >= 230 && r <= 250) && (g >= 230 && g <= 250) && (b >= 230 && b <= 250) && 
+                           (diffRG <= 4 && diffGB <= 4 && diffBR <= 4);
+
+        if (isGrayTone) {
+          if (x < grayMinX) grayMinX = x;
+          if (x > grayMaxX) grayMaxX = x;
+          if (y < grayMinY) grayMinY = y;
+          if (y > grayMaxY) grayMaxY = y;
+          grayDetectedCount++;
+        }
+      }
+    }
+
+    if (mode === 'answer') {
+      // 해설 모드: 감지된 회색 박스 영역이 충분히 크다면 이를 크롭 범위로 즉시 반환
+      if (grayDetectedCount > 150 && grayMinX < grayMaxX && grayMinY < grayMaxY) {
+        const padX = Math.round(scanWidth * 0.02);
+        const padY = Math.round(scanHeight * 0.02);
+
+        const finalMinX = Math.max(0, grayMinX - padX);
+        const finalMaxX = Math.min(scanWidth, grayMaxX + padX);
+        const finalMinY = Math.max(0, grayMinY - padY);
+        const finalMaxY = Math.min(scanHeight, grayMaxY + padY);
+
+        return {
+          unit: '%',
+          x: Math.round((finalMinX / scanWidth) * 100),
+          y: Math.round((finalMinY / scanHeight) * 100),
+          width: Math.round(((finalMaxX - finalMinX) / scanWidth) * 100),
+          height: Math.round(((finalMaxY - finalMinY) / scanHeight) * 100)
+        };
+      }
+      // 회색 박스 검출 실패 시 일반 어두운 픽셀(텍스트) 검출 로직(아래)으로 전환
+    }
+
+    // 2. 지문 모드(Problem) 혹은 해설 모드 내 회색 박스 감출 실패 시 텍스트 감출
+    // 지문 모드이고 회색 박스가 발견되었다면, 스캔 높이 한계를 회색 박스 상단선 위로 제약
+    let scanLimitY = scanHeight - marginY;
+    if (mode === 'problem' && grayDetectedCount > 150 && grayMinY < scanHeight) {
+      scanLimitY = Math.max(marginY + 10, grayMinY - 2); 
+    }
+
+    const threshold = 240; // 텍스트 감출 임계치
+
+    for (let y = marginY; y < scanLimitY; y++) {
+      for (let x = marginX; x < scanWidth - marginX; x++) {
+        const idx = (y * scanWidth + x) * 4;
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
+        const a = data[idx + 3];
+
+        if (a < 50) continue;
+
         const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
 
         if (luminance < threshold) {
@@ -126,21 +186,18 @@ export const detectContentBounds = (image) => {
       }
     }
 
-    // 의미 있는 수준의 데이터가 발견되지 않았을 경우 기본 90% 영역 할당
     if (detectedCount < 10 || minX >= maxX || minY >= maxY) {
       return { unit: '%', x: 5, y: 5, width: 90, height: 90 };
     }
 
-    // 텍스트가 모서리에 걸려 잘리는 현상을 막기 위해 3% 가량의 패딩(Padding) 제공
     const padX = Math.round(scanWidth * 0.03);
     const padY = Math.round(scanHeight * 0.03);
 
     const finalMinX = Math.max(0, minX - padX);
     const finalMaxX = Math.min(scanWidth, maxX + padX);
     const finalMinY = Math.max(0, minY - padY);
-    const finalMaxY = Math.min(scanHeight, maxY + padY);
+    const finalMaxY = Math.min(scanLimitY, maxY + padY);
 
-    // 캔버스 크기 대비 백분율(%)로 치환
     const x = (finalMinX / scanWidth) * 100;
     const y = (finalMinY / scanHeight) * 100;
     const w = ((finalMaxX - finalMinX) / scanWidth) * 100;
