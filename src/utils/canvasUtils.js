@@ -66,6 +66,7 @@ export const getCroppedImg = (image, crop, fileName) => {
 /**
  * 이미지 내에서 텍스트 및 콘텐츠가 존재하는 실제 영역(Bounding Box)을 감지합니다.
  * @param {HTMLImageElement} image - 원본 이미지 엘리먼트
+ * @param {string} mode - 'problem' (지문) 또는 'answer' (해설)
  * @returns {Object} - 퍼센트(%) 기준의 Crop 영역 객체 { x, y, width, height }
  */
 export const detectContentBounds = (image, mode = 'problem') => {
@@ -91,7 +92,7 @@ export const detectContentBounds = (image, mode = 'problem') => {
 
     // 1. 이미지의 동적 배경 밝기(bgL) 추정
     const sampledLuminances = [];
-    for (let i = 0; i < data.length; i += 40) { // 연산 속도를 위해 10픽셀마다 샘플링
+    for (let i = 0; i < data.length; i += 40) { 
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
@@ -102,140 +103,156 @@ export const detectContentBounds = (image, mode = 'problem') => {
       }
     }
     sampledLuminances.sort((a, b) => b - a);
-    
-    // 상위 5% 밝기 수준을 기준 배경 밝기로 추정 (노이즈 방지)
     const bgL = sampledLuminances[Math.floor(sampledLuminances.length * 0.05)] || 255;
     
-    // 동적 임계치 비율 설정
-    const textThreshold = bgL * 0.85; // 배경 대비 15% 이상 어두우면 글씨(콘텐츠)
-    const grayMinRatio = 0.83;       // 배경 대비 약 17% 어두운 범위부터
-    const grayMaxRatio = 0.96;       // 배경 대비 약 4% 어두운 범위까지 회색 박스 인정
+    // 어두운 텍스트 임계치 (배경 밝기 비례)
+    const textThreshold = bgL * 0.86; 
 
-    // 외곽 테두리 검은 선 등의 노이즈가 영역으로 감지되지 않도록 가장자리 2% 마진 제외
+    // 외곽 테두리 노이즈 차단을 위한 좌우/상하 마진 제외 (2%)
     const marginX = Math.max(1, Math.round(scanWidth * 0.02));
     const marginY = Math.max(1, Math.round(scanHeight * 0.02));
 
-    let minX = scanWidth;
-    let maxX = 0;
-    let minY = scanHeight;
-    let maxY = 0;
-    let detectedCount = 0;
-
-    // 2. 회색 배경 박스 영역 검출 (Answer 모드이거나 Problem 모드에서 경계선 잡을 때 사용)
-    let grayMinX = scanWidth;
-    let grayMaxX = 0;
-    let grayMinY = scanHeight;
-    let grayMaxY = 0;
-    let grayDetectedCount = 0;
-
+    // 2. 수평 투영 프로파일 (행별 텍스트 픽셀 밀도 계산)
+    const rowDensities = new Array(scanHeight).fill(0);
     for (let y = marginY; y < scanHeight - marginY; y++) {
+      let textPixelCount = 0;
       for (let x = marginX; x < scanWidth - marginX; x++) {
         const idx = (y * scanWidth + x) * 4;
         const r = data[idx];
         const g = data[idx + 1];
         const b = data[idx + 2];
         const a = data[idx + 3];
-
-        if (a < 50) continue; // 투명 패스
-
-        const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-        const ratio = luminance / bgL;
-
-        const diffRG = Math.abs(r - g);
-        const diffGB = Math.abs(g - b);
-        const diffBR = Math.abs(b - r);
-        
-        // 회색 판정: R/G/B 편차가 적고, 무채색이며, 배경보다 살짝 어두운 톤인가
-        const isGrayTone = (ratio >= grayMinRatio && ratio <= grayMaxRatio) && 
-                           (diffRG <= 5 && diffGB <= 5 && diffBR <= 5);
-
-        if (isGrayTone) {
-          if (x < grayMinX) grayMinX = x;
-          if (x > grayMaxX) grayMaxX = x;
-          if (y < grayMinY) grayMinY = y;
-          if (y > grayMaxY) grayMaxY = y;
-          grayDetectedCount++;
-        }
-      }
-    }
-
-    const hasGrayBox = grayDetectedCount > 150 && grayMinX < grayMaxX && grayMinY < grayMaxY;
-
-    if (mode === 'answer') {
-      // 해설 모드: 감지된 회색 박스 영역이 유효하다면 즉시 반환
-      if (hasGrayBox) {
-        const padX = Math.round(scanWidth * 0.02);
-        const padY = Math.round(scanHeight * 0.02);
-
-        const finalMinX = Math.max(0, grayMinX - padX);
-        const finalMaxX = Math.min(scanWidth, grayMaxX + padX);
-        const finalMinY = Math.max(0, grayMinY - padY);
-        const finalMaxY = Math.min(scanHeight, grayMaxY + padY);
-
-        return {
-          unit: '%',
-          x: Math.round((finalMinX / scanWidth) * 100),
-          y: Math.round((finalMinY / scanHeight) * 100),
-          width: Math.round(((finalMaxX - finalMinX) / scanWidth) * 100),
-          height: Math.round(((finalMaxY - finalMinY) / scanHeight) * 100)
-        };
-      }
-      // 회색 박스 검출 실패 시 일반 어두운 픽셀(텍스트) 검출 로직(아래)으로 전환
-    }
-
-    // 3. 지문 모드(Problem) 혹은 회색 박스가 없는 상황에서의 텍스트 검출
-    let scanLimitY = scanHeight - marginY;
-    if (mode === 'problem' && hasGrayBox && grayMinY < scanHeight) {
-      // 지문 모드일 때 회색 박스가 감지되면, 스캔 한계선을 회색 박스 상단선 위로 제약
-      scanLimitY = Math.max(marginY + 10, grayMinY - 2); 
-    }
-
-    for (let y = marginY; y < scanLimitY; y++) {
-      for (let x = marginX; x < scanWidth - marginX; x++) {
-        const idx = (y * scanWidth + x) * 4;
-        const r = data[idx];
-        const g = data[idx + 1];
-        const b = data[idx + 2];
-        const a = data[idx + 3];
-
         if (a < 50) continue;
 
-        const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        if (lum < textThreshold) {
+          textPixelCount++;
+        }
+      }
+      rowDensities[y] = textPixelCount;
+    }
 
-        // 동적으로 산출된 텍스트 임계치보다 어두운 경우만 글씨로 인정
-        if (luminance < textThreshold) {
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
-          detectedCount++;
+    // 3. 여백 행(Blank Line) 식별 및 연속성(Gaps) 계산
+    // 300px 너비 기준, 가로 한 줄에 텍스트 판정 픽셀이 2px 이하면 여백 행으로 판단
+    const blankThreshold = Math.max(1, Math.round(scanWidth * 0.007)); 
+    const isBlankRow = new Array(scanHeight).fill(true);
+    for (let y = marginY; y < scanHeight - marginY; y++) {
+      if (rowDensities[y] > blankThreshold) {
+        isBlankRow[y] = false;
+      }
+    }
+
+    // 세로 방향 빈 공간(여백 구간) 탐색
+    const gaps = [];
+    let inGap = false;
+    let gapStart = 0;
+
+    for (let y = marginY; y < scanHeight - marginY; y++) {
+      if (isBlankRow[y]) {
+        if (!inGap) {
+          gapStart = y;
+          inGap = true;
+        }
+      } else {
+        if (inGap) {
+          const gapHeight = y - gapStart;
+          // 일반 줄간 여백 노이즈를 배제하기 위해 높이가 최소 3px 이상인 의미 있는 여백만 수집
+          if (gapHeight >= 3) {
+            gaps.push({ start: gapStart, end: y - 1, height: gapHeight });
+          }
+          inGap = false;
+        }
+      }
+    }
+    if (inGap) {
+      const gapHeight = (scanHeight - marginY) - gapStart;
+      if (gapHeight >= 3) {
+        gaps.push({ start: gapStart, end: scanHeight - marginY - 1, height: gapHeight });
+      }
+    }
+
+    // 4. 문단 가르기 여백 식별 (가장 높이가 큰 여백 상위 3개를 Y좌표 순으로 수집)
+    const sortedGaps = [...gaps].sort((a, b) => b.height - a.height);
+    const significantGaps = sortedGaps.slice(0, 3);
+    significantGaps.sort((a, b) => a.start - b.start);
+
+    let dividerY1 = 0; // 지문-해설 분할 경계 Y
+    let dividerY2 = scanHeight - marginY; // 해설-다음문제 분할 경계 Y
+
+    if (significantGaps.length >= 2) {
+      // 2개 이상의 의미 있는 큰 여백이 검출됨 (지문-해설 경계, 해설-다음문제 경계 순)
+      const gap1 = significantGaps[0];
+      const gap2 = significantGaps[1];
+
+      dividerY1 = Math.round((gap1.start + gap1.end) / 2);
+      dividerY2 = Math.round((gap2.start + gap2.end) / 2);
+    } else if (significantGaps.length === 1) {
+      // 의미 있는 큰 여백이 단 1개만 검출된 경우 (한 문제만 인쇄된 페이지)
+      const gap1 = significantGaps[0];
+      dividerY1 = Math.round((gap1.start + gap1.end) / 2);
+      dividerY2 = scanHeight - marginY;
+    } else {
+      // 분할 여백 검출 실패 시 폴백
+      dividerY1 = 0;
+      dividerY2 = scanHeight - marginY;
+    }
+
+    // 5. 모드별 크롭 상자 바운딩 박스(Bounding Box) 계산
+    let limitMinY = marginY;
+    let limitMaxY = scanHeight - marginY;
+
+    if (mode === 'problem') {
+      limitMinY = marginY;
+      limitMaxY = dividerY1 > 0 ? dividerY1 : (scanHeight - marginY);
+    } else {
+      limitMinY = dividerY1 > 0 ? dividerY1 : marginY;
+      limitMaxY = dividerY2 > dividerY1 ? dividerY2 : (scanHeight - marginY);
+    }
+
+    let finalMinX = scanWidth;
+    let finalMaxX = 0;
+    let finalMinY = scanHeight;
+    let finalMaxY = 0;
+    let foundPixels = 0;
+
+    for (let y = limitMinY; y < limitMaxY; y++) {
+      for (let x = marginX; x < scanWidth - marginX; x++) {
+        const idx = (y * scanWidth + x) * 4;
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
+        const a = data[idx + 3];
+        if (a < 50) continue;
+
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        if (lum < textThreshold) {
+          if (x < finalMinX) finalMinX = x;
+          if (x > finalMaxX) finalMaxX = x;
+          if (y < finalMinY) finalMinY = y;
+          if (y > finalMaxY) finalMaxY = y;
+          foundPixels++;
         }
       }
     }
 
-    if (detectedCount < 10 || minX >= maxX || minY >= maxY) {
+    if (foundPixels < 10 || finalMinX >= finalMaxX || finalMinY >= finalMaxY) {
       return { unit: '%', x: 5, y: 5, width: 90, height: 90 };
     }
 
-    const padX = Math.round(scanWidth * 0.03);
-    const padY = Math.round(scanHeight * 0.03);
+    const padX = Math.round(scanWidth * (mode === 'problem' ? 0.03 : 0.02));
+    const padY = Math.round(scanHeight * (mode === 'problem' ? 0.03 : 0.02));
 
-    const finalMinX = Math.max(0, minX - padX);
-    const finalMaxX = Math.min(scanWidth, maxX + padX);
-    const finalMinY = Math.max(0, minY - padY);
-    const finalMaxY = Math.min(scanLimitY, maxY + padY);
-
-    const x = (finalMinX / scanWidth) * 100;
-    const y = (finalMinY / scanHeight) * 100;
-    const w = ((finalMaxX - finalMinX) / scanWidth) * 100;
-    const h = ((finalMaxY - finalMinY) / scanHeight) * 100;
+    const finalX = Math.max(0, finalMinX - padX);
+    const finalW = Math.min(scanWidth, finalMaxX + padX) - finalX;
+    const finalY = Math.max(limitMinY, finalMinY - padY);
+    const finalH = Math.min(limitMaxY, finalMaxY + padY) - finalY;
 
     return {
       unit: '%',
-      x: Math.round(x),
-      y: Math.round(y),
-      width: Math.round(w),
-      height: Math.round(h)
+      x: Math.round((finalX / scanWidth) * 100),
+      y: Math.round((finalY / scanHeight) * 100),
+      width: Math.round((finalW / scanWidth) * 100),
+      height: Math.round((finalH / scanHeight) * 100)
     };
   } catch (error) {
     console.error("detectContentBounds error:", error);
