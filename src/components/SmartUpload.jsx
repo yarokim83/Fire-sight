@@ -19,7 +19,7 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
         handleInitialUpload, handleAddImages, handleRemoveImage, handleSave, resetState,
         updateGradingPoint, updateSearchTag,
         cropSrc, crop, setCrop, setCompletedCrop,
-        isCropModalOpen, imgRef, onCropConfirm, onCropCancel,
+        isCropModalOpen, imgRef, onCropConfirm, onCropSkip, onCropCancel,
         currentCropTotal, currentCropIndex,
         extractText, setExtractText
     } = useSmartUpload(initialData, onSaveComplete);
@@ -148,6 +148,7 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
                     setCompletedCrop={setCompletedCrop}
                     imgRef={imgRef}
                     onConfirm={onCropConfirm}
+                    onSkip={onCropSkip}
                     onCancel={onCropCancel}
                     totalCount={currentCropTotal}
                     currentIndex={currentCropIndex}

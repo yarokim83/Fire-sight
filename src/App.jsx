@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import {
   Flame, Droplets, Zap, Eye, EyeOff,
-  Wind, DoorOpen, Layers
+  Wind, DoorOpen, Layers, Menu
 } from 'lucide-react'
 
 // 컴포넌트 임포트
@@ -26,7 +26,7 @@ const THEME_CONFIG = {
   '공통': { bg: 'bg-slate-900', border: 'border-purple-500/30', activeTab: 'bg-purple-600 text-white shadow-purple-500/20', text: 'text-purple-400', icon: Layers }
 };
 
-const APP_VERSION = 'v3.2.24'; // 안티그래비티 이관
+const APP_VERSION = 'v3.2.30'; // 안티그래비티 이관
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const SCOPES = 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.file';
 
@@ -43,6 +43,7 @@ function App() {
   const [subject, setSubject] = useState('수계');
   const [isExamMode, setIsExamMode] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
 
   // 데이터 흐름 (수정 데이터 관리)
   const [activeStrategy, setActiveStrategy] = useState(null);
@@ -107,6 +108,19 @@ function App() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 1024;
+      setIsMobile(mobile);
+      if (mobile) {
+        setIsSidebarCollapsed(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {
@@ -274,14 +288,25 @@ function App() {
 
       {!isExamMode && (
         <header className={`h-14 border-b ${theme.border} bg-slate-900/80 backdrop-blur-md flex items-center justify-between px-4 z-50 shadow-sm shrink-0 transition-colors duration-500`}>
-          <div className="flex items-center gap-2 cursor-pointer min-w-max" onClick={() => setMode('dashboard')}>
-            <div className="p-1.5 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg shadow-lg">
-              <Flame size={18} className="text-white fill-white" />
+          <div className="flex items-center gap-2">
+            {isMobile && (
+              <button
+                onClick={() => setIsSidebarCollapsed(false)}
+                className="mr-1 p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-all active:scale-95 shrink-0 cursor-pointer"
+                title="메뉴 열기"
+              >
+                <Menu size={18} />
+              </button>
+            )}
+            <div className="flex items-center gap-2 cursor-pointer min-w-max" onClick={() => setMode('dashboard')}>
+              <div className="p-1.5 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg shadow-lg">
+                <Flame size={18} className="text-white fill-white" />
+              </div>
+              <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                Fire-Sight <span className="font-light text-slate-400">Pro</span>
+                <span className="text-[9px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 border border-white/5 uppercase font-black">{APP_VERSION}</span>
+              </h1>
             </div>
-            <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
-              Fire-Sight <span className="font-light text-slate-400">Pro</span>
-              <span className="text-[9px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 border border-white/5 uppercase font-black">{APP_VERSION}</span>
-            </h1>
           </div>
 
           <div className="flex-1"></div>
@@ -321,6 +346,7 @@ function App() {
             setIsCollapsed={setIsSidebarCollapsed}
             isAuthenticated={isAuthenticated}
             handleLogout={handleLogout}
+            isMobile={isMobile}
           />
         )}
         <main className={`flex-1 relative overflow-hidden ${theme.bg} transition-colors duration-500 ${isExamMode ? 'text-lg tracking-wide' : 'text-base'}`}>

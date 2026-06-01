@@ -113,10 +113,14 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
         }
     };
 
-    const onCropConfirm = async () => {
+    const onCropConfirm = async (isSkip = false) => {
         try {
             const originalFile = cropQueueRef.current[currentCropIndex];
-            if (completedCrop?.width && completedCrop?.height && imgRef.current) {
+            
+            if (isSkip) {
+                const targetName = cropTarget === 'problem' ? '지문' : '해설';
+                addLog(`⏩ 제외 선택: ${targetName} ${currentCropIndex + 1}쪽 업로드에서 완전히 제외됨`);
+            } else if (completedCrop?.width && completedCrop?.height && imgRef.current) {
                 addLog(`✂️ 영역 정밀 타격 완료...`);
                 const croppedBlob = await getCroppedImg(imgRef.current, completedCrop);
                 const fileExt = originalFile.name.split('.').pop();
@@ -125,6 +129,7 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
                 croppedFile.skipExtraction = !extractText;
                 processedFilesRef.current.push(croppedFile);
             } else {
+                addLog(`📸 전체 이미지 유지: 원본 전체 영역 추출/저장 진행`);
                 originalFile.isCropped = false;
                 originalFile.skipExtraction = !extractText;
                 processedFilesRef.current.push(originalFile);
@@ -424,7 +429,9 @@ export const useSmartUpload = (initialData, onSaveComplete) => {
                 return { ...prev, searchTags: list };
             });
         },
-        cropSrc, crop, setCrop, completedCrop, setCompletedCrop, isCropModalOpen, imgRef, onCropConfirm, 
+        cropSrc, crop, setCrop, completedCrop, setCompletedCrop, isCropModalOpen, imgRef, 
+        onCropConfirm: () => onCropConfirm(false),
+        onCropSkip: () => onCropConfirm(true),
         onCropCancel: () => { setIsCropModalOpen(false); setCropSrc(null); cropQueueRef.current = []; setExtractText(true); },
         currentCropTotal: cropQueueRef.current.length, currentCropIndex: currentCropIndex + 1,
         extractText, setExtractText

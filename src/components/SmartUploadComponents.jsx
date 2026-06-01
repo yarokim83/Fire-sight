@@ -19,7 +19,7 @@ import { detectContentBounds } from '../utils/canvasUtils';
  --------------------------------------------------------- */
 export const CropModal = ({ 
     isOpen, src, crop, setCrop, setCompletedCrop, imgRef, 
-    onConfirm, onCancel, totalCount, currentIndex,
+    onConfirm, onSkip, onCancel, totalCount, currentIndex,
     extractText, setExtractText
 }) => {
     const [zoom, setZoom] = useState(100); // 초기값 100% (전체 보기)
@@ -40,48 +40,63 @@ export const CropModal = ({
 
     return (
         <div className="fixed inset-0 z-[10000] bg-black/98 backdrop-blur-2xl flex flex-col animate-in fade-in duration-300 font-sans">
-            {/* 상단 컨트롤 센터: PSA 스타일 정밀 조작반 */}
-            <div className="h-20 flex items-center justify-between px-8 bg-slate-900/90 border-b border-white/10 shrink-0">
-                <div className="flex items-center gap-4">
-                    <div className="p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-600/20">
-                        <Maximize size={22} className="text-white" />
-                    </div>
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <h3 className="text-lg font-black text-white tracking-tight">정밀 영역 타격</h3>
-                            {/* 멀티 이미지 진행도 표시 */}
-                            {totalCount > 1 && (
-                                <span className="bg-blue-500 text-white px-2 py-0.5 rounded text-[10px] font-black animate-pulse">
-                                    {currentIndex} / {totalCount}
-                                </span>
-                            )}
+            {/* 상단 컨트롤 센터: 반응형으로 높이 및 간격 조절 */}
+            <div className="bg-slate-900/90 border-b border-white/10 shrink-0 px-4 py-3 xl:py-0 xl:h-20 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3 xl:gap-4 relative">
+                {/* 1. 왼쪽 타이틀 영역 & 모바일용 메인 액션 */}
+                <div className="flex items-center justify-between xl:justify-start gap-3 w-full xl:w-auto shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 lg:p-3 bg-blue-600 rounded-xl lg:rounded-2xl shadow-lg shadow-blue-600/20">
+                            <Maximize size={18} className="text-white lg:hidden" />
+                            <Maximize size={22} className="text-white hidden lg:block" />
                         </div>
-                        <p className="text-white/30 text-[10px] uppercase font-black font-mono tracking-widest mt-0.5">PSA Precision Crop System Active</p>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-sm lg:text-lg font-black text-white tracking-tight">정밀 영역 타격</h3>
+                                {totalCount > 1 && (
+                                    <span className="bg-blue-500 text-white px-2 py-0.5 rounded text-[9px] lg:text-[10px] font-black animate-pulse">
+                                        {currentIndex} / {totalCount}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-white/30 text-[8px] lg:text-[10px] uppercase font-black font-mono tracking-widest mt-0.5">PSA Precision Crop System</p>
+                        </div>
+                    </div>
+
+                    {/* 모바일/태블릿(xl 미만) 화면에서 타이틀 우측에 취소/확인 버튼 배치 */}
+                    <div className="flex xl:hidden gap-1.5 md:gap-2">
+                        <button onClick={onCancel} className="px-3 py-2 rounded-xl bg-white/5 text-white/50 hover:bg-rose-500/20 hover:text-rose-400 transition-all text-[10px] font-bold border border-white/5 uppercase tracking-widest">
+                            Cancel
+                        </button>
+                        <button onClick={onConfirm} className="px-3.5 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-500 transition-all shadow-md text-[10px] font-black flex items-center gap-1 uppercase tracking-widest">
+                            <Check size={12} strokeWidth={3} />
+                            <span>{currentIndex < totalCount ? "Next" : "Confirm"}</span>
+                        </button>
                     </div>
                 </div>
 
-                {/* 중앙 줌 컨트롤러: 확대 시에도 스크롤로 전체 탐색 가능 */}
-                <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 bg-white/5 p-2 rounded-2xl border border-white/10 backdrop-blur-xl">
-                    <button onClick={handleZoomOut} className="p-2 hover:bg-white/10 rounded-xl text-white/60 transition-all hover:text-white"><ZoomOut size={20} /></button>
-                    <div className="flex items-center gap-3 px-2">
+                {/* 2. 중앙 줌 컨트롤러: xl 미만에서는 중앙 정렬, xl 이상에서는 absolute 중앙 배치 */}
+                <div className="flex items-center gap-3 bg-white/5 p-2 rounded-2xl border border-white/10 backdrop-blur-xl shrink-0 my-1 xl:my-0 xl:absolute xl:left-1/2 xl:-translate-x-1/2">
+                    <button onClick={handleZoomOut} className="p-2 hover:bg-white/10 rounded-xl text-white/60 transition-all hover:text-white"><ZoomOut size={16} /></button>
+                    <div className="flex items-center gap-3 px-1 lg:px-2">
                         <input 
                             type="range" min="50" max="300" value={zoom} 
                             onChange={(e) => setZoom(Number(e.target.value))} 
-                            className="w-40 accent-blue-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                            className="w-24 sm:w-32 md:w-40 accent-blue-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer"
                         />
-                        <span className="text-[10px] font-black text-blue-400 font-mono w-8">{zoom}%</span>
+                        <span className="text-[9px] lg:text-[10px] font-black text-blue-400 font-mono w-8">{zoom}%</span>
                     </div>
-                    <button onClick={handleZoomIn} className="p-2 hover:bg-white/10 rounded-xl text-white/60 transition-all hover:text-white"><ZoomIn size={20} /></button>
+                    <button onClick={handleZoomIn} className="p-2 hover:bg-white/10 rounded-xl text-white/60 transition-all hover:text-white"><ZoomIn size={16} /></button>
                     <div className="w-[1px] h-4 bg-white/10 mx-1" />
                     <button onClick={handleResetZoom} className="p-2 hover:bg-white/10 rounded-xl text-white/40 transition-all hover:text-blue-400" title="화면 맞춤">
-                        <RotateCcw size={18} />
+                        <RotateCcw size={16} />
                     </button>
                 </div>
 
-                <div className="flex gap-4">
+                {/* 3. 오른쪽 버튼 액션 영역 */}
+                <div className="flex flex-wrap items-center justify-center xl:justify-end gap-1.5 md:gap-2 w-full xl:w-auto shrink-0 pb-1 xl:pb-0">
                     <button
                         onClick={() => setExtractText(!extractText)}
-                        className={`px-6 py-3 rounded-2xl text-sm font-black border transition-all flex items-center gap-2 uppercase tracking-widest active:scale-95 shadow-lg ${
+                        className={`px-3 py-2 rounded-xl text-[10px] font-black border transition-all flex items-center gap-1 md:gap-1.5 uppercase tracking-widest active:scale-95 shadow-lg ${
                             extractText
                             ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500 hover:text-white shadow-emerald-500/5'
                             : 'bg-white/5 text-white/40 border-white/5 hover:bg-rose-500/20 hover:text-rose-400 hover:border-rose-500/20'
@@ -90,26 +105,38 @@ export const CropModal = ({
                     >
                         {extractText ? (
                             <>
-                                <ScanLine size={16} />
-                                <span>OCR Extract: ON ✨</span>
+                                <ScanLine size={12} />
+                                <span className="text-[10px]">OCR: ON ✨</span>
                             </>
                         ) : (
                             <>
-                                <X size={16} />
-                                <span>OCR Extract: SKIP ⏩</span>
+                                <X size={12} />
+                                <span className="text-[10px]">OCR: SKIP ⏩</span>
                             </>
                         )}
                     </button>
                     <button 
                         onClick={handleAutoFit}
-                        className="px-6 py-3 rounded-2xl bg-amber-500/10 text-amber-400 hover:bg-amber-500 hover:text-white transition-all text-sm font-black border border-amber-500/20 flex items-center gap-2 uppercase tracking-widest active:scale-95 shadow-lg shadow-amber-500/5"
+                        className="px-3 py-2 rounded-xl bg-amber-500/10 text-amber-400 hover:bg-amber-500 hover:text-white transition-all text-[10px] font-black border border-amber-500/20 flex items-center gap-1 md:gap-1.5 uppercase tracking-widest active:scale-95 shadow-lg shadow-amber-500/5"
                         title="AI 스마트 자동 콘텐츠 경계 맞춤"
                     >
-                        <Sparkles size={16} /> Smart Fit 🪄
+                        <Sparkles size={12} /> <span className="text-[10px]">Smart Fit 🪄</span>
                     </button>
-                    <button onClick={onCancel} className="px-6 py-3 rounded-2xl bg-white/5 text-white/50 hover:bg-rose-500/20 hover:text-rose-400 transition-all text-sm font-bold border border-white/5 uppercase tracking-widest">Cancel</button>
-                    <button onClick={onConfirm} className="px-8 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-500 transition-all shadow-2xl text-sm font-black flex items-center gap-2 uppercase tracking-widest">
-                        <Check size={18} strokeWidth={3} /> {currentIndex < totalCount ? "Next Image" : "Confirm Area"}
+                    <button 
+                        onClick={onSkip}
+                        className="px-3 py-2 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-600 hover:text-white transition-all text-[10px] font-black border border-rose-500/20 flex items-center gap-1 md:gap-1.5 uppercase tracking-widest active:scale-95 shadow-lg shadow-rose-500/5"
+                        title="이 이미지를 저장 목록에서 완전히 제외하고 다음으로 넘어갑니다"
+                    >
+                        <Trash2 size={12} /> <span className="text-[10px]">Exclude 🗑️</span>
+                    </button>
+                    
+                    {/* xl 이상에서만 노출되는 대화면용 취소/확인 버튼 */}
+                    <button onClick={onCancel} className="hidden xl:block px-5 py-2.5 rounded-xl bg-white/5 text-white/50 hover:bg-rose-500/20 hover:text-rose-400 transition-all text-xs font-bold border border-white/5 uppercase tracking-widest">
+                        Cancel
+                    </button>
+                    <button onClick={onConfirm} className="hidden xl:block px-6 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-500 transition-all shadow-2xl text-xs font-black flex items-center gap-1.5 uppercase tracking-widest">
+                        <Check size={14} strokeWidth={3} />
+                        <span>{currentIndex < totalCount ? "Next" : "Confirm"}</span>
                     </button>
                 </div>
             </div>
