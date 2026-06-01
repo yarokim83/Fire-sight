@@ -89,6 +89,28 @@ export const detectContentBounds = (image, mode = 'problem') => {
     const imgData = ctx.getImageData(0, 0, scanWidth, scanHeight);
     const data = imgData.data;
 
+    // 1. 이미지의 동적 배경 밝기(bgL) 추정
+    const sampledLuminances = [];
+    for (let i = 0; i < data.length; i += 40) { // 연산 속도를 위해 10픽셀마다 샘플링
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const a = data[i + 3];
+      if (a >= 50) {
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        sampledLuminances.push(lum);
+      }
+    }
+    sampledLuminances.sort((a, b) => b - a);
+    
+    // 상위 5% 밝기 수준을 기준 배경 밝기로 추정 (노이즈 방지)
+    const bgL = sampledLuminances[Math.floor(sampledLuminances.length * 0.05)] || 255;
+    
+    // 동적 임계치 비율 설정
+    const textThreshold = bgL * 0.85; // 배경 대비 15% 이상 어두우면 글씨(콘텐츠)
+    const grayMinRatio = 0.83;       // 배경 대비 약 17% 어두운 범위부터
+    const grayMaxRatio = 0.96;       // 배경 대비 약 4% 어두운 범위까지 회색 박스 인정
+
     // 외곽 테두리 검은 선 등의 노이즈가 영역으로 감지되지 않도록 가장자리 2% 마진 제외
     const marginX = Math.max(1, Math.round(scanWidth * 0.02));
     const marginY = Math.max(1, Math.round(scanHeight * 0.02));
@@ -99,8 +121,7 @@ export const detectContentBounds = (image, mode = 'problem') => {
     let maxY = 0;
     let detectedCount = 0;
 
-    // 1. 회색 배경 박스 영역 검출 (Answer 모드이거나 Problem 모드에서 경계선 잡을 때 사용)
-    // 연한 회색 조건: R, G, B가 모두 230 이상 250 이하이며, RGB 간의 편차가 매우 작음 (채도가 0에 수렴)
+    // 2. 회색 배경 박스 영역 검출 (Answer 모드이거나 Problem 모드에서 경계선 잡을 때 사용)
     let grayMinX = scanWidth;
     let grayMaxX = 0;
     let grayMinY = scanHeight;
@@ -117,11 +138,16 @@ export const detectContentBounds = (image, mode = 'problem') => {
 
         if (a < 50) continue; // 투명 패스
 
+        const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+        const ratio = luminance / bgL;
+
         const diffRG = Math.abs(r - g);
         const diffGB = Math.abs(g - b);
         const diffBR = Math.abs(b - r);
-        const isGrayTone = (r >= 230 && r <= 250) && (g >= 230 && g <= 250) && (b >= 230 && b <= 250) && 
-                           (diffRG <= 4 && diffGB <= 4 && diffBR <= 4);
+        
+        // 회색 판정: R/G/B 편차가 적고, 무채색이며, 배경보다 살짝 어두운 톤인가
+        const isGrayTone = (ratio >= grayMinRatio && ratio <= grayMaxRatio) && 
+                           (diffRG <= 5 && diffGB <= 5 && diffBR <= 5);
 
         if (isGrayTone) {
           if (x < grayMinX) grayMinX = x;
@@ -133,9 +159,11 @@ export const detectContentBounds = (image, mode = 'problem') => {
       }
     }
 
+    const hasGrayBox = grayDetectedCount > 150 && grayMinX < grayMaxX && grayMinY < grayMaxY;
+
     if (mode === 'answer') {
-      // 해설 모드: 감지된 회색 박스 영역이 충분히 크다면 이를 크롭 범위로 즉시 반환
-      if (grayDetectedCount > 150 && grayMinX < grayMaxX && grayMinY < grayMaxY) {
+      // 해설 모드: 감지된 회색 박스 영역이 유효하다면 즉시 반환
+      if (hasGrayBox) {
         const padX = Math.round(scanWidth * 0.02);
         const padY = Math.round(scanHeight * 0.02);
 
@@ -155,14 +183,12 @@ export const detectContentBounds = (image, mode = 'problem') => {
       // 회색 박스 검출 실패 시 일반 어두운 픽셀(텍스트) 검출 로직(아래)으로 전환
     }
 
-    // 2. 지문 모드(Problem) 혹은 해설 모드 내 회색 박스 감출 실패 시 텍스트 감출
-    // 지문 모드이고 회색 박스가 발견되었다면, 스캔 높이 한계를 회색 박스 상단선 위로 제약
+    // 3. 지문 모드(Problem) 혹은 회색 박스가 없는 상황에서의 텍스트 검출
     let scanLimitY = scanHeight - marginY;
-    if (mode === 'problem' && grayDetectedCount > 150 && grayMinY < scanHeight) {
+    if (mode === 'problem' && hasGrayBox && grayMinY < scanHeight) {
+      // 지문 모드일 때 회색 박스가 감지되면, 스캔 한계선을 회색 박스 상단선 위로 제약
       scanLimitY = Math.max(marginY + 10, grayMinY - 2); 
     }
-
-    const threshold = 240; // 텍스트 감출 임계치
 
     for (let y = marginY; y < scanLimitY; y++) {
       for (let x = marginX; x < scanWidth - marginX; x++) {
@@ -176,7 +202,8 @@ export const detectContentBounds = (image, mode = 'problem') => {
 
         const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
 
-        if (luminance < threshold) {
+        // 동적으로 산출된 텍스트 임계치보다 어두운 경우만 글씨로 인정
+        if (luminance < textThreshold) {
           if (x < minX) minX = x;
           if (x > maxX) maxX = x;
           if (y < minY) minY = y;
