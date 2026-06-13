@@ -1,15 +1,23 @@
 
 import React, { useState } from 'react';
-import { Settings, Cpu, Terminal, BrainCircuit, X, Save, Sparkles, Loader2, RotateCcw } from 'lucide-react';
+import { Settings, Cpu, Terminal, BrainCircuit, X, Save, Sparkles, Loader2, RotateCcw, Check, Trash2 } from 'lucide-react';
 import { useSmartUpload } from '../hooks/useSmartUpload';
 import {
     UploadIntro, AnalysisLoading, ImageViewer, ProblemForm, DebugConsole,
     CropModal
 } from './SmartUploadComponents';
 
+const RECOMMENDED_MODELS = [
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', desc: '초고속, 최고 가성비 최신 모델 (인쇄체/OCR 권장)' },
+    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', desc: '고정밀 최신 모델, 수식/손글씨 판독 최적' },
+    { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview', desc: '차세대 고성능 추론 모델 (베타)' },
+    { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite', desc: '경량 초고속 모델' }
+];
+
 export default function SmartUpload({ onSaveComplete, initialData }) {
     const {
         aiModel, setAiModel,
+        splitProblems, setSplitProblems,
         isManualMode, isSaving, step, setStep,
         viewMode, setViewMode, formData, setFormData,
         problemPreviewUrls, answerPreviewUrls, currentImageIndex, setCurrentImageIndex,
@@ -19,9 +27,19 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
         handleInitialUpload, handleAddImages, handleRemoveImage, handleSave, resetState,
         updateGradingPoint, updateSearchTag,
         cropSrc, crop, setCrop, setCompletedCrop,
-        isCropModalOpen, imgRef, onCropConfirm, onCropSkip, onCropCancel,
-        currentCropTotal, currentCropIndex,
-        extractText, setExtractText
+        isCropModalOpen, imgRef, onCropCancel,
+        extractText, setExtractText,
+        currentPageIndex, totalPagesIndex,
+        goToNextPage, goToPrevPage,
+        addCropToActiveProblem, nextProblem, finishExtraction,
+        problemsQueueCount, currentProblemCrops,
+        
+        // 🔴 신규 추가 바인딩
+        problemsList,
+        saveSingleProblem,
+        removeProblem,
+        activeProblemIndex,
+        setActiveProblemIndex
     } = useSmartUpload(initialData, onSaveComplete);
 
     const [showModelSettings, setShowModelSettings] = useState(false);
@@ -103,35 +121,63 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
 
             {/* --- [모델 설정 팝오버] --- */}
             {showModelSettings && (
-                <div className="absolute top-16 right-4 z-[100] w-72 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-5 animate-in fade-in slide-in-from-top-2">
-                    <div className="flex justify-between items-center mb-4">
-                        <h4 className="text-xs font-black text-slate-300 uppercase tracking-widest">AI Model Config</h4>
+                <div className="absolute top-16 right-4 z-[100] w-80 bg-slate-900 border-2 border-slate-800 rounded-3xl shadow-2xl p-5 animate-in fade-in slide-in-from-top-2 space-y-4">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                        <h4 className="text-xs font-black text-slate-300 uppercase tracking-widest flex items-center gap-1.5">
+                            <Cpu size={14} className="text-amber-500" /> AI Model Config
+                        </h4>
                         <button onClick={() => setShowModelSettings(false)} className="text-slate-500 hover:text-white"><X size={16} /></button>
                     </div>
 
-                    <div className="space-y-4">
-                        <div>
-                            <label className="text-[10px] text-slate-500 font-bold mb-1.5 block">ENTER GEMINI MODEL ID</label>
-                            <input
-                                type="text"
-                                value={tempModelName}
-                                onChange={(e) => setTempModelName(e.target.value)}
-                                className="w-full bg-black/50 border border-slate-700 rounded-xl px-4 py-2.5 text-xs font-mono text-amber-400 focus:outline-none focus:border-amber-500/50 transition-all"
-                                placeholder="e.g. gemini-3.1-pro-preview"
-                            />
+                    <div className="space-y-3">
+                        <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Recommended Models</label>
+                        <div className="flex flex-col gap-2">
+                            {RECOMMENDED_MODELS.map((m) => {
+                                const isActive = tempModelName === m.id;
+                                return (
+                                    <button
+                                        key={m.id}
+                                        type="button"
+                                        onClick={() => setTempModelName(m.id)}
+                                        className={`w-full text-left p-3 rounded-2xl border transition-all flex flex-col gap-0.5 active:scale-[0.98] ${
+                                            isActive
+                                            ? 'bg-amber-500/10 border-amber-500/80 text-white shadow-lg shadow-amber-500/5'
+                                            : 'bg-black/30 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                                        }`}
+                                    >
+                                        <span className="text-xs font-bold">{m.name}</span>
+                                        <span className="text-[9px] text-slate-500 font-medium">{m.desc}</span>
+                                    </button>
+                                );
+                            })}
                         </div>
-
-                        <button
-                            onClick={() => {
-                                setAiModel(tempModelName);
-                                setShowModelSettings(false);
-                                alert(`모델이 ${tempModelName}으로 변경되었습니다.`);
-                            }}
-                            className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-white text-xs font-black rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-amber-500/20"
-                        >
-                            <Save size={14} /> APPLY MODEL CHANGE
-                        </button>
                     </div>
+
+                    <div className="space-y-2 pt-2 border-t border-slate-800">
+                        <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Custom Model ID</label>
+                        <input
+                            type="text"
+                            value={tempModelName}
+                            onChange={(e) => setTempModelName(e.target.value)}
+                            className="w-full bg-black/50 border border-slate-700 rounded-xl px-4 py-2.5 text-xs font-mono text-amber-400 focus:outline-none focus:border-amber-500/50 transition-all placeholder:text-slate-700"
+                            placeholder="직접 모델 ID 입력 (e.g. gemini-1.5-flash-latest)"
+                        />
+                    </div>
+
+                    <button
+                        onClick={() => {
+                            if (!tempModelName.trim()) {
+                                alert('모델 ID를 입력하거나 선택해주세요.');
+                                    return;
+                            }
+                            setAiModel(tempModelName.trim());
+                            setShowModelSettings(false);
+                            alert(`모델이 ${tempModelName.trim()}으로 변경되었습니다.`);
+                        }}
+                        className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-white text-xs font-black rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-amber-500/20"
+                    >
+                        <Save size={14} /> APPLY MODEL CHANGE
+                    </button>
                 </div>
             )}
 
@@ -139,6 +185,7 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
             <DebugConsole logs={debugLogs} show={showDebug} onClose={() => setShowDebug(false)} />
 
             {/* 🔴 [위치 이동] CropModal을 main 밖으로 빼내서 무조건 최상단에 뜨게 만듭니다! */}
+            {/* 🔴 CropModal 연동 (지문/해설 크롭 분할, 페이지 이동 및 문항 종결 지원) */}
             {isCropModalOpen && (
                 <CropModal
                     isOpen={isCropModalOpen}
@@ -147,13 +194,22 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
                     setCrop={setCrop}
                     setCompletedCrop={setCompletedCrop}
                     imgRef={imgRef}
-                    onConfirm={onCropConfirm}
-                    onSkip={onCropSkip}
                     onCancel={onCropCancel}
-                    totalCount={currentCropTotal}
-                    currentIndex={currentCropIndex}
                     extractText={extractText}
                     setExtractText={setExtractText}
+                    
+                    currentPage={currentPageIndex + 1}
+                    totalPages={totalPagesIndex}
+                    goToPrevPage={goToPrevPage}
+                    goToNextPage={goToNextPage}
+                    onAddProblemCrop={() => addCropToActiveProblem('problem')}
+                    onAddAnswerCrop={() => addCropToActiveProblem('answer')}
+                    onNextProblem={nextProblem}
+                    onFinishExtraction={finishExtraction}
+                    currentProblemIndex={problemsQueueCount + 1}
+                    addedProblemsCount={problemsQueueCount}
+                    addedProblemCropsCount={currentProblemCrops.problemFiles.length}
+                    addedAnswerCropsCount={currentProblemCrops.answerFiles.length}
                     mode={viewMode}
                 />
             )}
@@ -168,6 +224,7 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
                             isManualMode={isManualMode} inputFileRef={inputFileRef}
                             onUpload={handleInitialUpload} onViewMode={setViewMode} setStep={setStep}
                             processIncomingFiles={processIncomingFiles}
+                            splitProblems={splitProblems} setSplitProblems={setSplitProblems}
                         />
                     </div>
                 )}
@@ -180,8 +237,81 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
                 )}
 
                 {step === 3 && (
-                     <div className="flex-1 flex flex-col h-full overflow-hidden animate-in slide-in-from-bottom-4 duration-1000">
-                        <div className="flex flex-col lg:flex-row gap-12 p-8 md:p-12 flex-1 min-h-0 overflow-hidden">
+                 <div className="flex-1 flex flex-col h-full overflow-y-auto lg:overflow-hidden animate-in slide-in-from-bottom-4 duration-1000">
+                    {/* 🔴 [신규] 문항 탭 네비게이터 및 진척도 컨트롤러 */}
+                    <div className="bg-slate-900/30 border-b border-white/5 px-8 py-4 shrink-0 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div className="flex items-center gap-3 overflow-x-auto pb-2 sm:pb-0 scrollbar-hide snap-x flex-1">
+                            {problemsList.map((prob, idx) => {
+                                const isActive = activeProblemIndex === idx;
+                                const isSaved = prob.isSaved;
+                                return (
+                                    <div 
+                                        key={idx}
+                                        className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl border transition-all snap-start select-none ${
+                                            isActive
+                                            ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20'
+                                            : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white cursor-pointer'
+                                        }`}
+                                        onClick={() => {
+                                            setActiveProblemIndex(idx);
+                                            setCurrentImageIndex(0);
+                                        }}
+                                    >
+                                        {isSaved ? (
+                                            <span className="bg-emerald-500 text-white p-0.5 rounded-full flex items-center justify-center"><Check size={10} strokeWidth={3} /></span>
+                                        ) : (
+                                            <span className="w-4 h-4 rounded-full border border-current flex items-center justify-center text-[9px] font-bold font-mono">{idx + 1}</span>
+                                        )}
+                                        <span className="text-xs font-bold whitespace-nowrap">
+                                            {prob.title ? (prob.title.length > 8 ? prob.title.slice(0, 8) + '...' : prob.title) : `문항 ${idx + 1}`}
+                                        </span>
+                                        {problemsList.length > 1 && (
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    removeProblem(idx);
+                                                }}
+                                                className="p-0.5 hover:bg-white/20 rounded-md transition-colors text-white/30 hover:text-rose-400 ml-1"
+                                                title="이 문항 목록에서 제외"
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* 현황 요약 및 조작 버튼 */}
+                        <div className="flex items-center gap-4 justify-between sm:justify-end shrink-0">
+                            <div className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider">
+                                저장 완료: <span className="text-emerald-400">{problemsList.filter(p => p.isSaved).length}</span> / {problemsList.length} 문항
+                            </div>
+                            
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => saveSingleProblem(activeProblemIndex)}
+                                    disabled={problemsList[activeProblemIndex]?.isSaved}
+                                    className={`px-4 py-2 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all active:scale-95 flex items-center gap-1.5 shadow-md ${
+                                        problemsList[activeProblemIndex]?.isSaved
+                                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 cursor-not-allowed'
+                                        : 'bg-blue-600 hover:bg-blue-500 text-white border border-blue-500'
+                                    }`}
+                                >
+                                    <Save size={12} />
+                                    <span>{problemsList[activeProblemIndex]?.isSaved ? 'Saved' : 'Save Current'}</span>
+                                </button>
+                                <button
+                                    onClick={() => removeProblem(activeProblemIndex)}
+                                    className="px-4 py-2 bg-rose-600/10 hover:bg-rose-600 text-rose-500 hover:text-white border border-rose-500/20 hover:border-rose-500 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all active:scale-95 flex items-center gap-1.5 shadow-md"
+                                >
+                                    <Trash2 size={12} />
+                                    <span>Exclude</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 p-6 md:p-12 flex-1 lg:min-h-0 lg:overflow-hidden overflow-y-auto lg:overflow-y-visible">
                             <div className="lg:w-[450px] flex flex-col gap-6 shrink-0 relative">
                                 {isAnalyzingAnswer && (
                                     <div className="absolute inset-0 z-[60] bg-black/70 backdrop-blur-md rounded-[2.5rem] flex flex-col items-center justify-center animate-in fade-in">
@@ -234,6 +364,22 @@ export default function SmartUpload({ onSaveComplete, initialData }) {
                     </div>
                 )}
             </main>
+
+            {isSaving && (
+                <div className="fixed inset-0 z-[10005] bg-black/80 backdrop-blur-md flex flex-col items-center justify-center animate-in fade-in duration-300">
+                    <div className="relative mb-6">
+                        <div className="w-20 h-20 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
+                        <Save className="absolute inset-0 m-auto text-emerald-400 animate-pulse" size={28} />
+                    </div>
+                    <h3 className="text-emerald-400 font-black tracking-[0.2em] text-[10px] uppercase mb-2">Saving Workbook Database</h3>
+                    <p className="text-white font-bold text-sm">데이터베이스에 자료를 저장하고 있습니다...</p>
+                    {problemsList && problemsList.length > 0 && (
+                        <p className="text-white/40 text-xs mt-2 font-mono">
+                            저장 완료: <span className="text-emerald-400 font-bold">{problemsList.filter(p => p.isSaved).length}</span> / {problemsList.length} 문항
+                        </p>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

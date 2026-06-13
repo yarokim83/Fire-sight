@@ -1,7 +1,7 @@
 {
   "name": "firesight",
   "private": true,
-  "version": "3.2.33",
+  "version": "3.2.51",
   "type": "module",
   "scripts": {
     "dev": "vite",

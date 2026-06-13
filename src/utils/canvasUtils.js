@@ -11,40 +11,46 @@ export const getCroppedImg = (image, crop, fileName) => {
     const scaleY = image.naturalHeight / image.height;
     const ctx = canvas.getContext('2d');
   
-    // 디바이스 픽셀 비율 고려 (고해상도 디스플레이 대응)
-    const pixelRatio = window.devicePixelRatio;
+    let cropX = crop.x;
+    let cropY = crop.y;
+    let cropWidth = crop.width;
+    let cropHeight = crop.height;
+
+    // 만약 crop이 퍼센트 단위인 경우 픽셀 단위로 변환
+    if (crop.unit === '%' || (crop.x <= 100 && crop.y <= 100 && crop.width <= 100 && crop.height <= 100 && !crop.unit)) {
+        cropX = (crop.x / 100) * image.width;
+        cropY = (crop.y / 100) * image.height;
+        cropWidth = (crop.width / 100) * image.width;
+        cropHeight = (crop.height / 100) * image.height;
+    }
   
-    canvas.width = Math.floor(crop.width * scaleX * pixelRatio);
-    canvas.height = Math.floor(crop.height * scaleY * pixelRatio);
+    const targetWidth = Math.floor(cropWidth * scaleX);
+    const targetHeight = Math.floor(cropHeight * scaleY);
+
+    if (targetWidth <= 0 || targetHeight <= 0) {
+        return Promise.reject(new Error('선택된 영역의 크기가 너무 작거나 올바르지 않습니다.'));
+    }
+
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
   
-    ctx.scale(pixelRatio, pixelRatio);
     ctx.imageSmoothingQuality = 'high';
   
-    const cropX = crop.x * scaleX;
-    const cropY = crop.y * scaleY;
+    const finalCropX = cropX * scaleX;
+    const finalCropY = cropY * scaleY;
   
-    const centerX = image.naturalWidth / 2;
-    const centerY = image.naturalHeight / 2;
-  
-    ctx.save();
-  
-    // 캔버스 중심을 기준으로 이동 및 그리기
-    ctx.translate(-cropX, -cropY);
-    ctx.translate(centerX, centerY);
-    ctx.translate(-centerX, -centerY);
+    // drawImage의 source 파라미터를 활용해 1:1 영역 렌더링
     ctx.drawImage(
       image,
+      finalCropX,
+      finalCropY,
+      targetWidth,
+      targetHeight,
       0,
       0,
-      image.naturalWidth,
-      image.naturalHeight,
-      0,
-      0,
-      image.naturalWidth,
-      image.naturalHeight
+      targetWidth,
+      targetHeight
     );
-  
-    ctx.restore();
   
     // 캔버스 내용을 Blob으로 변환
     return new Promise((resolve, reject) => {
@@ -76,8 +82,8 @@ export const detectContentBounds = (image, mode = 'problem') => {
 
   try {
     const canvas = document.createElement('canvas');
-    // 연산 지연 최소화를 위해 300px 스케일로 다운샘플링하여 스캔
-    const scanWidth = 300;
+    // 해상도 향상 및 텍스트/여백 라인의 선명성 보존을 위해 600px 스케일로 다운샘플링
+    const scanWidth = 600;
     const scanHeight = Math.round((image.naturalHeight / image.naturalWidth) * scanWidth);
 
     canvas.width = scanWidth;
@@ -92,7 +98,7 @@ export const detectContentBounds = (image, mode = 'problem') => {
 
     // 1. 이미지의 동적 배경 밝기(bgL) 추정
     const sampledLuminances = [];
-    for (let i = 0; i < data.length; i += 40) { 
+    for (let i = 0; i < data.length; i += 80) { 
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
@@ -105,10 +111,10 @@ export const detectContentBounds = (image, mode = 'problem') => {
     sampledLuminances.sort((a, b) => b - a);
     const bgL = sampledLuminances[Math.floor(sampledLuminances.length * 0.05)] || 255;
     
-    // 어두운 텍스트 임계치 (배경 밝기 비례)
-    const textThreshold = bgL * 0.86; 
+    // 어두운 텍스트 임계치 (배경 밝기 대비 15% 이상 어두우면 글씨)
+    const textThreshold = bgL * 0.85; 
 
-    // 외곽 테두리 노이즈 차단을 위한 좌우/상하 마진 제외 (2%)
+    // 외곽 테두리 2% 마진 제외
     const marginX = Math.max(1, Math.round(scanWidth * 0.02));
     const marginY = Math.max(1, Math.round(scanHeight * 0.02));
 
@@ -132,9 +138,9 @@ export const detectContentBounds = (image, mode = 'problem') => {
       rowDensities[y] = textPixelCount;
     }
 
-    // 3. 여백 행(Blank Line) 식별 및 연속성(Gaps) 계산
-    // 300px 너비 기준, 가로 한 줄에 텍스트 판정 픽셀이 2px 이하면 여백 행으로 판단
-    const blankThreshold = Math.max(1, Math.round(scanWidth * 0.007)); 
+    // 3. 여백 행(Blank Line) 판단
+    // 가로 한 줄에 텍스트 픽셀이 600px 중 5px 이하(약 0.8%)인 경우를 확실한 여백 행으로 간주
+    const blankThreshold = Math.max(2, Math.round(scanWidth * 0.008)); 
     const isBlankRow = new Array(scanHeight).fill(true);
     for (let y = marginY; y < scanHeight - marginY; y++) {
       if (rowDensities[y] > blankThreshold) {
@@ -142,7 +148,7 @@ export const detectContentBounds = (image, mode = 'problem') => {
       }
     }
 
-    // 세로 방향 빈 공간(여백 구간) 탐색
+    // 세로 방향 빈 여백 구간(Gaps) 탐색
     const gaps = [];
     let inGap = false;
     let gapStart = 0;
@@ -156,8 +162,9 @@ export const detectContentBounds = (image, mode = 'problem') => {
       } else {
         if (inGap) {
           const gapHeight = y - gapStart;
-          // 일반 줄간 여백 노이즈를 배제하기 위해 높이가 최소 3px 이상인 의미 있는 여백만 수집
-          if (gapHeight >= 3) {
+          // 일반 자잘한 폰트 획 사이 간격(5px 이하)은 줄간격 여백으로 보고 배제
+          // 600px 해상도에서 문단/해설 분할 여백은 최소 6px 이상임
+          if (gapHeight >= 6) {
             gaps.push({ start: gapStart, end: y - 1, height: gapHeight });
           }
           inGap = false;
@@ -166,38 +173,39 @@ export const detectContentBounds = (image, mode = 'problem') => {
     }
     if (inGap) {
       const gapHeight = (scanHeight - marginY) - gapStart;
-      if (gapHeight >= 3) {
+      if (gapHeight >= 6) {
         gaps.push({ start: gapStart, end: scanHeight - marginY - 1, height: gapHeight });
       }
     }
 
-    // 4. 문단 가르기 여백 식별 (가장 높이가 큰 여백 상위 3개를 Y좌표 순으로 수집)
+    // 4. 큰 문단 분할 여백 탐색
+    // 수집된 gaps 중 가장 세로폭(height)이 넓은 상위 3개를 추려 Y축 순으로 정렬
     const sortedGaps = [...gaps].sort((a, b) => b.height - a.height);
     const significantGaps = sortedGaps.slice(0, 3);
     significantGaps.sort((a, b) => a.start - b.start);
 
-    let dividerY1 = 0; // 지문-해설 분할 경계 Y
-    let dividerY2 = scanHeight - marginY; // 해설-다음문제 분할 경계 Y
+    let dividerY1 = 0; 
+    let dividerY2 = scanHeight - marginY;
 
     if (significantGaps.length >= 2) {
-      // 2개 이상의 의미 있는 큰 여백이 검출됨 (지문-해설 경계, 해설-다음문제 경계 순)
+      // 2개 이상의 문단 여백이 뚜렷하게 존재할 때
       const gap1 = significantGaps[0];
       const gap2 = significantGaps[1];
 
       dividerY1 = Math.round((gap1.start + gap1.end) / 2);
       dividerY2 = Math.round((gap2.start + gap2.end) / 2);
     } else if (significantGaps.length === 1) {
-      // 의미 있는 큰 여백이 단 1개만 검출된 경우 (한 문제만 인쇄된 페이지)
+      // 1개의 문단 여백만 있을 때
       const gap1 = significantGaps[0];
       dividerY1 = Math.round((gap1.start + gap1.end) / 2);
       dividerY2 = scanHeight - marginY;
     } else {
-      // 분할 여백 검출 실패 시 폴백
+      // 여백 탐지 실패 시 폴백
       dividerY1 = 0;
       dividerY2 = scanHeight - marginY;
     }
 
-    // 5. 모드별 크롭 상자 바운딩 박스(Bounding Box) 계산
+    // 5. 모드별 크롭 범위 제한
     let limitMinY = marginY;
     let limitMaxY = scanHeight - marginY;
 
@@ -209,6 +217,7 @@ export const detectContentBounds = (image, mode = 'problem') => {
       limitMaxY = dividerY2 > dividerY1 ? dividerY2 : (scanHeight - marginY);
     }
 
+    // 6. 제한된 Y 영역 안에서 텍스트가 있는 실제 바운딩 박스 계산
     let finalMinX = scanWidth;
     let finalMaxX = 0;
     let finalMinY = scanHeight;
@@ -236,9 +245,11 @@ export const detectContentBounds = (image, mode = 'problem') => {
     }
 
     if (foundPixels < 10 || finalMinX >= finalMaxX || finalMinY >= finalMaxY) {
+      // 텍스트 검출 실패 시 폴백
       return { unit: '%', x: 5, y: 5, width: 90, height: 90 };
     }
 
+    // 여백 패딩 적용
     const padX = Math.round(scanWidth * (mode === 'problem' ? 0.03 : 0.02));
     const padY = Math.round(scanHeight * (mode === 'problem' ? 0.03 : 0.02));
 

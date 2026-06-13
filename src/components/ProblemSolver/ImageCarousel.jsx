@@ -16,9 +16,11 @@ export default function ImageCarousel({ images, onZoom, onDelete, isEditMode }) 
             {isEditMode && (
                 <button 
                     onClick={(e) => { e.stopPropagation(); onDelete(images[index]); }}
-                    className="absolute top-6 right-6 bg-red-500/80 hover:bg-red-500 text-white p-3 rounded-xl shadow-xl z-50 transition-all"
+                    onTouchStart={(e) => e.stopPropagation()}
+                    className="absolute top-6 right-6 bg-red-500/80 hover:bg-red-500 text-white p-3.5 rounded-xl shadow-xl z-50 transition-all active:scale-95 flex items-center justify-center"
+                    aria-label="Delete image"
                 >
-                    <Trash2 size={18} />
+                    <Trash2 size={20} />
                 </button>
             )}
 

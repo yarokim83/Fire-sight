@@ -6,7 +6,7 @@ import { updateProblemResult, updateProblemMemo, updateProblemInfo, deleteProble
 import { 
     ChevronLeft, ChevronRight, CheckCircle2, XCircle, 
     BookOpen, Maximize2, Trash2, X, ArrowLeft,
-    Type, PenTool, Eraser, RotateCcw, StickyNote, Edit3, Save, ImageIcon,
+    Type, PenTool, Eraser, RotateCcw, StickyNote, Edit3, Save, ImageIcon, ClipboardPaste,
     Check, Trophy, RefreshCcw, AlertTriangle, Pen, CheckCircle2 as OIcon,
     RefreshCw, Plus, Link, Target, Calculator, Highlighter, Sparkles, EyeOff
 } from 'lucide-react';
@@ -131,6 +131,22 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const [localAnswerImages, setLocalAnswerImages] = useState([]);
      // 🔴 [신규 추가] 해설 이미지 업로드 상태 및 함수
     const [isUploading, setIsUploading] = useState(false);
+    const [confirmModal, setConfirmModal] = useState({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: null,
+        onCancel: null
+    });
+    const showConfirm = (title, message, onConfirm, onCancel = null) => {
+        setConfirmModal({
+            isOpen: true,
+            title,
+            message,
+            onConfirm,
+            onCancel
+        });
+    };
     const canvasRef = useRef(null);        
     const overlayCanvasRef = useRef(null); 
     
@@ -339,29 +355,34 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
 
 
     const handleDeleteImage = async (type, imageUrl) => {
-        if (!window.confirm('삭제하시겠습니까?')) return;
-        try {
-            // [에러 핸들링] Storage 삭제 시도 (실패해도 DB 정리는 강제 진행)
-            try {
-                const fileRef = ref(storage, imageUrl);
-                await deleteObject(fileRef);
-            } catch (storageError) {
-                console.warn('스토리지에서 이미지를 찾을 수 없거나 이미 삭제되었습니다. DB 정리를 계속 진행합니다.', storageError);
-            }
+        showConfirm(
+            '이미지 삭제',
+            '이 이미지를 정말 삭제하시겠습니까? 삭제 후에는 복구할 수 없습니다.',
+            async () => {
+                try {
+                    // [에러 핸들링] Storage 삭제 시도 (실패해도 DB 정리는 강제 진행)
+                    try {
+                        const fileRef = ref(storage, imageUrl);
+                        await deleteObject(fileRef);
+                    } catch (storageError) {
+                        console.warn('스토리지에서 이미지를 찾을 수 없거나 이미 삭제되었습니다. DB 정리를 계속 진행합니다.', storageError);
+                    }
 
-            // DB 레코드 삭제 (좀비 이미지 링크 제거)
-            const docRef = doc(db, 'workbook', currentProblem.id);
-            if (type === 'problem') {
-                await updateDoc(docRef, { images: arrayRemove(imageUrl) });
-                setLocalProblemImages(prev => prev.filter(url => url !== imageUrl));
-            } else {
-                await updateDoc(docRef, { answerImages: arrayRemove(imageUrl) });
-                setLocalAnswerImages(prev => prev.filter(url => url !== imageUrl));
+                    // DB 레코드 삭제 (좀비 이미지 링크 제거)
+                    const docRef = doc(db, 'workbook', currentProblem.id);
+                    if (type === 'problem') {
+                        await updateDoc(docRef, { images: arrayRemove(imageUrl) });
+                        setLocalProblemImages(prev => prev.filter(url => url !== imageUrl));
+                    } else {
+                        await updateDoc(docRef, { answerImages: arrayRemove(imageUrl) });
+                        setLocalAnswerImages(prev => prev.filter(url => url !== imageUrl));
+                    }
+                } catch (e) { 
+                    alert('삭제 처리에 실패했습니다. 다시 시도해주세요.'); 
+                    console.error(e); 
+                }
             }
-        } catch (e) { 
-            alert('삭제 처리에 실패했습니다. 다시 시도해주세요.'); 
-            console.error(e); 
-        }
+        );
     };
 
    
@@ -392,6 +413,94 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         } finally {
             setIsUploading(false);
             e.target.value = null; 
+        }
+    };
+
+    const handlePasteAnswerImage = async (e) => {
+        if (isUploading) return;
+        
+        const clipboardItems = e.clipboardData?.items;
+        if (!clipboardItems) return;
+        
+        const imageFiles = [];
+        for (let i = 0; i < clipboardItems.length; i++) {
+            const item = clipboardItems[i];
+            if (item.type.indexOf('image') !== -1) {
+                const file = item.getAsFile();
+                if (file) {
+                    const pastedFile = new File([file], `clipboard_${Date.now()}_${i}.png`, { type: file.type });
+                    imageFiles.push(pastedFile);
+                }
+            }
+        }
+        
+        if (imageFiles.length === 0) return;
+        
+        e.preventDefault();
+        
+        setIsUploading(true);
+        try {
+            const newUrls = [];
+            for (let i = 0; i < imageFiles.length; i++) {
+                const file = imageFiles[i];
+                const fileRef = ref(storage, `answers/${file.name}`);
+                await uploadBytes(fileRef, file);
+                const url = await getDownloadURL(fileRef);
+                newUrls.push(url);
+            }
+            
+            const docRef = doc(db, 'workbook', currentProblem.id);
+            await updateDoc(docRef, { answerImages: arrayUnion(...newUrls) });
+            
+            setLocalAnswerImages(prev => [...prev, ...newUrls]);
+            alert('클립보드 이미지가 성공적으로 추가되었습니다! ✅');
+        } catch (error) {
+            console.error('Paste upload error:', error);
+            alert('클립보드 이미지 업로드에 실패했습니다.');
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handlePasteFromClipboard = async () => {
+        if (isUploading) return;
+        try {
+            if (!navigator.clipboard || !navigator.clipboard.read) {
+                alert("이 브라우저/환경에서는 클립보드 읽기 API를 지원하지 않습니다. 최신 Safari 또는 Chrome 브라우저를 사용해 주세요.");
+                return;
+            }
+            setIsUploading(true);
+            const clipboardItems = await navigator.clipboard.read();
+            let imageBlob = null;
+            for (const item of clipboardItems) {
+                for (const type of item.types) {
+                    if (type.startsWith('image/')) {
+                        imageBlob = await item.getType(type);
+                        break;
+                    }
+                }
+                if (imageBlob) break;
+            }
+
+            if (imageBlob) {
+                const file = new File([imageBlob], `clipboard_${Date.now()}.png`, { type: imageBlob.type });
+                const fileRef = ref(storage, `answers/${file.name}`);
+                await uploadBytes(fileRef, file);
+                const url = await getDownloadURL(fileRef);
+                
+                const docRef = doc(db, 'workbook', currentProblem.id);
+                await updateDoc(docRef, { answerImages: arrayUnion(url) });
+                
+                setLocalAnswerImages(prev => [...prev, url]);
+                alert('클립보드 이미지가 성공적으로 추가되었습니다! ✅');
+            } else {
+                alert("클립보드에 복사된 이미지가 없습니다. 이미지를 캡처 후 '복사'한 다음 눌러주세요.");
+            }
+        } catch (err) {
+            console.error("클립보드 이미지 붙여넣기 실패:", err);
+            alert("클립보드 읽기 권한이 거부되었거나 이미지를 가져올 수 없습니다. 브라우저의 클립보드 접근 권한 설정을 확인해 주세요.");
+        } finally {
+            setIsUploading(false);
         }
     };
 
@@ -456,7 +565,29 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                         <Edit3 size={20} />
                     </button>
                     
-                    <button onClick={() => {if(window.confirm('삭제하시겠습니까?')) { deleteProblem(currentProblem.id); onBack(); }}} className="p-2.5 rounded-xl text-red-400 hover:bg-red-500/20"><Trash2 size={20} /></button>
+                    <button 
+                        onClick={() => {
+                            showConfirm(
+                                '문제 삭제',
+                                '이 문제를 복구할 수 없도록 정말 삭제하시겠습니까?',
+                                async () => {
+                                    try {
+                                        await deleteProblem(currentProblem.id);
+                                        onBack();
+                                    } catch (err) {
+                                        console.error(err);
+                                        alert('문제 삭제에 실패했습니다.');
+                                    }
+                                }
+                            );
+                        }} 
+                        onTouchStart={(e) => e.stopPropagation()}
+                        className="p-2.5 rounded-xl text-red-400 hover:bg-red-500/20 hover:text-red-500 transition-all active:scale-95 flex items-center justify-center"
+                        title="문제 삭제"
+                        aria-label="Delete problem"
+                    >
+                        <Trash2 size={20} />
+                    </button>
                 </div>
             </div>
 
@@ -545,10 +676,12 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                             </h3>
                             
                             {/* 🔴 [업그레이드된 UI] 해설 이미지 추가 버튼과 이미지 목록 통합 */}
-                            <div className="mb-6">
+                            <div className="mb-6" onPaste={handlePasteAnswerImage}>
                                 <div className="flex items-center justify-between mb-3">
-                                    <label className="text-sm font-bold text-slate-400">Answer Images (해설 이미지)</label>
-                                    <div>
+                                    <label className="text-sm font-bold text-slate-400">
+                                        Answer Images (해설 이미지) <span className="text-[10px] text-emerald-500/70 font-normal ml-2">(클립보드 붙여넣기 지원 📋)</span>
+                                    </label>
+                                    <div className="flex items-center gap-2">
                                         <input 
                                             type="file" 
                                             id="add-answer-image" 
@@ -563,8 +696,18 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                             className={`flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg cursor-pointer transition-all shadow-lg ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         >
                                             {isUploading ? <RefreshCw className="animate-spin" size={14} /> : <Plus size={14} />}
-                                            {isUploading ? '업로드 중...' : '이미지 추가'}
+                                            <span>이미지 추가</span>
                                         </label>
+                                        <button 
+                                            type="button"
+                                            onClick={handlePasteFromClipboard}
+                                            disabled={isUploading}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg transition-all shadow-lg ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            title="클립보드에 복사된 이미지를 즉시 추가합니다"
+                                        >
+                                            <ClipboardPaste size={14} className="text-emerald-400" />
+                                            <span>클립보드 붙여넣기</span>
+                                        </button>
                                     </div>
                                 </div>
                                 
@@ -575,9 +718,11 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                                 <img src={url} alt="Answer" className="w-full h-full object-contain cursor-zoom-in hover:scale-105 transition-all duration-300" onClick={() => setZoomImage(url)} />
                                                 <button 
                                                     onClick={(e) => { e.stopPropagation(); handleDeleteImage('answer', url); }}
-                                                    className="absolute top-3 right-3 bg-red-500/90 hover:bg-red-500 text-white p-2.5 rounded-xl shadow-xl transition-all"
+                                                    onTouchStart={(e) => e.stopPropagation()}
+                                                    className="absolute top-3 right-3 bg-red-500/90 hover:bg-red-500 text-white p-3 rounded-xl shadow-xl transition-all active:scale-95 flex items-center justify-center"
+                                                    aria-label="Delete answer image"
                                                 >
-                                                    <Trash2 size={16} />
+                                                    <Trash2 size={18} />
                                                 </button>
                                             </div>
                                         ))}
@@ -594,8 +739,9 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                 <textarea 
                                     value={editedAnswer}
                                     onChange={(e) => setEditedAnswer(e.target.value)}
+                                    onPaste={handlePasteAnswerImage}
                                     className="w-full min-h-[200px] bg-black/40 border-2 border-emerald-500/50 rounded-2xl p-4 text-emerald-50/90 text-lg font-black tracking-tight outline-none focus:border-emerald-400 transition-all resize-y shadow-inner"
-                                    placeholder="해설 내용을 수정하세요..."
+                                    placeholder="해설 내용을 수정하세요... (클립보드 이미지를 여기에 붙여넣어 추가할 수도 있습니다 📋)"
                                 />
                             </div>
 
@@ -878,6 +1024,52 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                             setZoomImage(null); 
                         }} 
                     />
+                </div>
+            )}
+
+            {confirmModal.isOpen && (
+                <div 
+                    className="fixed inset-0 z-[10000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+                    onClick={() => {
+                        if (confirmModal.onCancel) confirmModal.onCancel();
+                        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                    }}
+                >
+                    <div 
+                        className="w-full max-w-sm bg-slate-900/95 border-2 border-slate-800/80 rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 space-y-6"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-start gap-4">
+                            <div className="p-3 bg-red-500/10 text-red-500 rounded-2xl shrink-0 mt-0.5">
+                                <AlertTriangle size={24} />
+                            </div>
+                            <div className="space-y-1">
+                                <h3 className="text-lg font-black text-white">{confirmModal.title}</h3>
+                                <p className="text-sm text-slate-400 font-bold leading-relaxed">{confirmModal.message}</p>
+                            </div>
+                        </div>
+                        
+                        <div className="flex gap-3 justify-end pt-2">
+                            <button 
+                                onClick={() => {
+                                    if (confirmModal.onCancel) confirmModal.onCancel();
+                                    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                                }}
+                                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold rounded-xl transition-all"
+                            >
+                                취소
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    if (confirmModal.onConfirm) confirmModal.onConfirm();
+                                    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                                }}
+                                className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white text-sm font-black rounded-xl transition-all shadow-lg shadow-red-600/20 active:scale-95"
+                            >
+                                삭제
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
