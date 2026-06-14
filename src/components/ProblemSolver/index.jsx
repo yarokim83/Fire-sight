@@ -504,6 +504,253 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         }
     };
 
+    const renderModelAnswer = (text) => {
+        if (!text) return <p className="text-slate-500">해설이 등록되지 않았습니다.</p>;
+
+        // 동적 채점 기준 키워드 결합
+        const customTerms = currentProblem?.gradingPoints?.mandatory_terms || [];
+        const baseKeywords = ['형식승인', '유효 설치 범위', '방호구역 내', '유효설치범위', '방호구역내'];
+        const keywords = Array.from(new Set([...baseKeywords, ...customTerms]))
+            .filter(Boolean)
+            .sort((a, b) => b.length - a.length);
+
+        // 정규식 예약어 안전 이스케이프
+        const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        // 텍스트 내 핵심 명사 하이라이팅 헬퍼
+        const highlightText = (txt) => {
+            if (!txt || keywords.length === 0) return txt;
+            const escapedKeywords = keywords.map(escapeRegExp);
+            const regex = new RegExp(`(${escapedKeywords.join('|')})`, 'g');
+            const parts = txt.split(regex);
+            return parts.map((part, i) => 
+                keywords.includes(part) 
+                ? <strong key={i} className="text-emerald-400 font-extrabold tracking-tight">{part}</strong> 
+                : part
+            );
+        };
+
+        // 수치/단위 강조 헬퍼 (온도, 거리, 시간 등 숫자+단위)
+        const highlightNumbersAndUnits = (txt) => {
+            if (!txt) return '';
+            const numRegex = /(\d+(?:\.\d+)?\s*(?:°C|℃|%|m|s|min|초|분|개|dB|V|A|W|Ω|Hz|kg|L|MPa|kg\/cm²|cm))/g;
+            const parts = txt.split(numRegex);
+            return parts.map((part, i) => 
+                numRegex.test(part)
+                ? <span key={i} className="text-amber-400 font-mono font-black">{part}</span>
+                : highlightText(part)
+            );
+        };
+
+        const lines = text.split('\n');
+        const renderedElements = [];
+        let gridItems = [];
+
+        const renderGrid = (items, key) => {
+            return (
+                <div key={key} className="grid grid-cols-1 xs:grid-cols-2 gap-3 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 my-4 shadow-inner">
+                    {items.map((item, idx) => (
+                        <div key={idx} className="flex flex-col gap-1 bg-black/30 border border-white/5 p-3 rounded-xl">
+                            <span className="text-[10px] text-slate-500 font-black uppercase tracking-wider select-none">
+                                {idx % 2 === 0 ? '조건 / 대상' : '기준 / 수치'}
+                            </span>
+                            <span className="text-sm font-bold text-slate-200">
+                                {highlightNumbersAndUnits(item)}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            );
+        };
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) {
+                if (gridItems.length > 0) {
+                    renderedElements.push(renderGrid(gridItems, `grid-${i}`));
+                    gridItems = [];
+                }
+                renderedElements.push(<div key={`empty-${i}`} className="h-2" />);
+                continue;
+            }
+
+            // [패턴 4] 온도/수치 데이터 테이블(Grid)화 감지
+            const gridMatch = line.match(/^([^\:]+)\s*[:\-]\s*([^\:]+)$/);
+            if (gridMatch && (line.includes('°C') || line.includes('℃') || line.includes('%') || /\d+/.test(line))) {
+                gridItems.push(gridMatch[1].trim());
+                gridItems.push(gridMatch[2].trim());
+                continue;
+            } else {
+                if (gridItems.length > 0) {
+                    renderedElements.push(renderGrid(gridItems, `grid-${i}`));
+                    gridItems = [];
+                }
+            }
+
+            // [패턴 2] 조항 배지 분리 감지 (연속 다중 매칭 루프)
+            let tempLine = line;
+            const badges = [];
+            while (true) {
+                const match = tempLine.match(/^([\(（][0-9]+[\)）]|[①-⑳]|[0-9]+\.)\s*(.*)/);
+                if (match) {
+                    badges.push(match[1]);
+                    tempLine = match[2].trim();
+                } else {
+                    break;
+                }
+            }
+
+            if (badges.length > 0) {
+                renderedElements.push(
+                    <div key={`badge-line-${i}`} className="flex items-start gap-3 my-3.5 pl-1 leading-relaxed">
+                        <div className="flex items-center gap-2 shrink-0 select-none mt-0.5">
+                            {badges.map((badge, bIdx) => {
+                                // ①-⑳ 유니코드 원기호는 둥근 배경 없이 큼직하고 굵은 독립 텍스트 기호로 강조 렌더링
+                                if (/^[①-⑳]$/.test(badge)) {
+                                    return (
+                                        <span key={bIdx} className="text-emerald-400 font-black text-[22px] leading-none align-middle mr-0.5">
+                                            {badge}
+                                        </span>
+                                    );
+                                }
+                                // (1), 1. 등의 괄호 및 숫자 기호는 둥근 사각형 배지로 연출
+                                return (
+                                    <span key={bIdx} className="shrink-0 bg-slate-800 text-emerald-400 font-extrabold border border-slate-700/80 px-3 py-1 rounded-xl text-[14px] font-mono shadow-md">
+                                        {badge}
+                                    </span>
+                                );
+                            })}
+                        </div>
+                        <div className="flex-1 text-slate-100 text-[16px] font-medium tracking-tight">
+                            {highlightNumbersAndUnits(tempLine)}
+                        </div>
+                    </div>
+                );
+            } else {
+                // 일반 문단
+                renderedElements.push(
+                    <p key={`text-line-${i}`} className="my-2.5 text-slate-200 text-[16px] font-medium leading-[1.75] tracking-tight pl-1">
+                        {highlightNumbersAndUnits(line)}
+                    </p>
+                );
+            }
+        }
+
+        if (gridItems.length > 0) {
+            renderedElements.push(renderGrid(gridItems, `grid-final`));
+        }
+
+        return <div className="font-sans space-y-1">{renderedElements}</div>;
+    };
+
+    const renderQuestion = (text) => {
+        if (!text) return null;
+
+        const customTerms = currentProblem?.gradingPoints?.mandatory_terms || [];
+        const baseKeywords = ['형식승인', '유효 설치 범위', '방호구역 내', '유효설치범위', '방호구역내'];
+        const keywords = Array.from(new Set([...baseKeywords, ...customTerms]))
+            .filter(Boolean)
+            .sort((a, b) => b.length - a.length);
+
+        const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        const highlightText = (txt) => {
+            if (!txt || keywords.length === 0) return txt;
+            const escapedKeywords = keywords.map(escapeRegExp);
+            const regex = new RegExp(`(${escapedKeywords.join('|')})`, 'g');
+            const parts = txt.split(regex);
+            return parts.map((part, i) => 
+                keywords.includes(part) 
+                ? <strong key={i} className="text-emerald-400 font-extrabold tracking-tight">{part}</strong> 
+                : part
+            );
+        };
+
+        const highlightNumbersAndUnits = (txt) => {
+            if (!txt) return '';
+            const numRegex = /(\d+(?:\.\d+)?\s*(?:°C|℃|%|m|s|min|초|분|개|dB|V|A|W|Ω|Hz|kg|L|MPa|kg\/cm²|cm))/g;
+            const parts = txt.split(numRegex);
+            return parts.map((part, i) => 
+                numRegex.test(part)
+                ? <span key={i} className="text-amber-400 font-mono font-black">{part}</span>
+                : highlightText(part)
+            );
+        };
+
+        const lines = text.split('\n');
+        const renderedElements = [];
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) {
+                renderedElements.push(<div key={`q-empty-${i}`} className="h-2" />);
+                continue;
+            }
+
+            // [패턴 1] 대괄호 타이틀(예: [106]) 감지
+            const titleMatch = line.match(/^([\[（][0-9a-zA-Z\s]+[\]）])\s*(.*)/);
+            if (titleMatch) {
+                const title = titleMatch[1];
+                const body = titleMatch[2];
+                renderedElements.push(
+                    <h4 key={`q-title-${i}`} className="text-white font-black text-lg sm:text-xl leading-relaxed tracking-tight mb-4 flex items-center gap-2 mt-2">
+                        <span className="text-blue-400 font-mono">{title}</span>
+                        <span>{highlightNumbersAndUnits(body)}</span>
+                    </h4>
+                );
+                continue;
+            }
+
+            // [패턴 2] 조항 배지 분리 감지 (연속 다중 매칭 루프)
+            let tempLine = line;
+            const badges = [];
+            while (true) {
+                const match = tempLine.match(/^([\(（][0-9]+[\)）]|[①-⑳]|[0-9]+\.)\s*(.*)/);
+                if (match) {
+                    badges.push(match[1]);
+                    tempLine = match[2].trim();
+                } else {
+                    break;
+                }
+            }
+
+            if (badges.length > 0) {
+                renderedElements.push(
+                    <div key={`q-badge-line-${i}`} className="flex items-start gap-3 my-3 pl-1 leading-relaxed">
+                        <div className="flex items-center gap-2 shrink-0 select-none mt-0.5">
+                            {badges.map((badge, bIdx) => {
+                                if (/^[①-⑳]$/.test(badge)) {
+                                    return (
+                                        <span key={bIdx} className="text-emerald-400 font-black text-[22px] leading-none align-middle mr-0.5">
+                                            {badge}
+                                        </span>
+                                    );
+                                }
+                                return (
+                                    <span key={bIdx} className="shrink-0 bg-slate-800 text-slate-300 font-extrabold border border-slate-700/80 px-3 py-1 rounded-xl text-[14px] font-mono shadow-md">
+                                        {badge}
+                                    </span>
+                                );
+                            })}
+                        </div>
+                        <div className="flex-1 text-slate-200 text-[16px] sm:text-[17px] font-semibold tracking-tight">
+                            {highlightNumbersAndUnits(tempLine)}
+                        </div>
+                    </div>
+                );
+            } else {
+                // 일반 문단
+                renderedElements.push(
+                    <p key={`q-text-line-${i}`} className="my-2 text-slate-300 text-[16px] sm:text-[17px] font-semibold leading-[1.75] tracking-tight pl-1">
+                        {highlightNumbersAndUnits(line)}
+                    </p>
+                );
+            }
+        }
+
+        return <div className="font-sans space-y-1">{renderedElements}</div>;
+    };
+
     const HighlightedUserAnswer = () => {
         if (!gradingResult) return <p className="text-slate-300 whitespace-pre-wrap">{userAnswer}</p>;
         
@@ -664,7 +911,9 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                     placeholder="지문 내용을 수정하세요..."
                                 />
                             ) : (
-                                <div className="prose prose-invert max-w-none text-slate-300 whitespace-pre-line leading-relaxed text-lg font-medium">{currentProblem.question}</div>
+                                <div className="max-w-none select-text">
+                                    {renderQuestion(currentProblem.question)}
+                                </div>
                             )}
                         </div>
                     </div>
@@ -948,8 +1197,8 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                                     ))}
                                                 </div>
                                             )}
-                                            <div className="prose prose-invert max-w-none text-slate-100 whitespace-pre-line leading-[1.8] text-[17px] font-medium tracking-wide select-text mt-4">
-                                                {currentProblem.modelAnswer || '해설이 등록되지 않았습니다.'}
+                                            <div className="max-w-none select-text mt-4">
+                                                {renderModelAnswer(currentProblem.modelAnswer)}
                                             </div>
                                         </div>
                                     </div>
