@@ -53,8 +53,11 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
         const loadVoices = () => {
             const allVoices = window.speechSynthesis.getVoices();
             const koVoices = allVoices.filter(v => v.lang.startsWith('ko'));
-            // 구글/애플 고품질 한국어 보이스 우선 탑재, 없으면 기본 한국어 보이스 매핑
-            const preferred = koVoices.find(v => v.name.includes('Google') || v.name.includes('Apple')) || koVoices[0];
+            // 초고품질 온라인 신경망 음성(Edge Natural 등)을 최우선 선택, 2순위 Google/Apple, 3순위 기본
+            const preferred = 
+                koVoices.find(v => v.name.includes('Natural') || v.name.includes('Online')) ||
+                koVoices.find(v => v.name.includes('Google') || v.name.includes('Apple')) || 
+                koVoices[0];
             setSelectedVoice(preferred);
         };
 
