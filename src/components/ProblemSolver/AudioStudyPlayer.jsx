@@ -32,6 +32,18 @@ const cleanTextForTTS = (text) => {
     return clean.trim();
 };
 
+// 긴 지문을 문장 단위로 분할하여 iOS WebKit 끊김 문제를 해결하는 함수
+const splitIntoSentences = (text) => {
+    if (!text) return [];
+    const lines = text.split('\n');
+    const sentences = [];
+    lines.forEach(line => {
+        const parts = line.split(/[.?!]/).map(s => s.trim()).filter(Boolean);
+        sentences.push(...parts);
+    });
+    return sentences.filter(s => s.length > 0);
+};
+
 export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFirst, isLast }) {
     const [isPlaying, setIsPlaying] = useState(false);
     const [activeStep, setActiveStep] = useState('idle'); // 'idle' | 'title' | 'question' | 'pause' | 'introAnswer' | 'answer' | 'done'
@@ -72,6 +84,40 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
         };
     }, []);
 
+    // 문장 큐를 순차적으로 낭독하는 재귀 함수
+    const speakQueue = (sentences, index, onEndCallback) => {
+        if (!isPlayingRef.current) return;
+
+        if (index >= sentences.length) {
+            onEndCallback();
+            return;
+        }
+
+        const sentenceText = sentences[index];
+        const utterance = new SpeechSynthesisUtterance(sentenceText);
+        utterance.lang = 'ko-KR';
+        utterance.rate = rate;
+        if (selectedVoice) {
+            utterance.voice = selectedVoice;
+        }
+
+        utterance.onend = () => {
+            if (isPlayingRef.current) {
+                speakQueue(sentences, index + 1, onEndCallback);
+            }
+        };
+
+        utterance.onerror = (e) => {
+            console.error("큐 낭독 중 에러 발생:", e);
+            if (e.error !== 'interrupted' && isPlayingRef.current) {
+                speakQueue(sentences, index + 1, onEndCallback);
+            }
+        };
+
+        currentUtteranceRef.current = utterance;
+        window.speechSynthesis.speak(utterance);
+    };
+
     // 음성 낭독 처리 함수
     const speakText = (text, onEndCallback) => {
         window.speechSynthesis.cancel();
@@ -82,29 +128,13 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
             return;
         }
 
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'ko-KR';
-        utterance.rate = rate;
-        if (selectedVoice) {
-            utterance.voice = selectedVoice;
+        const sentences = splitIntoSentences(text);
+        if (sentences.length === 0) {
+            onEndCallback();
+            return;
         }
 
-        utterance.onend = () => {
-            // 재생 중에만 다음 시퀀스로 이어지도록 가드 처리
-            if (isPlayingRef.current) {
-                onEndCallback();
-            }
-        };
-
-        utterance.onerror = (e) => {
-            console.error("TTS 낭독 중 에러 발생:", e);
-            if (e.error !== 'interrupted' && isPlayingRef.current) {
-                onEndCallback();
-            }
-        };
-
-        currentUtteranceRef.current = utterance;
-        window.speechSynthesis.speak(utterance);
+        speakQueue(sentences, 0, onEndCallback);
     };
 
     // Active Recall 낭독 시퀀스 러너
