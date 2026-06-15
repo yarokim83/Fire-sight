@@ -220,7 +220,8 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
             }
 
             await checkCacheStatus();
-            alert("프리미엄 AI 음성이 성공적으로 생성되어 기기에 무상 캐싱되었습니다! 다음 재생 시 바로 적용됩니다.");
+            await preloadAudioCache(); // 구워진 캐시 즉시 프리로드 객체에 반영
+            alert("프리미엄 AI 음성이 성공적으로 생성되어 기기에 무상 캐싱되었습니다! 즉시 재생 가능합니다.");
         } catch (error) {
             console.error("AI 오디오 생성 실패:", error);
             alert(`오디오 생성에 실패했습니다: ${error.message}`);
@@ -488,6 +489,24 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
             setIsPlaying(false);
             cleanupAudio();
         } else {
+            // iOS / Safari의 비동기 Autoplay 차단 정책 우회용 오디오 엔진 언락 (유저 터치 이벤트 스택 내 즉시 기동)
+            try {
+                if (preloadedQuestionAudioRef.current && preloadedQuestionAudioRef.current.audio) {
+                    const qAudio = preloadedQuestionAudioRef.current.audio;
+                    qAudio.play().then(() => {
+                        qAudio.pause();
+                    }).catch(e => console.log("Question Audio Unlock Attempt: ", e));
+                }
+                if (preloadedAnswerAudioRef.current && preloadedAnswerAudioRef.current.audio) {
+                    const aAudio = preloadedAnswerAudioRef.current.audio;
+                    aAudio.play().then(() => {
+                        aAudio.pause();
+                    }).catch(e => console.log("Answer Audio Unlock Attempt: ", e));
+                }
+            } catch (err) {
+                console.warn("Audio Context Autoplay Unlock warning: ", err);
+            }
+
             setIsPlaying(true);
         }
     };
