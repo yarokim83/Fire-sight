@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, memo } from 'react';
+import React, { useState, useEffect, useRef, memo, useMemo } from 'react';
+
 import { 
   CheckCircle2, RefreshCcw, Sparkles, Book, Search, BookCopy, Loader2,
   Filter, Tag, X, RefreshCw, ChevronDown, ChevronUp, LayoutList, AlignJustify 
@@ -9,7 +10,7 @@ import SubjectAccordion from './SubjectAccordion';
 import ProblemCard from './ProblemCard'; 
 import { useWorkbookFilter } from './useWorkbookFilter';
 import ProblemSolver from '../ProblemSolver'; 
-import { deleteProblem } from '../../utils/db'; 
+import { deleteProblem, getAllSavedFiles } from '../../utils/db'; 
 
 const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem, globalData, filterState, setFilterState }) => {
   const { problems, loading } = globalData || { problems: [], loading: false };
@@ -25,13 +26,45 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem, globalDat
   const [solveSession, setSolveSession] = useState(null);
   const [isTagsExpanded, setIsTagsExpanded] = useState(false);
   const [viewType, setViewType] = useState('group'); 
+  const [cachedTtsProblemIds, setCachedTtsProblemIds] = useState(new Set());
 
+  // IndexedDB에 프리미엄 TTS 음성이 저장된 문항 ID 목록을 비동기로 로드
+  useEffect(() => {
+    const fetchCachedTts = async () => {
+      try {
+        const files = await getAllSavedFiles();
+        const ids = new Set();
+        files.forEach(f => {
+          if (f.id && f.id.startsWith('audio_')) {
+            const parts = f.id.split('_');
+            if (parts.length >= 3) {
+              const problemId = parts.slice(1, -1).join('_');
+              ids.add(problemId);
+            }
+          }
+        });
+        setCachedTtsProblemIds(ids);
+      } catch (e) {
+        console.error("Failed to load cached TTS files list:", e);
+      }
+    };
+    fetchCachedTts();
+  }, [globalData, solveSession]);
   // 무한 스크롤을 위한 상태
   const [displayCount, setDisplayCount] = useState(20);
   const observerRef = useRef(null);
   
   const sortedList = processedProblems?.sortedList || [];
   const subjects = processedProblems?.grouped ? Object.keys(processedProblems.grouped).sort() : [];
+
+  const activeProblems = useMemo(() => {
+    if (!solveSession) return [];
+    return solveSession.list.map(item => {
+      const fresh = problems.find(p => p.id === item.id);
+      return fresh || item;
+    });
+  }, [solveSession, problems]);
+
 
   // 무한 스크롤 감지 로직
   useEffect(() => {
@@ -74,7 +107,7 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem, globalDat
   if (solveSession) {
     return (
       <ProblemSolver 
-        problems={solveSession.list}       
+        problems={activeProblems}       
         startIndex={solveSession.startIndex} 
         onBack={() => setSolveSession(null)}
         onComplete={() => setSolveSession(null)}
@@ -208,6 +241,7 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem, globalDat
               onSelect={() => handleSelectProblem(problem)}
               onDelete={() => handleDeleteProblem(problem)}
               showSubjectBadge={true} 
+              hasCachedTts={cachedTtsProblemIds.has(problem.id) || problem.hasPremiumAudio === true}
             />
           ))}
           {displayCount < sortedList.length && (
@@ -229,6 +263,7 @@ const Workbook = ({ isExamMode, subject, initialFilter, onEditProblem, globalDat
                 onSelectProblem={handleSelectProblem}
                 onDeleteProblem={handleDeleteProblem}
                 initialExpanded={false} // ✅ 첫 번째 폴더도 닫힌 상태로 시작하도록 수정
+                cachedTtsProblemIds={cachedTtsProblemIds}
             />
         ))}
       </div>

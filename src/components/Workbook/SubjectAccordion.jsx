@@ -1,10 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { 
     ChevronDown, CheckCircle2, RefreshCcw, Sparkles, Folder, 
-    Calculator, PenTool, Image as ImageIcon 
+    Calculator, PenTool, Image as ImageIcon, Volume2 
 } from 'lucide-react';
 
-const SubjectAccordion = ({ subject, problems, onSelectProblem, onDeleteProblem, initialExpanded = false }) => {
+const SubjectAccordion = ({ subject, problems, onSelectProblem, onDeleteProblem, initialExpanded = false, cachedTtsProblemIds = new Set() }) => {
   const [isExpanded, setIsExpanded] = useState(initialExpanded);
   const completedCount = useMemo(() => problems.filter(p => p.lastScore === 100).length, [problems]);
   const totalCount = problems.length;
@@ -17,6 +17,13 @@ const SubjectAccordion = ({ subject, problems, onSelectProblem, onDeleteProblem,
 
   const getBadges = (item) => {
       const badges = [];
+      if ((cachedTtsProblemIds && cachedTtsProblemIds.has(item.id)) || item.hasPremiumAudio === true) {
+          badges.push(
+              <span key="tts" className="flex items-center gap-0.5 text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                  <Volume2 size={10} /> AI 음성
+              </span>
+          );
+      }
       if (item.problemType === 'drawing') {
           badges.push(
               <span key="draw" className="flex items-center gap-0.5 text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded border border-purple-500/30">

@@ -13,9 +13,16 @@ import {
     RefreshCw,
     CheckCircle,
     X,
-    HelpCircle
+    HelpCircle,
+    ArrowRight,
+    Repeat,
+    Repeat1
 } from 'lucide-react';
 import { saveFile, getFile, deleteFile } from '../../utils/db';
+import { ref as storageRef, uploadBytes, getBlob, deleteObject, getDownloadURL } from 'firebase/storage';
+
+import { storage, db } from '../../firebase';
+import { doc, updateDoc } from 'firebase/firestore';
 
 // TTS 낭독 텍스트 청취 가독성 극대화를 위한 한국어 정제 함수
 const cleanTextForTTS = (text) => {
@@ -49,6 +56,16 @@ const splitIntoSentences = (text) => {
         sentences.push(...parts);
     });
     return sentences.filter(s => s.length > 0);
+};
+
+// Firebase Storage getBlob 무한 펜딩 우회용 표준 Fetch 다운로드 헬퍼
+const downloadBlobFromStorage = async (sRef) => {
+    const url = await getDownloadURL(sRef);
+    const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error(`다운로드 실패 (HTTP ${response.status})`);
+    }
+    return await response.blob();
 };
 
 // OpenAI TTS API 호출 함수
@@ -124,8 +141,49 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
     const [isPlaying, setIsPlaying] = useState(false);
     const [activeStep, setActiveStep] = useState('idle'); // 'idle' | 'title' | 'question' | 'pause' | 'introAnswer' | 'answer' | 'done'
     const [rate, setRate] = useState(1.0); // 1.0, 1.25, 1.5, 2.0
-    const [playMode, setPlayMode] = useState('continuous'); // 'repeat' | 'continuous'
+    const [playMode, setPlayMode] = useState(() => localStorage.getItem('fire_sight_play_mode') || 'continuous');
     const [selectedVoice, setSelectedVoice] = useState(null);
+
+    useEffect(() => {
+        localStorage.setItem('fire_sight_play_mode', playMode);
+    }, [playMode]);
+
+    const handleTogglePlayMode = () => {
+        setPlayMode(prev => {
+            if (prev === 'single') return 'continuous';
+            if (prev === 'continuous') return 'repeat';
+            return 'single';
+        });
+    };
+
+    const getPlayModeDetails = () => {
+        switch (playMode) {
+            case 'single':
+                return {
+                    icon: <ArrowRight size={12} className="text-slate-300 animate-pulse" />,
+                    label: "단일 재생",
+                    title: "한문제만 출력 (현재 문제 완료 후 정지)"
+                };
+            case 'continuous':
+                return {
+                    icon: <Repeat size={12} className="text-emerald-400" />,
+                    label: "연속 재생",
+                    title: "다음문제 출력 (완료 시 다음 문제 자동 연속 재생)"
+                };
+            case 'repeat':
+                return {
+                    icon: <Repeat1 size={12} className="text-amber-400" />,
+                    label: "한문제 반복",
+                    title: "한문제 반복 (현재 문제 무한 반복)"
+                };
+            default:
+                return {
+                    icon: <Repeat size={12} className="text-emerald-400" />,
+                    label: "연속 재생",
+                    title: "다음문제 출력"
+                };
+        }
+    };
 
     // 하이브리드 캐시/API 제어 상태
     const [hasQuestionCache, setHasQuestionCache] = useState(false);
@@ -134,6 +192,11 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
     const [showSettings, setShowSettings] = useState(false);
     const [userApiKey, setUserApiKey] = useState(() => localStorage.getItem('fire_sight_user_openai_key') || '');
     const [premiumVoice, setPremiumVoice] = useState(() => localStorage.getItem('fire_sight_premium_voice') || 'alloy');
+    const [localHasPremiumAudio, setLocalHasPremiumAudio] = useState(false);
+
+    useEffect(() => {
+        setLocalHasPremiumAudio(!!currentProblem?.hasPremiumAudio);
+    }, [currentProblem?.id]);
 
     const currentUtteranceRef = useRef(null);
     const currentAudioRef = useRef(null);
@@ -141,11 +204,16 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
     const preloadedAnswerAudioRef = useRef(null);
     const pauseTimeoutRef = useRef(null);
     const isPlayingRef = useRef(isPlaying);
+    const activeStepRef = useRef(activeStep);
 
     // ref와 state 동기화 (이벤트 핸들러 내 최신값 참조용)
     useEffect(() => {
         isPlayingRef.current = isPlaying;
     }, [isPlaying]);
+
+    useEffect(() => {
+        activeStepRef.current = activeStep;
+    }, [activeStep]);
 
     // TTS 목소리 로드 및 한국어 설정
     useEffect(() => {
@@ -195,52 +263,215 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
         const activeKey = userApiKey.trim() || import.meta.env.VITE_OPENAI_API_KEY || '';
         if (!activeKey) {
             setShowSettings(true);
-            alert("프리미엄 AI 음성 생성을 위해 설정 아이콘(⚙️)을 누르고 OpenAI API Key를 등록해 주세요.");
+            alert("프리미엄 AI 음성을 생성을 위해 설정 아이콘(⚙️)을 누르고 OpenAI API Key를 등록해 주세요.");
             return;
         }
 
         setIsGenerating(true);
         try {
-            // 1. 지문 오디오 생성
+            // 1. 지문 오디오 생성 및 업로드
             const cleanQuestion = cleanTextForTTS(currentProblem?.question || currentProblem?.content || '');
             if (cleanQuestion) {
                 const questionBlob = await fetchOpenAITTSWithChunking(cleanQuestion, activeKey, premiumVoice);
                 if (questionBlob) {
                     await saveFile(`audio_${currentProblem.id}_question`, { type: 'audio/mp3', problemId: currentProblem.id }, questionBlob);
+                    
+                    // Firebase Storage 업로드 (단일 depth 경로 answers/audio_tts_...)
+                    const qStorageRef = storageRef(storage, `answers/audio_tts_${currentProblem.id}_question.mp3`);
+                    await uploadBytes(qStorageRef, questionBlob);
                 }
             }
 
-            // 2. 해설 오디오 생성
+            // 2. 해설 오디오 생성 및 업로드
             const cleanAnswer = cleanTextForTTS(currentProblem?.modelAnswer || currentProblem?.answer || '');
             if (cleanAnswer) {
                 const answerBlob = await fetchOpenAITTSWithChunking(cleanAnswer, activeKey, premiumVoice);
                 if (answerBlob) {
                     await saveFile(`audio_${currentProblem.id}_answer`, { type: 'audio/mp3', problemId: currentProblem.id }, answerBlob);
+                    
+                    // Firebase Storage 업로드 (단일 depth 경로 answers/audio_tts_...)
+                    const aStorageRef = storageRef(storage, `answers/audio_tts_${currentProblem.id}_answer.mp3`);
+                    await uploadBytes(aStorageRef, answerBlob);
                 }
             }
 
+            // 3. Firestore 플래그 갱신 및 로컬 상태 즉각 반영 (Storage 업로드 완료 시에만 실행)
+            const docRef = doc(db, "workbook", currentProblem.id);
+            await updateDoc(docRef, { hasPremiumAudio: true });
+            setLocalHasPremiumAudio(true);
+
             await checkCacheStatus();
             await preloadAudioCache(); // 구워진 캐시 즉시 프리로드 객체에 반영
-            alert("프리미엄 AI 음성이 성공적으로 생성되어 기기에 무상 캐싱되었습니다! 즉시 재생 가능합니다.");
+            alert("프리미엄 AI 음성이 성공적으로 생성되어 기기에 저장 및 서버 동기화되었습니다! 🎉");
         } catch (error) {
-            console.error("AI 오디오 생성 실패:", error);
-            alert(`오디오 생성에 실패했습니다: ${error.message}`);
+            console.error("AI 오디오 생성 및 서버 업로드 실패:", error);
+            alert(`오디오 생성 및 서버 업로드에 실패했습니다.\n에러 내용: ${error.message}\n(API 키 설정 및 인터넷 연결을 확인하세요)`);
         } finally {
             setIsGenerating(false);
         }
     };
 
-    // 프리미엄 AI 음성 로컬 캐시 삭제
+    // 프리미엄 AI 음성 로컬 캐시 및 서버 리소스 삭제
     const handleDeletePremiumAudio = async () => {
-        if (!confirm("이 문제에 구워진 프리미엄 AI 음성 캐시를 삭제하시겠습니까?")) return;
+        if (!confirm("이 문제에 구워진 프리미엄 AI 음성 캐시 및 서버 저장본을 모두 삭제하시겠습니까?")) return;
+        setIsGenerating(true);
         try {
             await deleteFile(`audio_${currentProblem.id}_question`);
             await deleteFile(`audio_${currentProblem.id}_answer`);
+
+            // Firebase Storage 파일 삭제
+            try {
+                const qStorageRef = storageRef(storage, `answers/audio_tts_${currentProblem.id}_question.mp3`);
+                await deleteObject(qStorageRef);
+            } catch (err) {
+                console.warn("Storage 지문 오디오 삭제 실패:", err);
+            }
+            try {
+                const aStorageRef = storageRef(storage, `answers/audio_tts_${currentProblem.id}_answer.mp3`);
+                await deleteObject(aStorageRef);
+            } catch (err) {
+                console.warn("Storage 해설 오디오 삭제 실패:", err);
+            }
+
+            // Firestore 플래그 삭제
+            try {
+                const docRef = doc(db, "workbook", currentProblem.id);
+                await updateDoc(docRef, { hasPremiumAudio: false });
+                setLocalHasPremiumAudio(false);
+            } catch (e) {
+                console.error("Firestore 플래그 해제 실패:", e);
+            }
+
             await checkCacheStatus();
-            alert("프리미엄 음성 캐시가 성공적으로 삭제되었습니다.");
+            alert("프리미엄 음성 캐시 및 서버 데이터가 성공적으로 삭제되었습니다.");
         } catch (e) {
             console.error("캐시 삭제 실패:", e);
             alert("캐시 삭제에 실패했습니다.");
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    // 백그라운드 서버 오디오 자동 동기화 기능
+    const syncPremiumAudioFromServer = async () => {
+        if (!currentProblem || !currentProblem.hasPremiumAudio) return;
+
+        try {
+            const cacheKeyQ = `audio_${currentProblem.id}_question`;
+            const cacheKeyA = `audio_${currentProblem.id}_answer`;
+
+            const hasQText = !!cleanTextForTTS(currentProblem?.question || currentProblem?.content || '');
+            const hasAText = !!cleanTextForTTS(currentProblem?.modelAnswer || currentProblem?.answer || '');
+
+            const qFile = await getFile(cacheKeyQ);
+            const aFile = await getFile(cacheKeyA);
+
+            let changed = false;
+
+            // 1. 지문 오디오 동기화 필요 여부 확인
+            if (hasQText && !qFile) {
+                try {
+                    const qStorageRef = storageRef(storage, `answers/audio_tts_${currentProblem.id}_question.mp3`);
+                    const blob = await downloadBlobFromStorage(qStorageRef);
+                    if (blob) {
+                        await saveFile(cacheKeyQ, { type: 'audio/mp3', problemId: currentProblem.id }, blob);
+                        changed = true;
+                    }
+                } catch (err) {
+                    console.warn("Storage 지문 오디오 다운로드 실패:", err);
+                }
+            }
+
+            // 2. 해설 오디오 동기화 필요 여부 확인
+            if (hasAText && !aFile) {
+                try {
+                    const aStorageRef = storageRef(storage, `answers/audio_tts_${currentProblem.id}_answer.mp3`);
+                    const blob = await downloadBlobFromStorage(aStorageRef);
+                    if (blob) {
+                        await saveFile(cacheKeyA, { type: 'audio/mp3', problemId: currentProblem.id }, blob);
+                        changed = true;
+                    }
+                } catch (err) {
+                    console.warn("Storage 해설 오디오 다운로드 실패:", err);
+                }
+            }
+
+            if (changed) {
+                await checkCacheStatus();
+                await preloadAudioCache();
+            }
+        } catch (e) {
+            console.error("자동 서버 오디오 동기화 에러:", e);
+        }
+    };
+
+    // 서버 오디오 수동 강제 동기화 실행 및 진단 기능
+    const handleForceSyncAudio = async () => {
+        if (!currentProblem) return;
+        setIsGenerating(true);
+        try {
+            const cacheKeyQ = `audio_${currentProblem.id}_question`;
+            const cacheKeyA = `audio_${currentProblem.id}_answer`;
+
+            const hasQText = !!cleanTextForTTS(currentProblem?.question || currentProblem?.content || '');
+            const hasAText = !!cleanTextForTTS(currentProblem?.modelAnswer || currentProblem?.answer || '');
+
+            let qDownloaded = false;
+            let aDownloaded = false;
+
+            // 1. 지문 오디오 동기화
+            if (hasQText) {
+                try {
+                    const qStorageRef = storageRef(storage, `answers/audio_tts_${currentProblem.id}_question.mp3`);
+                    const blob = await downloadBlobFromStorage(qStorageRef);
+                    if (blob) {
+                        await saveFile(cacheKeyQ, { type: 'audio/mp3', problemId: currentProblem.id }, blob);
+                        qDownloaded = true;
+                    }
+                } catch (err) {
+                    console.error("수동 지문 동기화 실패:", err);
+                    alert(`지문 오디오 다운로드 실패: ${err.message}\n(CORS 차단 또는 서버 파일 부재)`);
+                }
+            }
+
+            // 2. 해설 오디오 동기화
+            if (hasAText) {
+                try {
+                    const aStorageRef = storageRef(storage, `answers/audio_tts_${currentProblem.id}_answer.mp3`);
+                    const blob = await downloadBlobFromStorage(aStorageRef);
+                    if (blob) {
+                        await saveFile(cacheKeyA, { type: 'audio/mp3', problemId: currentProblem.id }, blob);
+                        aDownloaded = true;
+                    }
+                } catch (err) {
+                    console.error("수동 해설 동기화 실패:", err);
+                    alert(`해설 오디오 다운로드 실패: ${err.message}\n(CORS 차단 또는 서버 파일 부재)`);
+                }
+            }
+
+            await checkCacheStatus();
+            await preloadAudioCache();
+
+            if (qDownloaded || aDownloaded) {
+                try {
+                    const docRef = doc(db, "workbook", currentProblem.id);
+                    await updateDoc(docRef, { hasPremiumAudio: true });
+                } catch (dbErr) {
+                    console.warn("Firestore 플래그 강제 보장 실패:", dbErr);
+                }
+                setLocalHasPremiumAudio(true);
+                alert("서버 프리미엄 음성 동기화 및 로컬 캐싱 완료! 🎉");
+            } else {
+                if (currentProblem.hasPremiumAudio) {
+                    setLocalHasPremiumAudio(true);
+                }
+                alert("동기화할 새 파일이 없거나 이미 최신 상태입니다.");
+            }
+        } catch (e) {
+            console.error("수동 동기화 에러:", e);
+            alert(`동기화 중 오류: ${e.message}`);
+        } finally {
+            setIsGenerating(false);
         }
     };
 
@@ -252,20 +483,51 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
         alert("설정이 저장되었습니다.");
     };
 
+    // 앱 전체 캐시 초기화 및 새로고침
+    const handleClearAppCache = async () => {
+        if (!confirm("앱의 모든 캐시(서비스워커, 캐시 스토리지)를 초기화하고 새로고침하시겠습니까?\n이 작업은 최신 버전(v3.3.24)을 강제로 받아옵니다.")) return;
+        setIsGenerating(true);
+        try {
+            if ('serviceWorker' in navigator) {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for (const registration of registrations) {
+                    await registration.unregister();
+                }
+            }
+            if ('caches' in window) {
+                const cacheNames = await caches.keys();
+                for (const name of cacheNames) {
+                    await caches.delete(name);
+                }
+            }
+            alert("캐시가 정상적으로 제거되었습니다. 앱을 재부팅합니다.");
+            window.location.reload();
+        } catch (e) {
+            console.error("캐시 제거 실패:", e);
+            alert("캐시 제거에 실패했습니다: " + e.message);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
     // 오디오 캐시 사전 로드 (지연 극복용 Preload)
     const preloadAudioCache = async () => {
         if (!currentProblem) return;
         
         // 이전 프리로드 자원 해제
         if (preloadedQuestionAudioRef.current) {
-            URL.revokeObjectURL(preloadedQuestionAudioRef.current.url);
+            if (!preloadedQuestionAudioRef.current.isServerUrl && preloadedQuestionAudioRef.current.url) {
+                URL.revokeObjectURL(preloadedQuestionAudioRef.current.url);
+            }
             if (preloadedQuestionAudioRef.current.audio) {
                 preloadedQuestionAudioRef.current.audio.src = "";
             }
             preloadedQuestionAudioRef.current = null;
         }
         if (preloadedAnswerAudioRef.current) {
-            URL.revokeObjectURL(preloadedAnswerAudioRef.current.url);
+            if (!preloadedAnswerAudioRef.current.isServerUrl && preloadedAnswerAudioRef.current.url) {
+                URL.revokeObjectURL(preloadedAnswerAudioRef.current.url);
+            }
             if (preloadedAnswerAudioRef.current.audio) {
                 preloadedAnswerAudioRef.current.audio.src = "";
             }
@@ -273,22 +535,44 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
         }
 
         try {
+            let qUrl = null;
             const qFile = await getFile(`audio_${currentProblem.id}_question`);
             if (qFile && qFile.blob) {
-                const url = URL.createObjectURL(qFile.blob);
-                const audio = new Audio(url);
-                audio.playbackRate = rate;
-                audio.load(); // 오디오 리소스 버퍼 로딩 시작
-                preloadedQuestionAudioRef.current = { audio, url };
+                qUrl = URL.createObjectURL(qFile.blob);
+            } else if (currentProblem.hasPremiumAudio) {
+                try {
+                    const qStorageRef = storageRef(storage, `answers/audio_tts_${currentProblem.id}_question.mp3`);
+                    qUrl = await getDownloadURL(qStorageRef);
+                } catch (err) {
+                    console.warn("지문 다운로드 URL 획득 실패:", err);
+                }
             }
 
+            if (qUrl) {
+                const audio = new Audio(qUrl);
+                audio.playbackRate = rate;
+                audio.load(); // 오디오 리소스 버퍼 로딩 시작
+                preloadedQuestionAudioRef.current = { audio, url: qUrl, isServerUrl: !qFile };
+            }
+
+            let aUrl = null;
             const aFile = await getFile(`audio_${currentProblem.id}_answer`);
             if (aFile && aFile.blob) {
-                const url = URL.createObjectURL(aFile.blob);
-                const audio = new Audio(url);
+                aUrl = URL.createObjectURL(aFile.blob);
+            } else if (currentProblem.hasPremiumAudio) {
+                try {
+                    const aStorageRef = storageRef(storage, `answers/audio_tts_${currentProblem.id}_answer.mp3`);
+                    aUrl = await getDownloadURL(aStorageRef);
+                } catch (err) {
+                    console.warn("해설 다운로드 URL 획득 실패:", err);
+                }
+            }
+
+            if (aUrl) {
+                const audio = new Audio(aUrl);
                 audio.playbackRate = rate;
                 audio.load();
-                preloadedAnswerAudioRef.current = { audio, url };
+                preloadedAnswerAudioRef.current = { audio, url: aUrl, isServerUrl: !aFile };
             }
         } catch (e) {
             console.error("오디오 사전 로드 실패:", e);
@@ -469,8 +753,19 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
                 break;
             }
             case 'done': {
-                setIsPlaying(false);
-                setActiveStep('idle');
+                if (playMode === 'repeat') {
+                    runSequence('title');
+                } else if (playMode === 'continuous') {
+                    if (!isLast) {
+                        onNext(true);
+                    } else {
+                        setIsPlaying(false);
+                        setActiveStep('idle');
+                    }
+                } else {
+                    setIsPlaying(false);
+                    setActiveStep('idle');
+                }
                 break;
             }
             default:
@@ -484,19 +779,24 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
             setIsPlaying(false);
             cleanupAudio();
         } else {
-            // iOS / Safari의 비동기 Autoplay 차단 정책 우회용 오디오 엔진 언락 (유저 터치 이벤트 스택 내 즉시 기동)
+            // iOS / Safari의 비동기 Autoplay 차단 정책 우회용 오디오 엔진 언락 및 즉시 재생 재개
             try {
-                if (preloadedQuestionAudioRef.current && preloadedQuestionAudioRef.current.audio) {
-                    const qAudio = preloadedQuestionAudioRef.current.audio;
-                    qAudio.play().then(() => {
-                        qAudio.pause();
-                    }).catch(e => console.log("Question Audio Unlock Attempt: ", e));
-                }
-                if (preloadedAnswerAudioRef.current && preloadedAnswerAudioRef.current.audio) {
-                    const aAudio = preloadedAnswerAudioRef.current.audio;
-                    aAudio.play().then(() => {
-                        aAudio.pause();
-                    }).catch(e => console.log("Answer Audio Unlock Attempt: ", e));
+                if (currentAudioRef.current && currentAudioRef.current.paused) {
+                    currentAudioRef.current.playbackRate = rate;
+                    currentAudioRef.current.play().catch(e => console.log("Current Audio Resume failed: ", e));
+                } else {
+                    if (preloadedQuestionAudioRef.current && preloadedQuestionAudioRef.current.audio) {
+                        const qAudio = preloadedQuestionAudioRef.current.audio;
+                        qAudio.play().then(() => {
+                            qAudio.pause();
+                        }).catch(e => console.log("Question Audio Unlock Attempt: ", e));
+                    }
+                    if (preloadedAnswerAudioRef.current && preloadedAnswerAudioRef.current.audio) {
+                        const aAudio = preloadedAnswerAudioRef.current.audio;
+                        aAudio.play().then(() => {
+                            aAudio.pause();
+                        }).catch(e => console.log("Answer Audio Unlock Attempt: ", e));
+                    }
                 }
             } catch (err) {
                 console.warn("Audio Context Autoplay Unlock warning: ", err);
@@ -511,12 +811,14 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
         if (isPlaying) {
             if (activeStep === 'question' || activeStep === 'answer') {
                 if (currentAudioRef.current && currentAudioRef.current.paused) {
-                    // 일시정지되었던 프리미엄 음성이 있으면 즉시 이어서 재생 (딜레이 없음)
+                    // 혹시라도 handleTogglePlay에서 재생 시작이 안 되었을 경우 대비용 예비 재생
+                    currentAudioRef.current.playbackRate = rate;
                     currentAudioRef.current.play().catch(e => {
                         console.error("오디오 복구 실패, 처음부터 재시작:", e);
                         runSequence(activeStep);
                     });
-                } else {
+                } else if (!currentAudioRef.current) {
+                    // Web Speech API용 재생 시작
                     runSequence(activeStep);
                 }
             } else {
@@ -529,22 +831,50 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
 
     // 배속이 실시간 변경될 때 오디오 객체에 즉시 반영 (리로드 방지)
     useEffect(() => {
+        const applyPlaybackRate = (audioObj) => {
+            if (!audioObj) return;
+            audioObj.defaultPlaybackRate = rate;
+            audioObj.playbackRate = rate;
+            
+            // Safari/iOS 대응: 재생 중인 경우 일시정지 후 즉시 재개하여 배속 적용 강제화
+            if (!audioObj.paused) {
+                audioObj.pause();
+                audioObj.play().then(() => {
+                    audioObj.playbackRate = rate;
+                }).catch(e => console.log("Safari speed rate change bypass:", e));
+            }
+        };
+
         if (currentAudioRef.current) {
-            currentAudioRef.current.playbackRate = rate;
+            applyPlaybackRate(currentAudioRef.current);
         }
         if (preloadedQuestionAudioRef.current && preloadedQuestionAudioRef.current.audio) {
-            preloadedQuestionAudioRef.current.audio.playbackRate = rate;
+            applyPlaybackRate(preloadedQuestionAudioRef.current.audio);
         }
         if (preloadedAnswerAudioRef.current && preloadedAnswerAudioRef.current.audio) {
-            preloadedAnswerAudioRef.current.audio.playbackRate = rate;
+            applyPlaybackRate(preloadedAnswerAudioRef.current.audio);
+        }
+
+        // Web Speech API의 경우 현재 말하고 있다면 즉시 끊고 현 단계 재시작하여 배속 적용
+        if (!currentAudioRef.current && isPlayingRef.current && 
+            activeStepRef.current !== 'idle' && activeStepRef.current !== 'done' && activeStepRef.current !== 'pause') {
+            window.speechSynthesis.cancel();
+            runSequence(activeStepRef.current);
         }
     }, [rate]);
 
     // 문제가 전환될 때만 낭독 리로드 및 프리로드 재가동
     useEffect(() => {
-        resetAudioEngine();
-        checkCacheStatus();
-        preloadAudioCache();
+        const loadAndSync = async () => {
+            resetAudioEngine();
+            await checkCacheStatus();
+            await preloadAudioCache();
+            
+            // 백그라운드 서버 오디오 자동 동기화
+            await syncPremiumAudioFromServer();
+        };
+
+        loadAndSync();
 
         if (isPlaying) {
             runSequence('title');
@@ -561,7 +891,7 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
     }, []);
 
     const hasAnswerText = !!cleanTextForTTS(currentProblem?.modelAnswer || currentProblem?.answer || '');
-    const isFullyCached = hasQuestionCache && (!hasAnswerText || hasAnswerCache);
+    const isFullyCached = (hasQuestionCache && (!hasAnswerText || hasAnswerCache)) || localHasPremiumAudio;
 
     return (
         <div className="font-sans fixed top-20 right-4 w-72 bg-slate-950/95 backdrop-blur-xl border border-slate-800/90 p-3 rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.6)] z-50 transition-all duration-300 animate-in fade-in slide-in-from-top-3">
@@ -583,12 +913,12 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
 
                     {/* 오른쪽: 핵심 재생 컨트롤 */}
                     <div className="flex items-center gap-1">
-                        {/* 다음 문제 이동 (좌측 버튼) */}
+                        {/* 이전 문제 이동 (좌측 버튼) */}
                         <button 
-                            onClick={onNext} 
-                            disabled={isLast}
-                            className={`p-1 rounded transition-all ${isLast ? 'text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-900'}`}
-                            title="다음 문제"
+                            onClick={() => onPrev && onPrev(true)} 
+                            disabled={isFirst}
+                            className={`p-1 rounded transition-all ${isFirst ? 'text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-900'}`}
+                            title="이전 문제"
                         >
                             <ChevronLeft size={16} />
                         </button>
@@ -602,33 +932,45 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
                             {isPlaying ? <Pause size={12} fill="currentColor" /> : <Play size={12} fill="currentColor" />}
                         </button>
 
-                        {/* 이전 문제 이동 (우측 버튼) */}
+                        {/* 다음 문제 이동 (우측 버튼) */}
                         <button 
-                            onClick={onPrev} 
-                            disabled={isFirst}
-                            className={`p-1 rounded transition-all ${isFirst ? 'text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-900'}`}
-                            title="이전 문제"
+                            onClick={() => onNext && onNext(true)} 
+                            disabled={isLast}
+                            className={`p-1 rounded transition-all ${isLast ? 'text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-900'}`}
+                            title="다음 문제"
                         >
                             <ChevronRight size={16} />
                         </button>
                     </div>
                 </div>
 
-                {/* 2. 하단: 배속, 캐싱, 세팅 */}
+                {/* 2. 하단: 배속, 재생모드, 캐싱, 세팅 */}
                 <div className="flex items-center justify-between gap-2">
-                    {/* 배속 조절 */}
-                    <div className="flex items-center gap-1 bg-slate-900 border border-slate-800/80 px-2 py-0.5 rounded-lg">
-                        <Clock size={10} className="text-slate-400" />
-                        <select 
-                            value={rate} 
-                            onChange={(e) => setRate(parseFloat(e.target.value))}
-                            className="bg-transparent text-slate-300 text-[9px] font-black outline-none cursor-pointer focus:text-white"
+                    <div className="flex items-center gap-1.5">
+                        {/* 배속 조절 */}
+                        <div className="flex items-center gap-1 bg-slate-900 border border-slate-800/80 px-2 py-0.5 rounded-lg">
+                            <Clock size={10} className="text-slate-400" />
+                            <select 
+                                value={rate} 
+                                onChange={(e) => setRate(parseFloat(e.target.value))}
+                                className="bg-transparent text-slate-300 text-[9px] font-black outline-none cursor-pointer focus:text-white"
+                            >
+                                <option value="1" className="bg-slate-950 text-white">1.0x</option>
+                                <option value="1.25" className="bg-slate-950 text-white">1.25x</option>
+                                <option value="1.5" className="bg-slate-950 text-white">1.5x</option>
+                                <option value="2" className="bg-slate-950 text-white">2.0x</option>
+                            </select>
+                        </div>
+
+                        {/* 재생 모드 순환 버튼 */}
+                        <button
+                            onClick={handleTogglePlayMode}
+                            className="flex items-center gap-1 bg-slate-900 hover:bg-slate-800 border border-slate-800/80 px-1.5 py-0.5 rounded-lg text-slate-300 hover:text-white transition-all active:scale-95"
+                            title={getPlayModeDetails().title}
                         >
-                            <option value="1.0" className="bg-slate-950 text-white">1.0x</option>
-                            <option value="1.25" className="bg-slate-950 text-white">1.25x</option>
-                            <option value="1.5" className="bg-slate-950 text-white">1.5x</option>
-                            <option value="2.0" className="bg-slate-950 text-white">2.0x</option>
-                        </select>
+                            {getPlayModeDetails().icon}
+                            <span className="text-[9px] font-black">{getPlayModeDetails().label}</span>
+                        </button>
                     </div>
 
                     {/* 프리미엄 캐싱 및 세팅 */}
@@ -719,6 +1061,36 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
                             >
                                 설정을 기기에 저장
                             </button>
+
+                            {/* 서버 음성 동기화 */}
+                            <div className="border-t border-slate-800/80 pt-2.5 mt-2.5 space-y-2">
+                                <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest">서버 음성 동기화</span>
+                                <div className="flex items-center justify-between bg-slate-900/60 p-1.5 rounded-lg border border-slate-800/40">
+                                    <div className="flex flex-col gap-0.5">
+                                        <span className="text-[9px] font-bold text-slate-300">서버 저장 상태</span>
+                                        <span className="text-[7.5px] text-slate-500">
+                                            {localHasPremiumAudio ? "🟢 음성 감지됨" : "⚪ 음성 없음"}
+                                        </span>
+                                    </div>
+                                    <button 
+                                        onClick={handleForceSyncAudio}
+                                        className="px-2 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 text-[8px] font-black rounded border border-slate-700 transition-all"
+                                    >
+                                        동기화 호출
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="border-t border-slate-800/80 pt-2.5 mt-2.5">
+                                <button
+                                    onClick={handleClearAppCache}
+                                    className="w-full py-1.5 bg-red-950/40 hover:bg-red-900/40 text-red-400 hover:text-red-300 text-[9px] font-black rounded-lg border border-red-900/30 transition-all flex items-center justify-center gap-1 active:scale-98"
+                                    title="앱 캐시 강제 청소 및 강제 새로고침"
+                                >
+                                    <RefreshCw size={10} className="animate-spin-slow" />
+                                    앱 캐시 초기화 및 새로고침
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}

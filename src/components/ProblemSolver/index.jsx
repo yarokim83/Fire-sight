@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { db, storage } from '../../firebase';
 import { doc, updateDoc, arrayRemove, arrayUnion, serverTimestamp } from 'firebase/firestore'; 
 import { ref, deleteObject, uploadBytes, getDownloadURL } from 'firebase/storage'; 
@@ -23,6 +23,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const containerRef = useRef(null);
     const leftPanelRef = useRef(null);
     const rightPanelRef = useRef(null);
+    const shouldKeepAnswerRef = useRef(false);
     const isDragging = useRef(false);
     const currentRatioRef = useRef(50);
 
@@ -124,6 +125,30 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const [newTerm, setNewTerm] = useState('');
     const [newNumber, setNewNumber] = useState('');
 
+    const getCreationTime = (p) => {
+        if (!p) return 0;
+        if (p.createdAt && typeof p.createdAt.toMillis === 'function') {
+            return p.createdAt.toMillis();
+        }
+        if (p.createdAt && p.createdAt.seconds) {
+            return p.createdAt.seconds * 1000 + (p.createdAt.nanoseconds || 0) / 1000000;
+        }
+        if (p.createdAt) {
+            const parsed = Number(p.createdAt);
+            if (!isNaN(parsed)) return parsed;
+            const dateParsed = Date.parse(p.createdAt);
+            if (!isNaN(dateParsed)) return dateParsed;
+        }
+        return 0;
+    };
+
+    const isDescending = useMemo(() => {
+        if (!problems || problems.length < 2) return false;
+        const firstTime = getCreationTime(problems[0]);
+        const lastTime = getCreationTime(problems[problems.length - 1]);
+        return firstTime > lastTime;
+    }, [problems]);
+
     const [showMemo, setShowMemo] = useState(false);
     const [memoText, setMemoText] = useState('');
     const [zoomImage, setZoomImage] = useState(null);
@@ -195,11 +220,25 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             setLocalAnswerImages(p.answerImages || []);
             setMemoText(p.memo || '');
             setUserAnswer('');
-            setShowAnswer(false);
+            if (shouldKeepAnswerRef.current) {
+                setShowAnswer(true);
+                const emptyGrading = {
+                    percentage: 0,
+                    matchedTerms: [],
+                    matchedNumbers: [],
+                    missingTerms: mergedTerms,
+                    missingNumbers: mergedNumbers,
+                    manualGradingRequired: true
+                };
+                setGradingResult(emptyGrading);
+                shouldKeepAnswerRef.current = false;
+            } else {
+                setShowAnswer(false);
+                setGradingResult(null);
+            }
             setShowMemo(false);
             setIsEditMode(false); 
             setIsOverlayMode(false);
-            setGradingResult(null);
             setIsRetrying(false); 
             setIsPeek(false);
             
@@ -273,9 +312,38 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         };
     };
 
-    const handleNext = () => {
-        if (currentIndex < problems.length - 1) setCurrentIndex(prev => prev + 1);
-        else onComplete();
+    const handleNext = (keepAnswer = false) => {
+        if (keepAnswer) {
+            shouldKeepAnswerRef.current = true;
+        }
+        if (isDescending) {
+            if (currentIndex > 0) {
+                setCurrentIndex(prev => prev - 1);
+            } else {
+                onComplete();
+            }
+        } else {
+            if (currentIndex < problems.length - 1) {
+                setCurrentIndex(prev => prev + 1);
+            } else {
+                onComplete();
+            }
+        }
+    };
+
+    const handlePrev = (keepAnswer = false) => {
+        if (keepAnswer) {
+            shouldKeepAnswerRef.current = true;
+        }
+        if (isDescending) {
+            if (currentIndex < problems.length - 1) {
+                setCurrentIndex(prev => prev + 1);
+            }
+        } else {
+            if (currentIndex > 0) {
+                setCurrentIndex(prev => prev - 1);
+            }
+        }
     };
 
     const handleShowAnswerDirectly = () => {
@@ -1345,10 +1413,10 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             {!isEditMode && showAnswer && (
                 <AudioStudyPlayer 
                     currentProblem={currentProblem}
-                    onNext={handleNext}
-                    onPrev={() => currentIndex > 0 && setCurrentIndex(prev => prev - 1)}
-                    isFirst={currentIndex === 0}
-                    isLast={currentIndex === problems.length - 1}
+                    onNext={(keep) => handleNext(keep === true)}
+                    onPrev={(keep) => handlePrev(keep === true)}
+                    isFirst={isDescending ? currentIndex === problems.length - 1 : currentIndex === 0}
+                    isLast={isDescending ? currentIndex === 0 : currentIndex === problems.length - 1}
                 />
             )}
         </div>

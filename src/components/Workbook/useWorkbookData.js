@@ -86,6 +86,7 @@ export const useWorkbookData = () => {
                   wrongCount: Number(data.wrongCount || 0),
                   lastScore: Number(data.lastScore || 0),
                   createdAt: createdDate,
+                  hasPremiumAudio: !!data.hasPremiumAudio, // 프리미엄 오디오 서버 캐시 플래그
                 };
               });
 

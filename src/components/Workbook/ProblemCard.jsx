@@ -1,11 +1,12 @@
-import React, { memo } from 'react';
 import { 
     CheckCircle2, RefreshCcw, Sparkles, 
-    PenTool, Calculator, Image as ImageIcon, Trash2 
+    PenTool, Calculator, Image as ImageIcon, Trash2, Volume2 
 } from 'lucide-react';
 
+import React, { memo } from 'react';
+
 // 리스트 뷰를 위한 경량화된 카드 컴포넌트
-const ProblemCard = ({ data, onSelect, onDelete, showSubjectBadge = false }) => {
+const ProblemCard = ({ data, onSelect, onDelete, showSubjectBadge = false, hasCachedTts = false }) => {
     
     if (!data) return null;
 
@@ -22,6 +23,14 @@ const ProblemCard = ({ data, onSelect, onDelete, showSubjectBadge = false }) => 
              badges.push(
                 <span key="subject" className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded border border-slate-600">
                     {item.subject}
+                </span>
+            );
+        }
+
+        if (hasCachedTts) {
+            badges.push(
+                <span key="tts" className="flex items-center gap-0.5 text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                    <Volume2 size={10} /> AI 음성
                 </span>
             );
         }
