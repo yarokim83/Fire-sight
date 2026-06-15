@@ -485,7 +485,7 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
 
     // 앱 전체 캐시 초기화 및 새로고침
     const handleClearAppCache = async () => {
-        if (!confirm("앱의 모든 캐시(서비스워커, 캐시 스토리지)를 초기화하고 새로고침하시겠습니까?\n이 작업은 최신 버전(v3.3.24)을 강제로 받아옵니다.")) return;
+        if (!confirm("앱의 모든 캐시(서비스워커, 캐시 스토리지)를 초기화하고 새로고침하시겠습니까?\n이 작업은 최신 버전(v3.3.25)을 강제로 받아옵니다.")) return;
         setIsGenerating(true);
         try {
             if ('serviceWorker' in navigator) {
@@ -894,7 +894,7 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
     const isFullyCached = (hasQuestionCache && (!hasAnswerText || hasAnswerCache)) || localHasPremiumAudio;
 
     return (
-        <div className="font-sans fixed top-20 right-4 w-72 bg-slate-950/95 backdrop-blur-xl border border-slate-800/90 p-3 rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.6)] z-50 transition-all duration-300 animate-in fade-in slide-in-from-top-3">
+        <div className="font-sans fixed bottom-6 left-4 right-4 md:bottom-auto md:left-auto md:top-20 md:right-4 md:w-72 bg-slate-950/95 backdrop-blur-xl border border-slate-800/90 p-3 rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.6)] z-50 transition-all duration-300 animate-in fade-in slide-in-from-bottom-3 md:slide-in-from-top-3">
             <div className="flex flex-col gap-2.5 relative">
                 {/* 1. 상단: 진행 상태 & 재생 컨트롤 */}
                 <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
@@ -1021,7 +1021,7 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
 
                 {/* API Key 입력 팝오버 세팅 패널 */}
                 {showSettings && (
-                    <div className="absolute top-full mt-2 right-0 w-64 bg-slate-950/98 border border-slate-800 rounded-xl p-3 shadow-2xl z-50 animate-in slide-in-from-top-2 duration-300">
+                    <div className="absolute bottom-full mb-2 left-0 right-0 md:top-full md:bottom-auto md:mt-2 md:mb-0 md:left-auto md:right-0 md:w-64 bg-slate-950/98 border border-slate-800 rounded-xl p-3 shadow-2xl z-50 animate-in slide-in-from-bottom-2 md:slide-in-from-top-2 duration-300">
                         <div className="flex justify-between items-center mb-2">
                             <span className="text-[10px] font-black text-white flex items-center gap-1.5"><Settings size={11} /> OpenAI TTS 프리미엄 설정</span>
                             <button onClick={() => setShowSettings(false)} className="text-slate-500 hover:text-white"><X size={14} /></button>
