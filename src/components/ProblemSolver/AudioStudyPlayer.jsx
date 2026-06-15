@@ -22,7 +22,8 @@ import { saveFile, getFile, deleteFile } from '../../utils/db';
 import { ref as storageRef, uploadBytes, getBlob, deleteObject, getDownloadURL } from 'firebase/storage';
 
 import { storage, db } from '../../firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, terminate, clearIndexedDbPersistence } from 'firebase/firestore';
+
 
 // TTS 낭독 텍스트 청취 가독성 극대화를 위한 한국어 정제 함수
 const cleanTextForTTS = (text) => {
@@ -485,22 +486,34 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
 
     // 앱 전체 캐시 초기화 및 새로고침
     const handleClearAppCache = async () => {
-        if (!confirm("앱의 모든 캐시(서비스워커, 캐시 스토리지)를 초기화하고 새로고침하시겠습니까?\n이 작업은 최신 버전(v3.3.25)을 강제로 받아옵니다.")) return;
+        if (!confirm("앱의 모든 캐시(서비스워커, 캐시 스토리지, Firestore 오프라인 데이터)를 초기화하고 새로고침하시겠습니까?\n이 작업은 최신 버전(v3.3.26)을 강제로 받아옵니다.")) return;
         setIsGenerating(true);
         try {
+            // 1. Firestore 오프라인 캐시 강제 소거 및 소켓 해제
+            try {
+                await terminate(db);
+                await clearIndexedDbPersistence(db);
+            } catch (firestoreErr) {
+                console.warn("Firestore 캐시 정리 실패:", firestoreErr);
+            }
+
+            // 2. 서비스워커 등록 해제
             if ('serviceWorker' in navigator) {
                 const registrations = await navigator.serviceWorker.getRegistrations();
                 for (const registration of registrations) {
                     await registration.unregister();
                 }
             }
+
+            // 3. Cache Storage 삭제
             if ('caches' in window) {
                 const cacheNames = await caches.keys();
                 for (const name of cacheNames) {
                     await caches.delete(name);
                 }
             }
-            alert("캐시가 정상적으로 제거되었습니다. 앱을 재부팅합니다.");
+
+            alert("앱 캐시 및 오프라인 데이터가 성공적으로 제거되었습니다. 앱을 재부팅합니다.");
             window.location.reload();
         } catch (e) {
             console.error("캐시 제거 실패:", e);
