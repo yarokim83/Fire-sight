@@ -348,7 +348,10 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
             };
 
             currentAudioRef.current = audio;
-            audio.play().catch(err => {
+            audio.playbackRate = rate;
+            audio.play().then(() => {
+                audio.playbackRate = rate;
+            }).catch(err => {
                 console.error("프리로드 play() 인터랙션 거부 (Fallback TTS 구동):", err);
                 currentAudioRef.current = null;
                 onEnd();
@@ -532,7 +535,20 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
         }
     }, [isPlaying]);
 
-    // 배속 또는 문제가 전환될 때의 낭독 리로드 및 프리로드 재가동
+    // 배속이 실시간 변경될 때 오디오 객체에 즉시 반영 (리로드 방지)
+    useEffect(() => {
+        if (currentAudioRef.current) {
+            currentAudioRef.current.playbackRate = rate;
+        }
+        if (preloadedQuestionAudioRef.current && preloadedQuestionAudioRef.current.audio) {
+            preloadedQuestionAudioRef.current.audio.playbackRate = rate;
+        }
+        if (preloadedAnswerAudioRef.current && preloadedAnswerAudioRef.current.audio) {
+            preloadedAnswerAudioRef.current.audio.playbackRate = rate;
+        }
+    }, [rate]);
+
+    // 문제가 전환될 때만 낭독 리로드 및 프리로드 재가동
     useEffect(() => {
         resetAudioEngine();
         checkCacheStatus();
@@ -543,7 +559,7 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
         } else {
             setActiveStep('idle');
         }
-    }, [currentProblem, rate]);
+    }, [currentProblem]);
 
     // 언마운트 시 엔진 전면 리셋
     useEffect(() => {
@@ -556,148 +572,132 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
     const isFullyCached = hasQuestionCache && (!hasAnswerText || hasAnswerCache);
 
     return (
-        <div className="font-sans fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] sm:w-full sm:max-w-2xl bg-slate-900/95 backdrop-blur-xl border border-slate-800/90 p-4 rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.8)] z-50 transition-all duration-300 animate-in fade-in slide-in-from-bottom-5">
-            <div className="flex flex-col w-full gap-3 relative">
-                {/* 상단 진행 정보 표시 바 */}
-                <div className="flex items-center justify-between text-xs font-semibold border-b border-slate-800/80 pb-2">
-                    <span className="flex items-center gap-1.5 text-emerald-400">
-                        <span className={`w-2.5 h-2.5 rounded-full bg-emerald-500 ${isPlaying ? 'animate-pulse' : 'opacity-60'}`} />
-                        오디오북 학습 {playMode === 'repeat' ? '• 1문제 반복' : '• 연속 재생'}
-                    </span>
-                    <span className="text-slate-400 font-mono tracking-tight leading-[1.75]">
-                        {activeStep === 'title' && "📌 제목 낭독 중..."}
-                        {activeStep === 'question' && (hasQuestionCache ? "✨ 프리미엄 지문 낭독 중..." : "📖 지문 낭독 중...")}
-                        {activeStep === 'pause' && "⏳ 3초간 정적 대기 (생각해보기)"}
-                        {activeStep === 'introAnswer' && "📢 정답 해설 준비..."}
-                        {activeStep === 'answer' && (hasAnswerCache ? "✨ 프리미엄 해설 낭독 중..." : "💡 정답 및 해설 낭독 중...")}
-                        {activeStep === 'idle' && "💤 대기 중"}
+        <div className="font-sans fixed bottom-4 left-1/2 -translate-x-1/2 w-[94%] sm:w-full sm:max-w-2xl bg-slate-950/95 backdrop-blur-xl border border-slate-800/90 py-2.5 px-4 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] z-50 transition-all duration-300 animate-in fade-in slide-in-from-bottom-5">
+            <div className="flex items-center justify-between w-full gap-3 relative flex-wrap sm:flex-nowrap">
+                {/* 1. 왼쪽: 진행 상태 텍스트 */}
+                <div className="flex items-center gap-2 min-w-0 shrink-0">
+                    <span className={`w-2 h-2 rounded-full bg-emerald-500 shrink-0 ${isPlaying ? 'animate-pulse' : 'opacity-60'}`} />
+                    <span className="text-[11px] font-bold text-slate-300 truncate max-w-[130px] sm:max-w-[200px]">
+                        {activeStep === 'title' && "📌 제목 낭독 중"}
+                        {activeStep === 'question' && (hasQuestionCache ? "✨ 프리미엄 지문" : "📖 지문 낭독")}
+                        {activeStep === 'pause' && "⏳ 묵음 대기 (3초)"}
+                        {activeStep === 'introAnswer' && "📢 해설 준비"}
+                        {activeStep === 'answer' && (hasAnswerCache ? "✨ 프리미엄 해설" : "💡 해설 낭독")}
+                        {activeStep === 'idle' && ""}
                     </span>
                 </div>
 
-                {/* 하단 메인 컨트롤 바 */}
-                <div className="flex items-center justify-between gap-4">
-                    {/* 이전 문제 이동 */}
+                {/* 2. 가운데: 핵심 재생 컨트롤 (사용자 체감 방향 교정: 좌=다음, 우=이전) */}
+                <div className="flex items-center gap-2 shrink-0">
+                    {/* 다음 문제 이동 (좌측 버튼) */}
                     <button 
-                        onClick={onPrev} 
-                        disabled={isFirst}
-                        className={`p-2.5 rounded-xl transition-all ${isFirst ? 'text-slate-600 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-800 active:scale-90'}`}
-                        title="이전 문제"
+                        onClick={onNext} 
+                        disabled={isLast}
+                        className={`p-2 rounded-lg transition-all ${isLast ? 'text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-800 active:scale-90'}`}
+                        title="다음 문제"
                     >
-                        <ChevronLeft size={22} />
+                        <ChevronLeft size={18} />
                     </button>
 
                     {/* 재생/일시정지 토글 버튼 */}
                     <button 
                         onClick={handleTogglePlay}
-                        className="p-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-2xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95 flex items-center justify-center font-black"
+                        className="p-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl transition-all shadow-md shadow-emerald-500/10 active:scale-95 flex items-center justify-center font-black"
                         title={isPlaying ? "일시정지" : "재생"}
                     >
-                        {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
+                        {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
                     </button>
 
-                    {/* 다음 문제 이동 */}
+                    {/* 이전 문제 이동 (우측 버튼) */}
                     <button 
-                        onClick={onNext} 
-                        disabled={isLast}
-                        className={`p-2.5 rounded-xl transition-all ${isLast ? 'text-slate-600 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-800 active:scale-90'}`}
-                        title="다음 문제"
+                        onClick={onPrev} 
+                        disabled={isFirst}
+                        className={`p-2 rounded-lg transition-all ${isFirst ? 'text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-800 active:scale-90'}`}
+                        title="이전 문제"
                     >
-                        <ChevronRight size={22} />
+                        <ChevronRight size={18} />
                     </button>
+                </div>
 
-                    <div className="h-6 w-[1px] bg-slate-800" />
-
-                    {/* 배속 조절 드롭다운 */}
-                    <div className="flex items-center gap-1 bg-slate-950/50 border border-slate-800/80 px-3 py-1.5 rounded-xl">
-                        <Clock size={14} className="text-slate-400" />
+                {/* 3. 오른쪽: 배속, 캐싱, 세팅 */}
+                <div className="flex items-center gap-2 shrink-0 ml-auto sm:ml-0">
+                    {/* 배속 조절 */}
+                    <div className="flex items-center gap-1 bg-slate-900 border border-slate-800/80 px-2 py-1 rounded-lg">
+                        <Clock size={11} className="text-slate-400" />
                         <select 
                             value={rate} 
                             onChange={(e) => setRate(parseFloat(e.target.value))}
-                            className="bg-transparent text-slate-300 text-xs font-extrabold outline-none cursor-pointer focus:text-white"
+                            className="bg-transparent text-slate-300 text-[10px] font-black outline-none cursor-pointer focus:text-white"
                         >
-                            <option value="1.0" className="bg-slate-900 text-white">1.0x</option>
-                            <option value="1.25" className="bg-slate-900 text-white">1.25x</option>
-                            <option value="1.5" className="bg-slate-900 text-white">1.5x</option>
-                            <option value="2.0" className="bg-slate-900 text-white">2.0x</option>
+                            <option value="1.0" className="bg-slate-950 text-white">1.0x</option>
+                            <option value="1.25" className="bg-slate-950 text-white">1.25x</option>
+                            <option value="1.5" className="bg-slate-950 text-white">1.5x</option>
+                            <option value="2.0" className="bg-slate-950 text-white">2.0x</option>
                         </select>
                     </div>
 
-                    {/* 프리미엄 목소리 굽기/제거 버튼 */}
+                    {/* 프리미엄 목소리 굽기/제거 */}
                     <div className="flex items-center gap-1">
                         {isGenerating ? (
-                            <button className="p-2.5 bg-slate-800 text-emerald-400 rounded-xl animate-spin cursor-not-allowed">
-                                <RefreshCw size={18} />
+                            <button className="p-2 bg-slate-800 text-emerald-400 rounded-lg animate-spin cursor-not-allowed">
+                                <RefreshCw size={14} />
                             </button>
                         ) : (
                             <button 
                                 onClick={handleGeneratePremiumAudio}
-                                className={`p-2.5 rounded-xl transition-all ${
+                                className={`p-2 rounded-lg transition-all ${
                                     isFullyCached
                                     ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20' 
                                     : 'bg-slate-800 text-amber-400 border border-slate-700/80 hover:bg-slate-700 hover:text-amber-300 active:scale-95'
                                 }`}
                                 title={isFullyCached ? "프리미엄 AI 음성 캐싱됨" : "프리미엄 AI 음성 생성 및 캐싱"}
                             >
-                                <Sparkles size={18} fill={isFullyCached ? "currentColor" : "none"} />
+                                <Sparkles size={14} fill={isFullyCached ? "currentColor" : "none"} />
                             </button>
                         )}
 
                         {(hasQuestionCache || hasAnswerCache) && !isGenerating && (
                             <button 
                                 onClick={handleDeletePremiumAudio}
-                                className="p-2.5 bg-slate-800 text-red-400 border border-slate-700/80 hover:bg-red-500/10 hover:text-red-400 rounded-xl transition-all active:scale-95"
+                                className="p-2 bg-slate-800 text-red-400 border border-slate-700/80 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-all active:scale-95"
                                 title="프리미엄 음성 캐시 삭제"
                             >
-                                <Trash2 size={18} />
+                                <Trash2 size={14} />
                             </button>
                         )}
                     </div>
 
-                    <div className="h-6 w-[1px] bg-slate-800" />
-
-                    {/* 재생 모드 토글 */}
-                    <button 
-                        onClick={() => setPlayMode(playMode === 'continuous' ? 'repeat' : 'continuous')}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all text-xs font-black active:scale-95 ${
-                            playMode === 'repeat' 
-                            ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 shadow-md shadow-amber-500/5' 
-                            : 'bg-slate-950/50 border-slate-800/80 text-slate-400 hover:text-slate-200'
-                        }`}
-                        title={playMode === 'repeat' ? "1문제 반복 중" : "전체 연속 재생 중"}
-                    >
-                        <PlayCircle size={14} />
-                        <span className="hidden xs:inline">{playMode === 'repeat' ? '1문제 반복' : '연속 재생'}</span>
-                    </button>
+                    <div className="h-4 w-[1px] bg-slate-800" />
 
                     {/* 세팅 토글 기어 버튼 */}
                     <button 
                         onClick={() => setShowSettings(!showSettings)}
-                        className={`p-2.5 rounded-xl transition-all ${showSettings ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                        className={`p-2 rounded-lg transition-all ${showSettings ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
                         title="OpenAI API 키 설정"
                     >
-                        <Settings size={18} />
+                        <Settings size={14} />
                     </button>
                 </div>
 
                 {/* API Key 입력 팝오버 세팅 패널 */}
                 {showSettings && (
-                    <div className="absolute bottom-16 right-0 w-80 bg-slate-950/98 border border-slate-800 rounded-2xl p-4 shadow-2xl z-50 animate-in slide-in-from-bottom-2 duration-300">
-                        <div className="flex justify-between items-center mb-3">
-                            <span className="text-xs font-black text-white flex items-center gap-1.5"><Settings size={14} /> OpenAI TTS 프리미엄 설정</span>
-                            <button onClick={() => setShowSettings(false)} className="text-slate-500 hover:text-white"><X size={16} /></button>
+                    <div className="absolute bottom-12 right-0 w-72 bg-slate-950/98 border border-slate-800 rounded-xl p-3 shadow-2xl z-50 animate-in slide-in-from-bottom-2 duration-300">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-[10px] font-black text-white flex items-center gap-1.5"><Settings size={11} /> OpenAI TTS 프리미엄 설정</span>
+                            <button onClick={() => setShowSettings(false)} className="text-slate-500 hover:text-white"><X size={14} /></button>
                         </div>
-                        <div className="space-y-3">
+                        <div className="space-y-2.5">
                             <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">개인 OpenAI API Key</label>
+                                <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">개인 OpenAI API Key</label>
                                 <input 
                                     type="password"
                                     value={userApiKey}
                                     onChange={(e) => setUserApiKey(e.target.value)}
                                     placeholder="sk-..."
-                                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:border-blue-500 outline-none transition-all"
+                                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-[10px] text-white placeholder:text-slate-700 focus:border-blue-500 outline-none transition-all"
                                 />
-                                <p className="text-[9px] text-slate-500 mt-1 leading-normal">
-                                    ※ 입력된 키는 외부 서버로 전송되지 않고 사용자의 기기 로컬 스토리지(`localStorage`)에만 안전하게 보관되어 API 직접 낭독에만 사용됩니다.
+                                <p className="text-[7.5px] text-slate-500 mt-1 leading-normal">
+                                    ※ 입력된 키는 사용자의 브라우저(`localStorage`)에만 저장되어 API 직접 낭독에만 사용됩니다.
                                 </p>
                             </div>
                             <div>

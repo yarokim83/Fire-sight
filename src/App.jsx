@@ -354,7 +354,6 @@ function App() {
         </main>
       </div>
 
-      {mode === 'workbook' && <CanvasWidget />}
     </div>
   );
 }
