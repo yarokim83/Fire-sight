@@ -7,8 +7,15 @@ import {
     RotateCcw, 
     PlayCircle, 
     Clock, 
-    Volume2 
+    Settings,
+    Sparkles,
+    Trash2,
+    RefreshCw,
+    CheckCircle,
+    X,
+    HelpCircle
 } from 'lucide-react';
+import { saveFile, getFile, deleteFile } from '../../utils/db';
 
 // TTS 낭독 텍스트 청취 가독성 극대화를 위한 한국어 정제 함수
 const cleanTextForTTS = (text) => {
@@ -44,6 +51,30 @@ const splitIntoSentences = (text) => {
     return sentences.filter(s => s.length > 0);
 };
 
+// OpenAI TTS API 호출 함수
+const fetchOpenAITTS = async (text, apiKey, voice) => {
+    const response = await fetch('https://api.openai.com/v1/audio/speech', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            model: 'tts-1',
+            input: text,
+            voice: voice || 'alloy',
+            response_format: 'mp3'
+        })
+    });
+
+    if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData?.error?.message || `API 호출 에러: ${response.statusText}`);
+    }
+
+    return await response.blob();
+};
+
 export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFirst, isLast }) {
     const [isPlaying, setIsPlaying] = useState(false);
     const [activeStep, setActiveStep] = useState('idle'); // 'idle' | 'title' | 'question' | 'pause' | 'introAnswer' | 'answer' | 'done'
@@ -51,7 +82,16 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
     const [playMode, setPlayMode] = useState('continuous'); // 'repeat' | 'continuous'
     const [selectedVoice, setSelectedVoice] = useState(null);
 
+    // 하이브리드 캐시/API 제어 상태
+    const [hasQuestionCache, setHasQuestionCache] = useState(false);
+    const [hasAnswerCache, setHasAnswerCache] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
+    const [userApiKey, setUserApiKey] = useState(() => localStorage.getItem('fire_sight_user_openai_key') || '');
+    const [premiumVoice, setPremiumVoice] = useState(() => localStorage.getItem('fire_sight_premium_voice') || 'alloy');
+
     const currentUtteranceRef = useRef(null);
+    const currentAudioRef = useRef(null);
     const pauseTimeoutRef = useRef(null);
     const isPlayingRef = useRef(isPlaying);
 
@@ -65,9 +105,14 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
         const loadVoices = () => {
             const allVoices = window.speechSynthesis.getVoices();
             const koVoices = allVoices.filter(v => v.lang.startsWith('ko'));
-            // 초고품질 온라인 신경망 음성(Edge Natural 등)을 최우선 선택, 2순위 Google/Apple, 3순위 기본
+            
+            // 1순위: Microsoft Online Natural 신경망 음성 (Edge/데스크톱용)
+            // 2순위: iOS Siri / Yuna / Premium (애플 모바일 기기용 고품질)
+            // 3순위: Google/Apple 기본 음성
+            // 4순위: 기본 첫 번째 보이스
             const preferred = 
                 koVoices.find(v => v.name.includes('Natural') || v.name.includes('Online')) ||
+                koVoices.find(v => v.name.includes('Siri') || v.name.includes('Yuna') || v.name.includes('Premium')) ||
                 koVoices.find(v => v.name.includes('Google') || v.name.includes('Apple')) || 
                 koVoices[0];
             setSelectedVoice(preferred);
@@ -79,12 +124,142 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
         }
 
         return () => {
-            window.speechSynthesis.cancel();
-            if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
+            cleanupAudio();
         };
     }, []);
 
-    // 문장 큐를 순차적으로 낭독하는 재귀 함수
+    // IndexedDB 캐시 유무 체크
+    const checkCacheStatus = async () => {
+        if (!currentProblem) return;
+        try {
+            const qFile = await getFile(`audio_${currentProblem.id}_question`);
+            const aFile = await getFile(`audio_${currentProblem.id}_answer`);
+            setHasQuestionCache(!!qFile);
+            setHasAnswerCache(!!aFile);
+        } catch (e) {
+            console.error("캐시 검사 에러:", e);
+            setHasQuestionCache(false);
+            setHasAnswerCache(false);
+        }
+    };
+
+    // 프리미엄 AI 음성 생성 및 캐싱 실행
+    const handleGeneratePremiumAudio = async () => {
+        const activeKey = userApiKey.trim() || import.meta.env.VITE_OPENAI_API_KEY || '';
+        if (!activeKey) {
+            setShowSettings(true);
+            alert("프리미엄 AI 음성 생성을 위해 설정 아이콘(⚙️)을 누르고 OpenAI API Key를 등록해 주세요.");
+            return;
+        }
+
+        setIsGenerating(true);
+        try {
+            // 1. 지문 오디오 생성
+            const cleanQuestion = cleanTextForTTS(currentProblem?.question || currentProblem?.content || '');
+            if (cleanQuestion) {
+                const questionBlob = await fetchOpenAITTS(cleanQuestion, activeKey, premiumVoice);
+                await saveFile(`audio_${currentProblem.id}_question`, { type: 'audio/mp3', problemId: currentProblem.id }, questionBlob);
+            }
+
+            // 2. 해설 오디오 생성
+            const cleanAnswer = cleanTextForTTS(currentProblem?.modelAnswer || currentProblem?.answer || '');
+            if (cleanAnswer) {
+                const answerBlob = await fetchOpenAITTS(cleanAnswer, activeKey, premiumVoice);
+                await saveFile(`audio_${currentProblem.id}_answer`, { type: 'audio/mp3', problemId: currentProblem.id }, answerBlob);
+            }
+
+            await checkCacheStatus();
+            alert("프리미엄 AI 음성이 성공적으로 생성되어 기기에 무상 캐싱되었습니다! 다음 재생 시 바로 적용됩니다.");
+        } catch (error) {
+            console.error("AI 오디오 생성 실패:", error);
+            alert(`오디오 생성에 실패했습니다: ${error.message}`);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    // 프리미엄 AI 음성 로컬 캐시 삭제
+    const handleDeletePremiumAudio = async () => {
+        if (!confirm("이 문제에 구워진 프리미엄 AI 음성 캐시를 삭제하시겠습니까?")) return;
+        try {
+            await deleteFile(`audio_${currentProblem.id}_question`);
+            await deleteFile(`audio_${currentProblem.id}_answer`);
+            await checkCacheStatus();
+            alert("프리미엄 음성 캐시가 성공적으로 삭제되었습니다.");
+        } catch (e) {
+            console.error("캐시 삭제 실패:", e);
+            alert("캐시 삭제에 실패했습니다.");
+        }
+    };
+
+    // API 키 및 목소리 설정 저장
+    const handleSaveSettings = () => {
+        localStorage.setItem('fire_sight_user_openai_key', userApiKey.trim());
+        localStorage.setItem('fire_sight_premium_voice', premiumVoice);
+        setShowSettings(false);
+        alert("설정이 저장되었습니다.");
+    };
+
+    // 오디오 클린업
+    const cleanupAudio = () => {
+        window.speechSynthesis.cancel();
+        if (currentAudioRef.current) {
+            currentAudioRef.current.pause();
+            currentAudioRef.current = null;
+        }
+        if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
+    };
+
+    // 캐시된 Blob 오디오 재생기
+    const playCacheAudio = (blob, onEnd) => {
+        cleanupAudio();
+
+        const audioUrl = URL.createObjectURL(blob);
+        const audio = new Audio(audioUrl);
+        audio.playbackRate = rate;
+
+        audio.onended = () => {
+            URL.revokeObjectURL(audioUrl);
+            currentAudioRef.current = null;
+            if (isPlayingRef.current) {
+                onEnd();
+            }
+        };
+
+        audio.onerror = (e) => {
+            console.error("캐시 오디오 재생 실패 (Fallback TTS 구동):", e);
+            URL.revokeObjectURL(audioUrl);
+            currentAudioRef.current = null;
+            onEnd(); // Fallback 진행
+        };
+
+        currentAudioRef.current = audio;
+        audio.play().catch(err => {
+            console.error("오디오 play() 인터랙션 거부:", err);
+            onEnd();
+        });
+    };
+
+    // 기본 Web Speech API 음성 낭독 함수
+    const speakText = (text, onEndCallback) => {
+        window.speechSynthesis.cancel();
+        if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
+
+        if (!text) {
+            onEndCallback();
+            return;
+        }
+
+        const sentences = splitIntoSentences(text);
+        if (sentences.length === 0) {
+            onEndCallback();
+            return;
+        }
+
+        speakQueue(sentences, 0, onEndCallback);
+    };
+
+    // 문장 큐 순차 낭독 재귀 함수
     const speakQueue = (sentences, index, onEndCallback) => {
         if (!isPlayingRef.current) return;
 
@@ -108,7 +283,7 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
         };
 
         utterance.onerror = (e) => {
-            console.error("큐 낭독 중 에러 발생:", e);
+            console.error("큐 낭독 에러:", e);
             if (e.error !== 'interrupted' && isPlayingRef.current) {
                 speakQueue(sentences, index + 1, onEndCallback);
             }
@@ -118,27 +293,8 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
         window.speechSynthesis.speak(utterance);
     };
 
-    // 음성 낭독 처리 함수
-    const speakText = (text, onEndCallback) => {
-        window.speechSynthesis.cancel();
-        if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
-
-        if (!text) {
-            onEndCallback();
-            return;
-        }
-
-        const sentences = splitIntoSentences(text);
-        if (sentences.length === 0) {
-            onEndCallback();
-            return;
-        }
-
-        speakQueue(sentences, 0, onEndCallback);
-    };
-
     // Active Recall 낭독 시퀀스 러너
-    const runSequence = (step) => {
+    const runSequence = async (step) => {
         if (!isPlayingRef.current) return;
 
         setActiveStep(step);
@@ -152,15 +308,29 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
                 break;
             }
             case 'question': {
-                const cleanQuestion = cleanTextForTTS(currentProblem?.question || currentProblem?.content || '');
-                speakText(cleanQuestion, () => {
-                    runSequence('pause');
-                });
+                try {
+                    const cache = await getFile(`audio_${currentProblem.id}_question`);
+                    if (cache && cache.blob) {
+                        playCacheAudio(cache.blob, () => {
+                            runSequence('pause');
+                        });
+                    } else {
+                        const cleanQuestion = cleanTextForTTS(currentProblem?.question || currentProblem?.content || '');
+                        speakText(cleanQuestion, () => {
+                            runSequence('pause');
+                        });
+                    }
+                } catch (e) {
+                    console.error("지문 캐시 체크 실패:", e);
+                    const cleanQuestion = cleanTextForTTS(currentProblem?.question || currentProblem?.content || '');
+                    speakText(cleanQuestion, () => {
+                        runSequence('pause');
+                    });
+                }
                 break;
             }
             case 'pause': {
-                // 지문 완독 후 정답 리콜을 위한 3초 정적 유지
-                window.speechSynthesis.cancel();
+                cleanupAudio();
                 pauseTimeoutRef.current = setTimeout(() => {
                     runSequence('introAnswer');
                 }, 3000);
@@ -173,10 +343,25 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
                 break;
             }
             case 'answer': {
-                const cleanAnswer = cleanTextForTTS(currentProblem?.modelAnswer || currentProblem?.answer || '');
-                speakText(cleanAnswer, () => {
-                    runSequence('done');
-                });
+                try {
+                    const cache = await getFile(`audio_${currentProblem.id}_answer`);
+                    if (cache && cache.blob) {
+                        playCacheAudio(cache.blob, () => {
+                            runSequence('done');
+                        });
+                    } else {
+                        const cleanAnswer = cleanTextForTTS(currentProblem?.modelAnswer || currentProblem?.answer || '');
+                        speakText(cleanAnswer, () => {
+                            runSequence('done');
+                        });
+                    }
+                } catch (e) {
+                    console.error("해설 캐시 체크 실패:", e);
+                    const cleanAnswer = cleanTextForTTS(currentProblem?.modelAnswer || currentProblem?.answer || '');
+                    speakText(cleanAnswer, () => {
+                        runSequence('done');
+                    });
+                }
                 break;
             }
             case 'done': {
@@ -184,7 +369,7 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
                     runSequence('title');
                 } else {
                     if (!isLast) {
-                        onNext(); // 다음 문제로 인덱스 전이
+                        onNext();
                     } else {
                         setIsPlaying(false);
                         setActiveStep('idle');
@@ -201,8 +386,7 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
     const handleTogglePlay = () => {
         if (isPlaying) {
             setIsPlaying(false);
-            window.speechSynthesis.cancel();
-            if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
+            cleanupAudio();
         } else {
             setIsPlaying(true);
         }
@@ -211,15 +395,29 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
     // 플레이어 제어용 Effect
     useEffect(() => {
         if (isPlaying) {
-            runSequence(activeStep === 'idle' || activeStep === 'done' ? 'title' : activeStep);
+            if (activeStep === 'question' || activeStep === 'answer') {
+                // 이미 재생 인스턴스가 활성 중이면 이어가기 시도
+                if (currentAudioRef.current) {
+                    currentAudioRef.current.play().catch(e => {
+                        console.error("오디오 복구 실패, 처음부터 재시작:", e);
+                        runSequence(activeStep);
+                    });
+                } else {
+                    runSequence(activeStep);
+                }
+            } else {
+                runSequence(activeStep === 'idle' || activeStep === 'done' ? 'title' : activeStep);
+            }
         } else {
-            window.speechSynthesis.cancel();
-            if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
+            cleanupAudio();
         }
     }, [isPlaying]);
 
     // 배속 또는 문제가 전환될 때의 낭독 리로드 제어
     useEffect(() => {
+        cleanupAudio();
+        checkCacheStatus();
+
         if (isPlaying) {
             runSequence('title');
         } else {
@@ -230,14 +428,13 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
     // 언마운트 시 클린업
     useEffect(() => {
         return () => {
-            window.speechSynthesis.cancel();
-            if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
+            cleanupAudio();
         };
     }, []);
 
     return (
         <div className="font-sans fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] sm:w-full sm:max-w-2xl bg-slate-900/95 backdrop-blur-xl border border-slate-800/90 p-4 rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.8)] z-50 transition-all duration-300 animate-in fade-in slide-in-from-bottom-5">
-            <div className="flex flex-col w-full gap-3">
+            <div className="flex flex-col w-full gap-3 relative">
                 {/* 상단 진행 정보 표시 바 */}
                 <div className="flex items-center justify-between text-xs font-semibold border-b border-slate-800/80 pb-2">
                     <span className="flex items-center gap-1.5 text-emerald-400">
@@ -246,10 +443,10 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
                     </span>
                     <span className="text-slate-400 font-mono tracking-tight leading-[1.75]">
                         {activeStep === 'title' && "📌 제목 낭독 중..."}
-                        {activeStep === 'question' && "📖 지문 낭독 중..."}
+                        {activeStep === 'question' && (hasQuestionCache ? "✨ 프리미엄 지문 낭독 중..." : "📖 지문 낭독 중...")}
                         {activeStep === 'pause' && "⏳ 3초간 정적 대기 (생각해보기)"}
                         {activeStep === 'introAnswer' && "📢 정답 해설 준비..."}
-                        {activeStep === 'answer' && "💡 정답 및 해설 낭독 중..."}
+                        {activeStep === 'answer' && (hasAnswerCache ? "✨ 프리미엄 해설 낭독 중..." : "💡 정답 및 해설 낭독 중...")}
                         {activeStep === 'idle' && "💤 대기 중"}
                     </span>
                 </div>
@@ -302,6 +499,39 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
                         </select>
                     </div>
 
+                    {/* 프리미엄 목소리 굽기/제거 버튼 */}
+                    <div className="flex items-center gap-1">
+                        {isGenerating ? (
+                            <button className="p-2.5 bg-slate-800 text-emerald-400 rounded-xl animate-spin cursor-not-allowed">
+                                <RefreshCw size={18} />
+                            </button>
+                        ) : (
+                            <button 
+                                onClick={handleGeneratePremiumAudio}
+                                className={`p-2.5 rounded-xl transition-all ${
+                                    (hasQuestionCache && hasAnswerCache)
+                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20' 
+                                    : 'bg-slate-800 text-amber-400 border border-slate-700/80 hover:bg-slate-700 hover:text-amber-300 active:scale-95'
+                                }`}
+                                title={(hasQuestionCache && hasAnswerCache) ? "프리미엄 AI 음성 캐싱됨" : "프리미엄 AI 음성 생성 및 캐싱"}
+                            >
+                                <Sparkles size={18} fill={(hasQuestionCache && hasAnswerCache) ? "currentColor" : "none"} />
+                            </button>
+                        )}
+
+                        {(hasQuestionCache || hasAnswerCache) && !isGenerating && (
+                            <button 
+                                onClick={handleDeletePremiumAudio}
+                                className="p-2.5 bg-slate-800 text-red-400 border border-slate-700/80 hover:bg-red-500/10 hover:text-red-400 rounded-xl transition-all active:scale-95"
+                                title="프리미엄 음성 캐시 삭제"
+                            >
+                                <Trash2 size={18} />
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="h-6 w-[1px] bg-slate-800" />
+
                     {/* 재생 모드 토글 */}
                     <button 
                         onClick={() => setPlayMode(playMode === 'continuous' ? 'repeat' : 'continuous')}
@@ -312,10 +542,65 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
                         }`}
                         title={playMode === 'repeat' ? "1문제 반복 중" : "전체 연속 재생 중"}
                     >
-                        {playMode === 'repeat' ? <RotateCcw size={14} /> : <PlayCircle size={14} />}
+                        <PlayCircle size={14} />
                         <span className="hidden xs:inline">{playMode === 'repeat' ? '1문제 반복' : '연속 재생'}</span>
                     </button>
+
+                    {/* 세팅 토글 기어 버튼 */}
+                    <button 
+                        onClick={() => setShowSettings(!showSettings)}
+                        className={`p-2.5 rounded-xl transition-all ${showSettings ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                        title="OpenAI API 키 설정"
+                    >
+                        <Settings size={18} />
+                    </button>
                 </div>
+
+                {/* API Key 입력 팝오버 세팅 패널 */}
+                {showSettings && (
+                    <div className="absolute bottom-16 right-0 w-80 bg-slate-950/98 border border-slate-800 rounded-2xl p-4 shadow-2xl z-50 animate-in slide-in-from-bottom-2 duration-300">
+                        <div className="flex justify-between items-center mb-3">
+                            <span className="text-xs font-black text-white flex items-center gap-1.5"><Settings size={14} /> OpenAI TTS 프리미엄 설정</span>
+                            <button onClick={() => setShowSettings(false)} className="text-slate-500 hover:text-white"><X size={16} /></button>
+                        </div>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">개인 OpenAI API Key</label>
+                                <input 
+                                    type="password"
+                                    value={userApiKey}
+                                    onChange={(e) => setUserApiKey(e.target.value)}
+                                    placeholder="sk-..."
+                                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:border-blue-500 outline-none transition-all"
+                                />
+                                <p className="text-[9px] text-slate-500 mt-1 leading-normal">
+                                    ※ 입력된 키는 외부 서버로 전송되지 않고 사용자의 기기 로컬 스토리지(`localStorage`)에만 안전하게 보관되어 API 직접 낭독에만 사용됩니다.
+                                </p>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">AI 목소리 스타일</label>
+                                <select
+                                    value={premiumVoice}
+                                    onChange={(e) => setPremiumVoice(e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:border-blue-500 outline-none cursor-pointer"
+                                >
+                                    <option value="alloy">Alloy (부드럽고 자연스러움)</option>
+                                    <option value="echo">Echo (선명하고 또렷함)</option>
+                                    <option value="fable">Fable (설득력 있는 나레이터)</option>
+                                    <option value="onyx">Onyx (깊고 신뢰감 있는 저음 남성)</option>
+                                    <option value="nova">Nova (매끄러운 중고음 여성)</option>
+                                    <option value="shimmer">Shimmer (활기차고 부드러움)</option>
+                                </select>
+                            </div>
+                            <button 
+                                onClick={handleSaveSettings}
+                                className="w-full py-2 bg-blue-600 hover:bg-blue-500 active:scale-98 text-white text-xs font-black rounded-xl transition-all shadow-lg shadow-blue-600/20"
+                            >
+                                설정을 기기에 저장
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
