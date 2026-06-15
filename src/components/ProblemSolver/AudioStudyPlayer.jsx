@@ -92,6 +92,8 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
 
     const currentUtteranceRef = useRef(null);
     const currentAudioRef = useRef(null);
+    const preloadedQuestionAudioRef = useRef(null);
+    const preloadedAnswerAudioRef = useRef(null);
     const pauseTimeoutRef = useRef(null);
     const isPlayingRef = useRef(isPlaying);
 
@@ -200,44 +202,111 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
         alert("설정이 저장되었습니다.");
     };
 
-    // 오디오 클린업
+    // 오디오 캐시 사전 로드 (지연 극복용 Preload)
+    const preloadAudioCache = async () => {
+        if (!currentProblem) return;
+        
+        // 이전 프리로드 자원 해제
+        if (preloadedQuestionAudioRef.current) {
+            URL.revokeObjectURL(preloadedQuestionAudioRef.current.url);
+            if (preloadedQuestionAudioRef.current.audio) {
+                preloadedQuestionAudioRef.current.audio.src = "";
+            }
+            preloadedQuestionAudioRef.current = null;
+        }
+        if (preloadedAnswerAudioRef.current) {
+            URL.revokeObjectURL(preloadedAnswerAudioRef.current.url);
+            if (preloadedAnswerAudioRef.current.audio) {
+                preloadedAnswerAudioRef.current.audio.src = "";
+            }
+            preloadedAnswerAudioRef.current = null;
+        }
+
+        try {
+            const qFile = await getFile(`audio_${currentProblem.id}_question`);
+            if (qFile && qFile.blob) {
+                const url = URL.createObjectURL(qFile.blob);
+                const audio = new Audio(url);
+                audio.playbackRate = rate;
+                audio.load(); // 오디오 리소스 버퍼 로딩 시작
+                preloadedQuestionAudioRef.current = { audio, url };
+            }
+
+            const aFile = await getFile(`audio_${currentProblem.id}_answer`);
+            if (aFile && aFile.blob) {
+                const url = URL.createObjectURL(aFile.blob);
+                const audio = new Audio(url);
+                audio.playbackRate = rate;
+                audio.load();
+                preloadedAnswerAudioRef.current = { audio, url };
+            }
+        } catch (e) {
+            console.error("오디오 사전 로드 실패:", e);
+        }
+    };
+
+    // 프리로드 오디오 및 IndexedDB 전면 리셋
+    const resetAudioEngine = () => {
+        cleanupAudio();
+        
+        if (preloadedQuestionAudioRef.current) {
+            URL.revokeObjectURL(preloadedQuestionAudioRef.current.url);
+            if (preloadedQuestionAudioRef.current.audio) {
+                preloadedQuestionAudioRef.current.audio.src = "";
+            }
+            preloadedQuestionAudioRef.current = null;
+        }
+        if (preloadedAnswerAudioRef.current) {
+            URL.revokeObjectURL(preloadedAnswerAudioRef.current.url);
+            if (preloadedAnswerAudioRef.current.audio) {
+                preloadedAnswerAudioRef.current.audio.src = "";
+            }
+            preloadedAnswerAudioRef.current = null;
+        }
+    };
+
+    // 오디오 일시정지 (인스턴스 파괴 없음)
     const cleanupAudio = () => {
         window.speechSynthesis.cancel();
         if (currentAudioRef.current) {
             currentAudioRef.current.pause();
-            currentAudioRef.current = null;
         }
         if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
     };
 
-    // 캐시된 Blob 오디오 재생기
-    const playCacheAudio = (blob, onEnd) => {
+    // 프리로드된 오디오 즉각 재생기 (딜레이 0초)
+    const playPreloadedAudio = (type, onEnd) => {
         cleanupAudio();
 
-        const audioUrl = URL.createObjectURL(blob);
-        const audio = new Audio(audioUrl);
-        audio.playbackRate = rate;
+        const preloadObj = type === 'question' ? preloadedQuestionAudioRef.current : preloadedAnswerAudioRef.current;
+        
+        if (preloadObj && preloadObj.audio) {
+            const { audio, url } = preloadObj;
+            audio.playbackRate = rate;
+            
+            audio.onended = () => {
+                currentAudioRef.current = null;
+                if (isPlayingRef.current) {
+                    onEnd();
+                }
+            };
 
-        audio.onended = () => {
-            URL.revokeObjectURL(audioUrl);
-            currentAudioRef.current = null;
-            if (isPlayingRef.current) {
+            audio.onerror = (e) => {
+                console.error("프리로드 오디오 재생 에러 (Fallback TTS 구동):", e);
+                currentAudioRef.current = null;
+                onEnd(); // Fallback 진행
+            };
+
+            currentAudioRef.current = audio;
+            audio.play().catch(err => {
+                console.error("프리로드 play() 인터랙션 거부 (Fallback TTS 구동):", err);
+                currentAudioRef.current = null;
                 onEnd();
-            }
-        };
-
-        audio.onerror = (e) => {
-            console.error("캐시 오디오 재생 실패 (Fallback TTS 구동):", e);
-            URL.revokeObjectURL(audioUrl);
-            currentAudioRef.current = null;
-            onEnd(); // Fallback 진행
-        };
-
-        currentAudioRef.current = audio;
-        audio.play().catch(err => {
-            console.error("오디오 play() 인터랙션 거부:", err);
+            });
+        } else {
+            // 프리로드 데이터가 유효하지 않으면 Fallback 진행
             onEnd();
-        });
+        }
     };
 
     // 기본 Web Speech API 음성 낭독 함수
@@ -308,20 +377,11 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
                 break;
             }
             case 'question': {
-                try {
-                    const cache = await getFile(`audio_${currentProblem.id}_question`);
-                    if (cache && cache.blob) {
-                        playCacheAudio(cache.blob, () => {
-                            runSequence('pause');
-                        });
-                    } else {
-                        const cleanQuestion = cleanTextForTTS(currentProblem?.question || currentProblem?.content || '');
-                        speakText(cleanQuestion, () => {
-                            runSequence('pause');
-                        });
-                    }
-                } catch (e) {
-                    console.error("지문 캐시 체크 실패:", e);
+                if (preloadedQuestionAudioRef.current) {
+                    playPreloadedAudio('question', () => {
+                        runSequence('pause');
+                    });
+                } else {
                     const cleanQuestion = cleanTextForTTS(currentProblem?.question || currentProblem?.content || '');
                     speakText(cleanQuestion, () => {
                         runSequence('pause');
@@ -343,20 +403,11 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
                 break;
             }
             case 'answer': {
-                try {
-                    const cache = await getFile(`audio_${currentProblem.id}_answer`);
-                    if (cache && cache.blob) {
-                        playCacheAudio(cache.blob, () => {
-                            runSequence('done');
-                        });
-                    } else {
-                        const cleanAnswer = cleanTextForTTS(currentProblem?.modelAnswer || currentProblem?.answer || '');
-                        speakText(cleanAnswer, () => {
-                            runSequence('done');
-                        });
-                    }
-                } catch (e) {
-                    console.error("해설 캐시 체크 실패:", e);
+                if (preloadedAnswerAudioRef.current) {
+                    playPreloadedAudio('answer', () => {
+                        runSequence('done');
+                    });
+                } else {
                     const cleanAnswer = cleanTextForTTS(currentProblem?.modelAnswer || currentProblem?.answer || '');
                     speakText(cleanAnswer, () => {
                         runSequence('done');
@@ -396,8 +447,8 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
     useEffect(() => {
         if (isPlaying) {
             if (activeStep === 'question' || activeStep === 'answer') {
-                // 이미 재생 인스턴스가 활성 중이면 이어가기 시도
-                if (currentAudioRef.current) {
+                if (currentAudioRef.current && currentAudioRef.current.paused) {
+                    // 일시정지되었던 프리미엄 음성이 있으면 즉시 이어서 재생 (딜레이 없음)
                     currentAudioRef.current.play().catch(e => {
                         console.error("오디오 복구 실패, 처음부터 재시작:", e);
                         runSequence(activeStep);
@@ -413,10 +464,11 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
         }
     }, [isPlaying]);
 
-    // 배속 또는 문제가 전환될 때의 낭독 리로드 제어
+    // 배속 또는 문제가 전환될 때의 낭독 리로드 및 프리로드 재가동
     useEffect(() => {
-        cleanupAudio();
+        resetAudioEngine();
         checkCacheStatus();
+        preloadAudioCache();
 
         if (isPlaying) {
             runSequence('title');
@@ -425,10 +477,10 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
         }
     }, [currentProblem, rate]);
 
-    // 언마운트 시 클린업
+    // 언마운트 시 엔진 전면 리셋
     useEffect(() => {
         return () => {
-            cleanupAudio();
+            resetAudioEngine();
         };
     }, []);
 
