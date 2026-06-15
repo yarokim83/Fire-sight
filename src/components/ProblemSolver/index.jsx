@@ -15,6 +15,7 @@ import { SUBJECT_LIST, PROBLEM_TYPES } from '/src/utils/constants';
 import SharedCanvas from '../SharedCanvas';
 import DrawingToolbar from './DrawingToolbar';
 import ImageCarousel from './ImageCarousel';
+import AudioStudyPlayer from './AudioStudyPlayer';
 
 export default function ProblemSolver({ problems, startIndex = 0, onBack, onComplete, onEditProblem }) {
     const [splitRatio, setSplitRatio] = useState(50);
@@ -1320,6 +1321,16 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                         </div>
                     </div>
                 </div>
+            )}
+
+            {!isEditMode && (
+                <AudioStudyPlayer 
+                    currentProblem={currentProblem}
+                    onNext={handleNext}
+                    onPrev={() => currentIndex > 0 && setCurrentIndex(prev => prev - 1)}
+                    isFirst={currentIndex === 0}
+                    isLast={currentIndex === problems.length - 1}
+                />
             )}
         </div>
     );
