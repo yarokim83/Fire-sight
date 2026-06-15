@@ -75,6 +75,51 @@ const fetchOpenAITTS = async (text, apiKey, voice) => {
     return await response.blob();
 };
 
+// OpenAI TTS API 호출 함수 (4096자 초과 시 문장 단위로 자동 분할 및 병합 지원)
+const fetchOpenAITTSWithChunking = async (text, apiKey, voice) => {
+    const LIMIT = 4000;
+    if (!text) return null;
+    if (text.length <= LIMIT) {
+        return await fetchOpenAITTS(text, apiKey, voice);
+    }
+
+    const sentences = splitIntoSentences(text);
+    const chunks = [];
+    let currentChunk = '';
+
+    for (const sentence of sentences) {
+        if ((currentChunk + sentence).length > LIMIT) {
+            if (currentChunk) {
+                chunks.push(currentChunk.trim());
+                currentChunk = '';
+            }
+            if (sentence.length > LIMIT) {
+                let temp = sentence;
+                while (temp.length > LIMIT) {
+                    chunks.push(temp.substring(0, LIMIT));
+                    temp = temp.substring(LIMIT);
+                }
+                currentChunk = temp;
+            } else {
+                currentChunk = sentence;
+            }
+        } else {
+            currentChunk += (currentChunk ? ' ' : '') + sentence;
+        }
+    }
+    if (currentChunk) {
+        chunks.push(currentChunk.trim());
+    }
+
+    const blobs = [];
+    for (const chunk of chunks) {
+        const blob = await fetchOpenAITTS(chunk, apiKey, voice);
+        blobs.push(blob);
+    }
+
+    return new Blob(blobs, { type: 'audio/mp3' });
+};
+
 export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFirst, isLast }) {
     const [isPlaying, setIsPlaying] = useState(false);
     const [activeStep, setActiveStep] = useState('idle'); // 'idle' | 'title' | 'question' | 'pause' | 'introAnswer' | 'answer' | 'done'
@@ -159,15 +204,19 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
             // 1. 지문 오디오 생성
             const cleanQuestion = cleanTextForTTS(currentProblem?.question || currentProblem?.content || '');
             if (cleanQuestion) {
-                const questionBlob = await fetchOpenAITTS(cleanQuestion, activeKey, premiumVoice);
-                await saveFile(`audio_${currentProblem.id}_question`, { type: 'audio/mp3', problemId: currentProblem.id }, questionBlob);
+                const questionBlob = await fetchOpenAITTSWithChunking(cleanQuestion, activeKey, premiumVoice);
+                if (questionBlob) {
+                    await saveFile(`audio_${currentProblem.id}_question`, { type: 'audio/mp3', problemId: currentProblem.id }, questionBlob);
+                }
             }
 
             // 2. 해설 오디오 생성
             const cleanAnswer = cleanTextForTTS(currentProblem?.modelAnswer || currentProblem?.answer || '');
             if (cleanAnswer) {
-                const answerBlob = await fetchOpenAITTS(cleanAnswer, activeKey, premiumVoice);
-                await saveFile(`audio_${currentProblem.id}_answer`, { type: 'audio/mp3', problemId: currentProblem.id }, answerBlob);
+                const answerBlob = await fetchOpenAITTSWithChunking(cleanAnswer, activeKey, premiumVoice);
+                if (answerBlob) {
+                    await saveFile(`audio_${currentProblem.id}_answer`, { type: 'audio/mp3', problemId: currentProblem.id }, answerBlob);
+                }
             }
 
             await checkCacheStatus();
@@ -484,6 +533,9 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
         };
     }, []);
 
+    const hasAnswerText = !!cleanTextForTTS(currentProblem?.modelAnswer || currentProblem?.answer || '');
+    const isFullyCached = hasQuestionCache && (!hasAnswerText || hasAnswerCache);
+
     return (
         <div className="font-sans fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] sm:w-full sm:max-w-2xl bg-slate-900/95 backdrop-blur-xl border border-slate-800/90 p-4 rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.8)] z-50 transition-all duration-300 animate-in fade-in slide-in-from-bottom-5">
             <div className="flex flex-col w-full gap-3 relative">
@@ -561,13 +613,13 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
                             <button 
                                 onClick={handleGeneratePremiumAudio}
                                 className={`p-2.5 rounded-xl transition-all ${
-                                    (hasQuestionCache && hasAnswerCache)
+                                    isFullyCached
                                     ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20' 
                                     : 'bg-slate-800 text-amber-400 border border-slate-700/80 hover:bg-slate-700 hover:text-amber-300 active:scale-95'
                                 }`}
-                                title={(hasQuestionCache && hasAnswerCache) ? "프리미엄 AI 음성 캐싱됨" : "프리미엄 AI 음성 생성 및 캐싱"}
+                                title={isFullyCached ? "프리미엄 AI 음성 캐싱됨" : "프리미엄 AI 음성 생성 및 캐싱"}
                             >
-                                <Sparkles size={18} fill={(hasQuestionCache && hasAnswerCache) ? "currentColor" : "none"} />
+                                <Sparkles size={18} fill={isFullyCached ? "currentColor" : "none"} />
                             </button>
                         )}
 
