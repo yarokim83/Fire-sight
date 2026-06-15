@@ -278,6 +278,19 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         else onComplete();
     };
 
+    const handleShowAnswerDirectly = () => {
+        const emptyGrading = {
+            percentage: 0,
+            matchedTerms: [],
+            matchedNumbers: [],
+            missingTerms: currentProblem.gradingPoints?.mandatory_terms || [],
+            missingNumbers: currentProblem.gradingPoints?.mandatory_numbers || [],
+            manualGradingRequired: true
+        };
+        setGradingResult(emptyGrading);
+        setShowAnswer(true);
+    };
+
     const handleSubmit = async () => {
         let currentAnswer = userAnswer;
         // 도화지에 그림을 그렸다면, 새 도화지에서 이미지를 뽑아옵니다!
@@ -1080,7 +1093,13 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                     </>
                                 )}
                                 
-                                <div className="absolute bottom-8 right-8 z-[300]">
+                                <div className="absolute bottom-8 right-8 z-[300] flex gap-3">
+                                    <button 
+                                        onClick={handleShowAnswerDirectly} 
+                                        className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-6 py-4 rounded-[1.5rem] font-black border border-slate-700 shadow-xl transition-all transform active:scale-95 pointer-events-auto"
+                                    >
+                                        해설 바로가기
+                                    </button>
                                     <button onClick={handleSubmit} className="flex items-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-10 py-4 rounded-[1.5rem] font-black shadow-[0_10px_30px_rgba(37,99,235,0.3)] transition-all transform active:scale-95 pointer-events-auto"><Check size={24} /> {inputMode === 'draw' ? '정답 확인' : '제출하기'}</button>
                                 </div>
                             </div>
@@ -1323,7 +1342,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 </div>
             )}
 
-            {!isEditMode && (
+            {!isEditMode && showAnswer && (
                 <AudioStudyPlayer 
                     currentProblem={currentProblem}
                     onNext={handleNext}
