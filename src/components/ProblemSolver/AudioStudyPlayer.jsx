@@ -469,16 +469,8 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
                 break;
             }
             case 'done': {
-                if (playMode === 'repeat') {
-                    runSequence('title');
-                } else {
-                    if (!isLast) {
-                        onNext();
-                    } else {
-                        setIsPlaying(false);
-                        setActiveStep('idle');
-                    }
-                }
+                setIsPlaying(false);
+                setActiveStep('idle');
                 break;
             }
             default:
@@ -572,62 +564,65 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
     const isFullyCached = hasQuestionCache && (!hasAnswerText || hasAnswerCache);
 
     return (
-        <div className="font-sans fixed bottom-4 left-1/2 -translate-x-1/2 w-[94%] sm:w-full sm:max-w-2xl bg-slate-950/95 backdrop-blur-xl border border-slate-800/90 py-2.5 px-4 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] z-50 transition-all duration-300 animate-in fade-in slide-in-from-bottom-5">
-            <div className="flex items-center justify-between w-full gap-3 relative flex-wrap sm:flex-nowrap">
-                {/* 1. 왼쪽: 진행 상태 텍스트 */}
-                <div className="flex items-center gap-2 min-w-0 shrink-0">
-                    <span className={`w-2 h-2 rounded-full bg-emerald-500 shrink-0 ${isPlaying ? 'animate-pulse' : 'opacity-60'}`} />
-                    <span className="text-[11px] font-bold text-slate-300 truncate max-w-[130px] sm:max-w-[200px]">
-                        {activeStep === 'title' && "📌 제목 낭독 중"}
-                        {activeStep === 'question' && (hasQuestionCache ? "✨ 프리미엄 지문" : "📖 지문 낭독")}
-                        {activeStep === 'pause' && "⏳ 묵음 대기 (3초)"}
-                        {activeStep === 'introAnswer' && "📢 해설 준비"}
-                        {activeStep === 'answer' && (hasAnswerCache ? "✨ 프리미엄 해설" : "💡 해설 낭독")}
-                        {activeStep === 'idle' && ""}
-                    </span>
+        <div className="font-sans fixed top-20 right-4 w-72 bg-slate-950/95 backdrop-blur-xl border border-slate-800/90 p-3 rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.6)] z-50 transition-all duration-300 animate-in fade-in slide-in-from-top-3">
+            <div className="flex flex-col gap-2.5 relative">
+                {/* 1. 상단: 진행 상태 & 재생 컨트롤 */}
+                <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+                    {/* 왼쪽: 진행 상태 */}
+                    <div className="flex items-center gap-1.5 min-w-0">
+                        <span className={`w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 ${isPlaying ? 'animate-pulse' : 'opacity-60'}`} />
+                        <span className="text-[10px] font-bold text-slate-300 truncate max-w-[120px]">
+                            {activeStep === 'title' && "📌 제목 낭독 중"}
+                            {activeStep === 'question' && (hasQuestionCache ? "✨ 프리미엄 지문" : "📖 지문 낭독")}
+                            {activeStep === 'pause' && "⏳ 묵음 대기 (3초)"}
+                            {activeStep === 'introAnswer' && "📢 해설 준비"}
+                            {activeStep === 'answer' && (hasAnswerCache ? "✨ 프리미엄 해설" : "💡 해설 낭독")}
+                            {activeStep === 'idle' && ""}
+                        </span>
+                    </div>
+
+                    {/* 오른쪽: 핵심 재생 컨트롤 */}
+                    <div className="flex items-center gap-1">
+                        {/* 다음 문제 이동 (좌측 버튼) */}
+                        <button 
+                            onClick={onNext} 
+                            disabled={isLast}
+                            className={`p-1 rounded transition-all ${isLast ? 'text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-900'}`}
+                            title="다음 문제"
+                        >
+                            <ChevronLeft size={16} />
+                        </button>
+
+                        {/* 재생/일시정지 토글 버튼 */}
+                        <button 
+                            onClick={handleTogglePlay}
+                            className="p-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg transition-all shadow-sm shadow-emerald-500/10 active:scale-95 flex items-center justify-center"
+                            title={isPlaying ? "일시정지" : "재생"}
+                        >
+                            {isPlaying ? <Pause size={12} fill="currentColor" /> : <Play size={12} fill="currentColor" />}
+                        </button>
+
+                        {/* 이전 문제 이동 (우측 버튼) */}
+                        <button 
+                            onClick={onPrev} 
+                            disabled={isFirst}
+                            className={`p-1 rounded transition-all ${isFirst ? 'text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-900'}`}
+                            title="이전 문제"
+                        >
+                            <ChevronRight size={16} />
+                        </button>
+                    </div>
                 </div>
 
-                {/* 2. 가운데: 핵심 재생 컨트롤 (사용자 체감 방향 교정: 좌=다음, 우=이전) */}
-                <div className="flex items-center gap-2 shrink-0">
-                    {/* 다음 문제 이동 (좌측 버튼) */}
-                    <button 
-                        onClick={onNext} 
-                        disabled={isLast}
-                        className={`p-2 rounded-lg transition-all ${isLast ? 'text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-800 active:scale-90'}`}
-                        title="다음 문제"
-                    >
-                        <ChevronLeft size={18} />
-                    </button>
-
-                    {/* 재생/일시정지 토글 버튼 */}
-                    <button 
-                        onClick={handleTogglePlay}
-                        className="p-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl transition-all shadow-md shadow-emerald-500/10 active:scale-95 flex items-center justify-center font-black"
-                        title={isPlaying ? "일시정지" : "재생"}
-                    >
-                        {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
-                    </button>
-
-                    {/* 이전 문제 이동 (우측 버튼) */}
-                    <button 
-                        onClick={onPrev} 
-                        disabled={isFirst}
-                        className={`p-2 rounded-lg transition-all ${isFirst ? 'text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-800 active:scale-90'}`}
-                        title="이전 문제"
-                    >
-                        <ChevronRight size={18} />
-                    </button>
-                </div>
-
-                {/* 3. 오른쪽: 배속, 캐싱, 세팅 */}
-                <div className="flex items-center gap-2 shrink-0 ml-auto sm:ml-0">
+                {/* 2. 하단: 배속, 캐싱, 세팅 */}
+                <div className="flex items-center justify-between gap-2">
                     {/* 배속 조절 */}
-                    <div className="flex items-center gap-1 bg-slate-900 border border-slate-800/80 px-2 py-1 rounded-lg">
-                        <Clock size={11} className="text-slate-400" />
+                    <div className="flex items-center gap-1 bg-slate-900 border border-slate-800/80 px-2 py-0.5 rounded-lg">
+                        <Clock size={10} className="text-slate-400" />
                         <select 
                             value={rate} 
                             onChange={(e) => setRate(parseFloat(e.target.value))}
-                            className="bg-transparent text-slate-300 text-[10px] font-black outline-none cursor-pointer focus:text-white"
+                            className="bg-transparent text-slate-300 text-[9px] font-black outline-none cursor-pointer focus:text-white"
                         >
                             <option value="1.0" className="bg-slate-950 text-white">1.0x</option>
                             <option value="1.25" className="bg-slate-950 text-white">1.25x</option>
@@ -636,52 +631,55 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
                         </select>
                     </div>
 
-                    {/* 프리미엄 목소리 굽기/제거 */}
-                    <div className="flex items-center gap-1">
-                        {isGenerating ? (
-                            <button className="p-2 bg-slate-800 text-emerald-400 rounded-lg animate-spin cursor-not-allowed">
-                                <RefreshCw size={14} />
-                            </button>
-                        ) : (
-                            <button 
-                                onClick={handleGeneratePremiumAudio}
-                                className={`p-2 rounded-lg transition-all ${
-                                    isFullyCached
-                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20' 
-                                    : 'bg-slate-800 text-amber-400 border border-slate-700/80 hover:bg-slate-700 hover:text-amber-300 active:scale-95'
-                                }`}
-                                title={isFullyCached ? "프리미엄 AI 음성 캐싱됨" : "프리미엄 AI 음성 생성 및 캐싱"}
-                            >
-                                <Sparkles size={14} fill={isFullyCached ? "currentColor" : "none"} />
-                            </button>
-                        )}
+                    {/* 프리미엄 캐싱 및 세팅 */}
+                    <div className="flex items-center gap-1.5">
+                        {/* 프리미엄 목소리 굽기/제거 */}
+                        <div className="flex items-center gap-1">
+                            {isGenerating ? (
+                                <button className="p-1.5 bg-slate-900 text-emerald-400 rounded-lg animate-spin cursor-not-allowed">
+                                    <RefreshCw size={12} />
+                                </button>
+                            ) : (
+                                <button 
+                                    onClick={handleGeneratePremiumAudio}
+                                    className={`p-1.5 rounded-lg transition-all ${
+                                        isFullyCached
+                                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20' 
+                                        : 'bg-slate-900 text-amber-400 border border-slate-800 hover:bg-slate-800 hover:text-amber-300 active:scale-95'
+                                    }`}
+                                    title={isFullyCached ? "프리미엄 AI 음성 캐싱됨" : "프리미엄 AI 음성 생성 및 캐싱"}
+                                >
+                                    <Sparkles size={12} fill={isFullyCached ? "currentColor" : "none"} />
+                                </button>
+                            )}
 
-                        {(hasQuestionCache || hasAnswerCache) && !isGenerating && (
-                            <button 
-                                onClick={handleDeletePremiumAudio}
-                                className="p-2 bg-slate-800 text-red-400 border border-slate-700/80 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-all active:scale-95"
-                                title="프리미엄 음성 캐시 삭제"
-                            >
-                                <Trash2 size={14} />
-                            </button>
-                        )}
+                            {(hasQuestionCache || hasAnswerCache) && !isGenerating && (
+                                <button 
+                                    onClick={handleDeletePremiumAudio}
+                                    className="p-1.5 bg-slate-900 text-red-400 border border-slate-800 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-all active:scale-95"
+                                    title="프리미엄 음성 캐시 삭제"
+                                >
+                                    <Trash2 size={12} />
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="h-4 w-[1px] bg-slate-800" />
+
+                        {/* 세팅 토글 기어 버튼 */}
+                        <button 
+                            onClick={() => setShowSettings(!showSettings)}
+                            className={`p-1.5 rounded-lg transition-all ${showSettings ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                            title="OpenAI API 키 설정"
+                        >
+                            <Settings size={12} />
+                        </button>
                     </div>
-
-                    <div className="h-4 w-[1px] bg-slate-800" />
-
-                    {/* 세팅 토글 기어 버튼 */}
-                    <button 
-                        onClick={() => setShowSettings(!showSettings)}
-                        className={`p-2 rounded-lg transition-all ${showSettings ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                        title="OpenAI API 키 설정"
-                    >
-                        <Settings size={14} />
-                    </button>
                 </div>
 
                 {/* API Key 입력 팝오버 세팅 패널 */}
                 {showSettings && (
-                    <div className="absolute bottom-12 right-0 w-72 bg-slate-950/98 border border-slate-800 rounded-xl p-3 shadow-2xl z-50 animate-in slide-in-from-bottom-2 duration-300">
+                    <div className="absolute top-full mt-2 right-0 w-64 bg-slate-950/98 border border-slate-800 rounded-xl p-3 shadow-2xl z-50 animate-in slide-in-from-top-2 duration-300">
                         <div className="flex justify-between items-center mb-2">
                             <span className="text-[10px] font-black text-white flex items-center gap-1.5"><Settings size={11} /> OpenAI TTS 프리미엄 설정</span>
                             <button onClick={() => setShowSettings(false)} className="text-slate-500 hover:text-white"><X size={14} /></button>
@@ -701,7 +699,7 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
                                 </p>
                             </div>
                             <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">AI 목소리 스타일</label>
+                                <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">AI 목소리 스타일</label>
                                 <select
                                     value={premiumVoice}
                                     onChange={(e) => setPremiumVoice(e.target.value)}
