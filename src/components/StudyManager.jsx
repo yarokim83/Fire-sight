@@ -214,7 +214,7 @@ export default function StudyManager({ isAuthenticated, accessToken, handleLogin
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `firesight_all_problems.md`; // 파일명 고정하여 중복 교체 용이화
+            link.download = `firesight_all_problems.txt`; // 파일명 고정하여 중복 교체 용이화
             
             document.body.appendChild(link);
             link.click();
@@ -223,7 +223,7 @@ export default function StudyManager({ isAuthenticated, accessToken, handleLogin
 
             setStatus({
                 type: 'success',
-                message: `🎉 구글 Gemini 연동용 Markdown 파일(firesight_all_problems.md) 다운로드 완료!`
+                message: `🎉 구글 Gemini 연동용 텍스트 파일(firesight_all_problems.txt) 다운로드 완료!`
             });
         } catch (error) {
             console.error("Gemini Export Failed:", error);
@@ -404,7 +404,7 @@ export default function StudyManager({ isAuthenticated, accessToken, handleLogin
                             <div>
                                 <h3 className="text-xl font-bold text-white mb-1">Google Gemini NotebookLM 연동</h3>
                                 <p className="text-slate-400 text-sm">
-                                    모든 문제를 구조화된 Markdown(.md) 파일로 변환하여 구글 AI의 자료실(Notebook)에 업로드할 수 있도록 내보냅니다.
+                                    모든 문제를 구조화된 텍스트(.txt) 파일로 변환하여 구글 AI의 자료실(Notebook)에 업로드할 수 있도록 내보냅니다.
                                 </p>
                             </div>
                         </div>
@@ -427,7 +427,7 @@ export default function StudyManager({ isAuthenticated, accessToken, handleLogin
                                 </h4>
                                 <p className="text-slate-500">
                                     Gemini나 NotebookLM에 새 백업 파일을 업로드할 때는, <strong>기존에 등록했던 예전 백업 파일 소스를 먼저 삭제</strong>해 주세요. 
-                                    방금 다운로드한 <strong>최신 단일 파일(<code className="text-indigo-300 font-bold">firesight_all_problems.md</code>) 하나만 소스 목록에 남겨두어야</strong> 데이터 중복으로 인한 AI 대화의 혼선을 막을 수 있습니다.
+                                    방금 다운로드한 <strong>최신 단일 파일(<code className="text-indigo-300 font-bold">firesight_all_problems.txt</code>) 하나만 소스 목록에 남겨두어야</strong> 데이터 중복으로 인한 AI 대화의 혼선을 막을 수 있습니다.
                                 </p>
                             </div>
                         </div>
@@ -440,7 +440,7 @@ export default function StudyManager({ isAuthenticated, accessToken, handleLogin
                             ${loading ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white active:scale-95'}`}
                     >
                         {loading ? <Loader2 className="animate-spin" /> : <Sparkles size={20} />}
-                        Gemini Notebook용 내보내기 (Markdown)
+                        Gemini Notebook용 내보내기 (TXT)
                     </button>
                 </div>
 
