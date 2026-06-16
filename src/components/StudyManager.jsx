@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { 
     Database, Download, Upload, FileJson, AlertTriangle, 
-    CheckCircle2, Loader2, ShieldCheck, RefreshCw, Cloud, Save
+    CheckCircle2, Loader2, ShieldCheck, RefreshCw, Cloud, Save,
+    Sparkles, FileText
 } from 'lucide-react';
 import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
 import { ref, getBlob } from 'firebase/storage';
@@ -148,6 +149,85 @@ export default function StudyManager({ isAuthenticated, accessToken, handleLogin
         } catch (error) {
             console.error("Drive upload error", error);
             setStatus({ type: 'error', message: `❌ 구글 드라이브 업로드 실패: ${error.message}` });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // 2.5 [AI 연동] 구글 Gemini 및 NotebookLM 전용 Markdown 전체 문제 내보내기
+    const handleGeminiExport = async () => {
+        if (loading) return;
+        setLoading(true);
+        setStatus(null);
+
+        try {
+            setStatus({ type: 'info', message: '🤖 구글 Gemini 연동용 데이터를 준비하고 있습니다...' });
+            const querySnapshot = await getDocs(collection(db, "workbook"));
+            if (querySnapshot.empty) {
+                throw new Error("저장된 데이터가 없습니다.");
+            }
+
+            // 생성일 순 정렬
+            const docs = querySnapshot.docs.map(doc => {
+                const docData = doc.data();
+                return {
+                    id: doc.id,
+                    ...docData,
+                    createdAt: docData.createdAt?.toDate ? docData.createdAt.toDate() : new Date(docData.createdAt || 0)
+                };
+            });
+            docs.sort((a, b) => a.createdAt - b.createdAt);
+
+            let mdContent = `# Firesight 단권화 문제집 백업 및 AI 학습용 데이터\n`;
+            mdContent += `- **추출일시**: ${new Date().toLocaleString()}\n`;
+            mdContent += `- **총 문항 수**: ${docs.length}개\n`;
+            mdContent += `- **주의사항**: 구글 Gemini NotebookLM에 새 파일을 올릴 때는, 기존에 올렸던 이전 백업 파일 소스를 삭제하고 **방금 다운로드한 최신 단일 파일 하나만 소스로 남겨두어야** 정확한 분석 및 중복 방지가 가능합니다.\n\n`;
+
+            docs.forEach((p, idx) => {
+                mdContent += `---\n\n`;
+                mdContent += `## [${p.category || p.subject || '기타'}] [${idx + 1}] ${p.title || '제목 없음'}\n`;
+                mdContent += `- **유형**: ${p.problemType || 'descriptive'}\n`;
+                
+                const cleanQuestion = (p.content || p.question || '내용 없음').replace(/\n/g, ' ').trim();
+                mdContent += `- **지문**: ${cleanQuestion}\n`;
+                
+                const cleanAnswer = (p.answer || p.modelAnswer || '해설 없음').replace(/\n/g, ' ').trim();
+                mdContent += `- **모범 답안**: ${cleanAnswer}\n`;
+                
+                let keywords = [];
+                if (Array.isArray(p.keywords)) keywords = p.keywords;
+                else if (typeof p.keywords === 'string' && p.keywords.trim()) keywords = p.keywords.split(',').map(k => k.trim());
+                else if (Array.isArray(p.tags)) keywords = p.tags;
+                mdContent += `- **채점 키워드**: ${keywords.join(', ') || '없음'}\n`;
+
+                const numbers = Array.isArray(p.numbers) ? p.numbers : (p.gradingPoints?.mandatory_numbers || []);
+                if (numbers.length > 0) {
+                    mdContent += `- **포함 수치**: ${numbers.join(', ')}\n`;
+                }
+                if (p.memo) {
+                    mdContent += `- **학습 메모**: ${p.memo.replace(/\n/g, ' ').trim()}\n`;
+                }
+                mdContent += `\n`;
+            });
+
+            const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `firesight_all_problems.md`; // 파일명 고정하여 중복 교체 용이화
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            setStatus({
+                type: 'success',
+                message: `🎉 구글 Gemini 연동용 Markdown 파일(firesight_all_problems.md) 다운로드 완료!`
+            });
+        } catch (error) {
+            console.error("Gemini Export Failed:", error);
+            setStatus({ type: 'error', message: `❌ Markdown 내보내기 실패: ${error.message}` });
         } finally {
             setLoading(false);
         }
@@ -311,6 +391,56 @@ export default function StudyManager({ isAuthenticated, accessToken, handleLogin
                     >
                         {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
                         복구 파일(JSON) 선택
+                    </button>
+                </div>
+
+                {/* 3. 구글 Gemini Notebook 연동 카드 */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-xl flex flex-col justify-between lg:col-span-2 max-w-none">
+                    <div>
+                        <div className="flex items-start gap-4 mb-6">
+                            <div className="p-3 bg-indigo-500/10 rounded-xl border border-indigo-500/20">
+                                <Sparkles size={32} className="text-indigo-400" />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-white mb-1">Google Gemini NotebookLM 연동</h3>
+                                <p className="text-slate-400 text-sm">
+                                    모든 문제를 구조화된 Markdown(.md) 파일로 변환하여 구글 AI의 자료실(Notebook)에 업로드할 수 있도록 내보냅니다.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-950/50 p-4 rounded-xl border border-slate-800 mb-6 text-xs leading-relaxed">
+                            <div>
+                                <h4 className="font-bold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                                    <FileText size={12} className="text-indigo-400" />
+                                    AI 맞춤 연동 학습 기능
+                                </h4>
+                                <ul className="text-slate-500 space-y-1 list-disc list-inside">
+                                    <li><strong>맞춤 모의고사</strong>: <em>"수계 과목 113번과 유사한 오답 방지용 5문항 출제해줘"</em></li>
+                                    <li><strong>핵심 요약</strong>: <em>"이 문제집의 설치 기준과 수치 조건들을 표로 만들어줘"</em></li>
+                                    <li><strong>Audio Overview</strong>: NotebookLM에서 오디오 쇼로 음성 요약본 청취</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-amber-400 mb-1.5 flex items-center gap-1.5">
+                                    <AlertTriangle size={12} className="text-amber-400" />
+                                    ⚠️ AI 중복 학습 오작동 방지 팁
+                                </h4>
+                                <p className="text-slate-500">
+                                    Gemini나 NotebookLM에 새 백업 파일을 업로드할 때는, <strong>기존에 등록했던 예전 백업 파일 소스를 먼저 삭제</strong>해 주세요. 
+                                    방금 다운로드한 <strong>최신 단일 파일(<code className="text-indigo-300 font-bold">firesight_all_problems.md</code>) 하나만 소스 목록에 남겨두어야</strong> 데이터 중복으로 인한 AI 대화의 혼선을 막을 수 있습니다.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button
+                        onClick={handleGeminiExport}
+                        disabled={loading}
+                        className={`w-full py-4 rounded-xl font-black text-lg flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/5
+                            ${loading ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white active:scale-95'}`}
+                    >
+                        {loading ? <Loader2 className="animate-spin" /> : <Sparkles size={20} />}
+                        Gemini Notebook용 내보내기 (Markdown)
                     </button>
                 </div>
 
