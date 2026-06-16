@@ -210,7 +210,7 @@ export default function StudyManager({ isAuthenticated, accessToken, handleLogin
                 mdContent += `\n`;
             });
 
-            const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8;' });
+            const blob = new Blob([mdContent], { type: 'application/octet-stream' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
