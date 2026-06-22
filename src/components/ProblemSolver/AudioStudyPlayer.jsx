@@ -907,7 +907,7 @@ export default function AudioStudyPlayer({ currentProblem, onNext, onPrev, isFir
     const isFullyCached = (hasQuestionCache && (!hasAnswerText || hasAnswerCache)) || localHasPremiumAudio;
 
     return (
-        <div className="font-sans fixed bottom-6 left-4 right-4 md:bottom-auto md:left-auto md:top-20 md:right-4 md:w-72 bg-slate-950/95 backdrop-blur-xl border border-slate-800/90 p-3 rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.6)] z-50 transition-all duration-300 animate-in fade-in slide-in-from-bottom-3 md:slide-in-from-top-3">
+        <div className="font-sans fixed bottom-6 left-4 right-4 md:bottom-6 md:left-auto md:top-auto md:right-6 md:w-72 bg-slate-950/95 backdrop-blur-xl border border-slate-800/90 p-3 rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.6)] z-50 transition-all duration-300 animate-in fade-in slide-in-from-bottom-3">
             <div className="flex flex-col gap-2.5 relative">
                 {/* 1. 상단: 진행 상태 & 재생 컨트롤 */}
                 <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
