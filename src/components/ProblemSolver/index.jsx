@@ -259,7 +259,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         if (showAnswer && gradingResult && containerRef.current) {
             const scrollTimer = setTimeout(() => {
                 containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 100);
+            }, 350);
             return () => clearTimeout(scrollTimer);
         }
     }, [showAnswer, gradingResult]);
@@ -370,12 +370,17 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     };
 
     const handleSubmit = async () => {
+        if (showAnswer) return; // 중복 제출 방지
+        
+        // 포커스 강제 해제하여 키보드를 신속하게 내림
         if (document.activeElement instanceof HTMLElement) {
             document.activeElement.blur();
         }
+        if (textInputRef.current) {
+            textInputRef.current.blur();
+        }
         
-        // 가상 키보드가 내려가면서 레이아웃이 갱신되는 출렁임(리사이즈)이 끝난 후,
-        // React 상태 반영과 채점지가 화면에 안정적으로 렌더링되도록 150ms의 지연시간을 부여합니다.
+        // 가상 키보드가 완전히 들어가고 브라우저 리사이징이 끝날 때까지 300ms 지연
         setTimeout(async () => {
             try {
                 let currentAnswer = userAnswer;
@@ -402,7 +407,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 console.error("답안 제출 실패:", err);
                 alert(`제출 중 오류가 발생했습니다: ${err.message}`);
             }
-        }, 200);
+        }, 300);
     };
 
     const handleRetrySubmit = async () => {
@@ -1210,7 +1215,9 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                         해설 바로가기
                                     </button>
                                     <button 
-                                        onClick={() => handleSubmit()}
+                                        onClick={(e) => { e.stopPropagation(); }}
+                                        onMouseDown={(e) => { e.stopPropagation(); handleSubmit(); }}
+                                        onTouchStart={(e) => { e.stopPropagation(); handleSubmit(); }}
                                         className="flex items-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-10 py-4 rounded-[1.5rem] font-black shadow-[0_10px_30px_rgba(37,99,235,0.3)] transition-all transform active:scale-95 pointer-events-auto"
                                     >
                                         <Check size={24} /> {inputMode === 'draw' ? '정답 확인' : '제출하기'}
