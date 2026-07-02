@@ -1423,15 +1423,15 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                             <div className="p-6 bg-emerald-950/10 rounded-3xl border border-emerald-500/20 space-y-4 shadow-xl">
                                                 <h4 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2"><Target size={14} /> Mandatory Terms (40%)</h4>
                                                 <div className="flex flex-wrap gap-2.5">
-                                                    {gradingResult.matchedTerms.map(t => <span key={t} className={`px-3.5 py-2 bg-emerald-500 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-950/30`}>{t}</span>)}
-                                                    {gradingResult.missingTerms.map(t => <span key={t} className={`px-3.5 py-2 bg-slate-900 text-slate-500 rounded-xl text-xs font-bold border border-slate-800 line-through opacity-50`}>{t}</span>)}
+                                                    {(gradingResult.matchedTerms || []).map((t, idx) => t ? <span key={`mt-${idx}`} className={`px-3.5 py-2 bg-emerald-500 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-950/30`}>{t}</span> : null)}
+                                                    {(gradingResult.missingTerms || []).map((t, idx) => t ? <span key={`mst-${idx}`} className={`px-3.5 py-2 bg-slate-900 text-slate-500 rounded-xl text-xs font-bold border border-slate-800 line-through opacity-50`}>{t}</span> : null)}
                                                 </div>
                                             </div>
                                             <div className="p-6 bg-blue-950/10 rounded-3xl border border-blue-500/20 space-y-4 shadow-xl">
                                                 <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest flex items-center gap-2"><Calculator size={14} /> Mandatory Numbers (60%)</h4>
                                                 <div className="flex flex-wrap gap-2.5">
-                                                    {gradingResult.matchedNumbers.map(n => <span key={n} className={`px-3.5 py-2 bg-blue-600 text-white rounded-xl text-xs font-black shadow-lg shadow-blue-950/30`}>{n}</span>)}
-                                                    {gradingResult.missingNumbers.map(n => <span key={n} className={`px-3.5 py-2 bg-slate-900 text-slate-500 rounded-xl text-xs font-bold border border-slate-800 line-through opacity-50`}>{n}</span>)}
+                                                    {(gradingResult.matchedNumbers || []).map((n, idx) => n !== null && n !== undefined ? <span key={`mn-${idx}`} className={`px-3.5 py-2 bg-blue-600 text-white rounded-xl text-xs font-black shadow-lg shadow-blue-950/30`}>{n}</span> : null)}
+                                                    {(gradingResult.missingNumbers || []).map((n, idx) => n !== null && n !== undefined ? <span key={`msn-${idx}`} className={`px-3.5 py-2 bg-slate-900 text-slate-500 rounded-xl text-xs font-bold border border-slate-800 line-through opacity-50`}>{n}</span> : null)}
                                                 </div>
                                             </div>
                                         </div>
