@@ -445,8 +445,8 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             textInputRef.current.blur();
         }
         
-        // 4. 가상 키보드가 안전하게 들어가고 브라우저 리사이징이 끝날 때까지 300ms 대기 후, 채점 진행 및 정답지 전환을 실행합니다.
-        // (이로써 텍스트 입력창이 내려가는 도중 DOM에서 증발하여 사파리가 위로 튕기거나 렉이 걸리는 현상을 방지합니다)
+        // 4. 리사이징 여유를 위해 100ms 대기 후 채점 진행 및 정답지 전환을 완료합니다.
+        // (물리 키보드 등 가상 키보드가 노출되지 않는 환경에서도 지체 현상 없이 쾌적하게 화면이 넘어갑니다)
         setTimeout(async () => {
             try {
                 const res = analyzeAnswer(finalAnswer);
@@ -454,11 +454,10 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 setShowAnswer(true);
 
                 if (inputMode === 'text' && finalAnswer.trim() && !res.manualGradingRequired) {
-                    try {
-                        await updateProblemResult(currentProblem.id, res.percentage);
-                    } catch (dbErr) {
-                        console.error("Firestore 점수 업데이트 실패:", dbErr);
-                    }
+                    // 데이터베이스 쓰기는 UI 스레드를 막지 않도록 백그라운드에서 비동기로 수행합니다.
+                    updateProblemResult(currentProblem.id, res.percentage).catch(dbErr => {
+                        console.error("Firestore 점수 업데이트 실패 (백그라운드):", dbErr);
+                    });
                 }
             } catch (err) {
                 console.error("답안 제출 실패:", err);
@@ -466,7 +465,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             } finally {
                 isSubmittingRef.current = false;
             }
-        }, 300);
+        }, 100);
     };
 
     const handleRetrySubmit = async () => {
