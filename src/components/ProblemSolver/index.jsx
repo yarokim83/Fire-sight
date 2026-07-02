@@ -372,7 +372,18 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const handleSubmit = async () => {
         if (showAnswer) return; // 중복 제출 방지
         
-        // 포커스 강제 해제하여 키보드를 신속하게 내림
+        // 1. 키보드가 닫혀 화면이 리사이징되거나 포커스가 해제되기 직전, 최신 답안 텍스트를 즉시 동기식으로 안전하게 선점 캡처합니다.
+        let finalAnswer = userAnswer;
+        if (inputMode === 'text' && textInputRef.current) {
+            finalAnswer = textInputRef.current.value || '';
+        } else if (inputMode === 'draw' && canvasRef.current) {
+            finalAnswer = canvasRef.current.getImageData('white') || '';
+        }
+        
+        // 2. 캡처 완료된 원시 데이터를 React 상태에 동기화
+        setUserAnswer(finalAnswer);
+
+        // 3. 포커스 해제하여 키보드를 신속하게 내림 (이미 데이터는 확보됨)
         if (document.activeElement instanceof HTMLElement) {
             document.activeElement.blur();
         }
@@ -380,23 +391,14 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             textInputRef.current.blur();
         }
         
-        // 가상 키보드가 완전히 들어가고 브라우저 리사이징이 끝날 때까지 300ms 지연
+        // 4. 가상 키보드가 완전히 들어가고 브라우저 리사이징이 끝날 때까지 300ms 지연 후 채점 화면 전환
         setTimeout(async () => {
             try {
-                let currentAnswer = userAnswer;
-                if (inputMode === 'text' && textInputRef.current) {
-                    currentAnswer = textInputRef.current.value || '';
-                    setUserAnswer(currentAnswer);
-                } else if (inputMode === 'draw' && canvasRef.current) {
-                    currentAnswer = canvasRef.current.getImageData('white') || '';
-                    setUserAnswer(currentAnswer);
-                }
-
-                const res = analyzeAnswer(currentAnswer);
+                const res = analyzeAnswer(finalAnswer);
                 setGradingResult(res); 
                 setShowAnswer(true);
 
-                if (inputMode === 'text' && currentAnswer.trim() && !res.manualGradingRequired) {
+                if (inputMode === 'text' && finalAnswer.trim() && !res.manualGradingRequired) {
                     try {
                         await updateProblemResult(currentProblem.id, res.percentage);
                     } catch (dbErr) {
