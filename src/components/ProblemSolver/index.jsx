@@ -939,17 +939,20 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     };
 
     const HighlightedUserAnswer = () => {
-        if (!gradingResult) return <p className="text-slate-300 whitespace-pre-wrap">{userAnswer}</p>;
+        if (!gradingResult) return <p className="text-slate-300 whitespace-pre-wrap">{userAnswer || ''}</p>;
         
         const allTerms = gradingResult.matchedTerms || [];
         const allNums = gradingResult.matchedNumbers || [];
         
         if (allTerms.length === 0 && allNums.length === 0) {
-            return <p className="text-white/80 whitespace-pre-wrap leading-relaxed text-lg">{userAnswer}</p>;
+            return <p className="text-white/80 whitespace-pre-wrap leading-relaxed text-lg">{userAnswer || ''}</p>;
         }
         
         // 태그 파괴 방지를 위해 HTML 이스케이프
-        const escapeHtml = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const escapeHtml = (text) => {
+            if (text === null || text === undefined) return '';
+            return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        };
         let safeHtml = escapeHtml(userAnswer);
         
         // 긴 단어부터 매칭하여 태그 꼬임 방지
@@ -957,16 +960,29 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         const sortedNums = [...allNums].sort((a,b) => String(b).length - String(a).length);
 
         sortedTerms.forEach(t => {
-            const chars = Array.from(String(t).replace(/\s+/g, ''));
-            const escapedChars = chars.map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-            // 태그 내부 속성값 매칭 방지: (?![^<]*>)
-            const pattern = new RegExp(`(${escapedChars.join('.{0,3}?')})(?![^<]*>)`, 'gi');
-            safeHtml = safeHtml.replace(pattern, '<span class="font-black px-1.5 py-0.5 rounded mx-0.5 border text-emerald-400 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_10px_rgba(52,211,153,0.1)]">$&</span>');
+            try {
+                const chars = Array.from(String(t).replace(/\s+/g, ''));
+                const escapedChars = chars.map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).filter(Boolean);
+                if (escapedChars.length > 0) {
+                    // 태그 내부 속성값 매칭 방지: (?![^<]*>)
+                    const pattern = new RegExp(`(${escapedChars.join('.{0,3}?')})(?![^<]*>)`, 'gi');
+                    safeHtml = safeHtml.replace(pattern, '<span class="font-black px-1.5 py-0.5 rounded mx-0.5 border text-emerald-400 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_10px_rgba(52,211,153,0.1)]">$&</span>');
+                }
+            } catch (regexErr) {
+                console.error("Highlight term regex error:", t, regexErr);
+            }
         });
 
         sortedNums.forEach(n => {
-            const pattern = new RegExp(`(${String(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(?![^<]*>)`, 'gi');
-            safeHtml = safeHtml.replace(pattern, '<span class="font-black px-1.5 py-0.5 rounded mx-0.5 border text-blue-400 bg-blue-500/10 border-blue-500/20 shadow-[0_0_10px_rgba(96,165,250,0.1)]">$&</span>');
+            try {
+                const escapedNum = String(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                if (escapedNum) {
+                    const pattern = new RegExp(`(${escapedNum})(?![^<]*>)`, 'gi');
+                    safeHtml = safeHtml.replace(pattern, '<span class="font-black px-1.5 py-0.5 rounded mx-0.5 border text-blue-400 bg-blue-500/10 border-blue-500/20 shadow-[0_0_10px_rgba(96,165,250,0.1)]">$&</span>');
+                }
+            } catch (regexErr) {
+                console.error("Highlight number regex error:", n, regexErr);
+            }
         });
 
         return (
