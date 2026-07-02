@@ -176,6 +176,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const canvasRef = useRef(null);        
     const overlayCanvasRef = useRef(null); 
     const textInputRef = useRef(null); 
+    const isSubmittingRef = useRef(false); 
     
     const [penColor, setPenColor] = useState('#facc15'); 
     const [lineWidth, setLineWidth] = useState(4);
@@ -284,42 +285,94 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     };
 
     const analyzeAnswer = (answerText = userAnswer) => { 
-        if (!currentProblem) return null;
-        const terms = currentProblem.gradingPoints?.mandatory_terms || [];
-        const numbers = currentProblem.gradingPoints?.mandatory_numbers || [];
-        if (inputMode === 'draw' || !answerText.trim()) {
-            return { percentage: 0, matchedTerms: [], matchedNumbers: [], missingTerms: terms, missingNumbers: numbers, manualGradingRequired: true };
+        try {
+            if (!currentProblem) return null;
+            
+            // gradingPoints 가드 보강
+            const gradingPoints = currentProblem.gradingPoints || {};
+            const rawTerms = gradingPoints.mandatory_terms;
+            const rawNumbers = gradingPoints.mandatory_numbers;
+            
+            // 배열 타입 보장
+            const terms = Array.isArray(rawTerms) ? rawTerms : [];
+            const numbers = Array.isArray(rawNumbers) ? rawNumbers : [];
+            
+            if (inputMode === 'draw' || !answerText || !String(answerText).trim()) {
+                return { 
+                    percentage: 0, 
+                    matchedTerms: [], 
+                    matchedNumbers: [], 
+                    missingTerms: terms, 
+                    missingNumbers: numbers, 
+                    manualGradingRequired: true 
+                };
+            }
+            
+            const normalizedInput = String(answerText).replace(/\s+/g, ' ');
+    
+            const buildRegex = (term) => {
+                try {
+                    if (!term) return { test: () => false };
+                    const safeTerm = String(term).trim();
+                    if (!safeTerm) return { test: () => false };
+                    
+                    const chars = Array.from(safeTerm.replace(/\s+/g, ''));
+                    const escapedChars = chars.map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).filter(Boolean);
+                    if (escapedChars.length === 0) return { test: () => false };
+                    return new RegExp(escapedChars.join('.{0,3}?'), 'i');
+                } catch (e) {
+                    console.error("buildRegex 에러:", term, e);
+                    return { test: () => false };
+                }
+            };
+    
+            const matchedTerms = terms.filter(t => {
+                try {
+                    return buildRegex(t).test(normalizedInput);
+                } catch (e) {
+                    return false;
+                }
+            });
+            
+            const normalizedInputForNumbers = String(answerText).replace(/\s+/g, '').toLowerCase();
+            const matchedNumbers = numbers.filter(n => {
+                try {
+                    const safeNum = String(n).replace(/\s+/g, '').toLowerCase();
+                    return safeNum ? normalizedInputForNumbers.includes(safeNum) : false;
+                } catch (e) {
+                    return false;
+                }
+            });
+            
+            let finalScore = 0;
+            if (terms.length > 0 && numbers.length > 0) {
+                finalScore = (matchedTerms.length/terms.length * 40) + (matchedNumbers.length/numbers.length * 60);
+            } else if (terms.length > 0) {
+                finalScore = (matchedTerms.length/terms.length * 100);
+            } else if (numbers.length > 0) {
+                finalScore = (matchedNumbers.length/numbers.length * 100);
+            }
+            
+            return { 
+                percentage: Math.round(finalScore), 
+                matchedTerms, 
+                matchedNumbers, 
+                missingTerms: terms.filter(t => !matchedTerms.includes(t)), 
+                missingNumbers: numbers.filter(n => !matchedNumbers.includes(n)), 
+                manualGradingRequired: (terms.length === 0 && numbers.length === 0) 
+            };
+        } catch (globalGradingErr) {
+            console.error("채점기 전역 예외 발생:", globalGradingErr);
+            return {
+                percentage: 0,
+                matchedTerms: [],
+                matchedNumbers: [],
+                missingTerms: [],
+                missingNumbers: [],
+                manualGradingRequired: true,
+                errorOccurred: true
+            };
         }
-        
-        // 1. 공백 및 개행을 단일 공백으로 단순화
-        const normalizedInput = answerText.replace(/\s+/g, ' ');
-
-        // [고도화된 Regex 검사기] 키워드의 각 글자 사이에 최대 3자의 임의 문자(조사, 오타 제한적 허용) 허용
-        const buildRegex = (term) => {
-            const chars = Array.from(String(term).replace(/\s+/g, ''));
-            const escapedChars = chars.map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-            return new RegExp(escapedChars.join('.{0,3}?'), 'i');
-        };
-
-        const matchedTerms = terms.filter(t => buildRegex(t).test(normalizedInput));
-        
-        // 숫자는 단위 혼동 방지를 위해 오직 공백만 무시하고 스캔
-        const normalizedInputForNumbers = answerText.replace(/\s+/g, '').toLowerCase();
-        const matchedNumbers = numbers.filter(n => normalizedInputForNumbers.includes(String(n).replace(/\s+/g, '').toLowerCase()));
-        
-        let finalScore = 0;
-        if (terms.length > 0 && numbers.length > 0) finalScore = (matchedTerms.length/terms.length * 40) + (matchedNumbers.length/numbers.length * 60);
-        else if (terms.length > 0) finalScore = (matchedTerms.length/terms.length * 100);
-        else if (numbers.length > 0) finalScore = (matchedNumbers.length/numbers.length * 100);
-        
-        return { 
-            percentage: Math.round(finalScore), 
-            matchedTerms, 
-            matchedNumbers, 
-            missingTerms: terms.filter(t => !matchedTerms.includes(t)), 
-            missingNumbers: numbers.filter(n => !matchedNumbers.includes(n)), 
-            manualGradingRequired: (terms.length === 0 && numbers.length === 0) 
-        };
     };
 
     const handleNext = (keepAnswer = false) => {
@@ -370,7 +423,8 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     };
 
     const handleSubmit = async () => {
-        if (showAnswer) return; // 중복 제출 방지
+        if (showAnswer || isSubmittingRef.current) return; // 중복 제출 방지
+        isSubmittingRef.current = true;
         
         // 1. 키보드가 닫히기 직전 최신 입력을 동기식으로 즉시 안전하게 확보합니다.
         let finalAnswer = userAnswer;
@@ -391,23 +445,28 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             textInputRef.current.blur();
         }
         
-        // 4. 동기식으로 채점 진행 및 정답지 전환을 실행하여 React 상태 연쇄 업데이트 누락을 차단합니다.
-        try {
-            const res = analyzeAnswer(finalAnswer);
-            setGradingResult(res); 
-            setShowAnswer(true);
+        // 4. 가상 키보드가 안전하게 들어가고 브라우저 리사이징이 끝날 때까지 300ms 대기 후, 채점 진행 및 정답지 전환을 실행합니다.
+        // (이로써 텍스트 입력창이 내려가는 도중 DOM에서 증발하여 사파리가 위로 튕기거나 렉이 걸리는 현상을 방지합니다)
+        setTimeout(async () => {
+            try {
+                const res = analyzeAnswer(finalAnswer);
+                setGradingResult(res); 
+                setShowAnswer(true);
 
-            if (inputMode === 'text' && finalAnswer.trim() && !res.manualGradingRequired) {
-                try {
-                    await updateProblemResult(currentProblem.id, res.percentage);
-                } catch (dbErr) {
-                    console.error("Firestore 점수 업데이트 실패:", dbErr);
+                if (inputMode === 'text' && finalAnswer.trim() && !res.manualGradingRequired) {
+                    try {
+                        await updateProblemResult(currentProblem.id, res.percentage);
+                    } catch (dbErr) {
+                        console.error("Firestore 점수 업데이트 실패:", dbErr);
+                    }
                 }
+            } catch (err) {
+                console.error("답안 제출 실패:", err);
+                alert(`제출 중 오류가 발생했습니다: ${err.message}`);
+            } finally {
+                isSubmittingRef.current = false;
             }
-        } catch (err) {
-            console.error("답안 제출 실패:", err);
-            alert(`제출 중 오류가 발생했습니다: ${err.message}`);
-        }
+        }, 300);
     };
 
     const handleRetrySubmit = async () => {
@@ -1215,7 +1274,9 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                         해설 바로가기
                                     </button>
                                     <button 
-                                        onClick={handleSubmit}
+                                        onClick={(e) => { e.stopPropagation(); }}
+                                        onMouseDown={(e) => { e.stopPropagation(); handleSubmit(); }}
+                                        onTouchStart={(e) => { e.stopPropagation(); handleSubmit(); }}
                                         className="flex items-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-10 py-4 rounded-[1.5rem] font-black shadow-[0_10px_30px_rgba(37,99,235,0.3)] transition-all transform active:scale-95 pointer-events-auto"
                                     >
                                         <Check size={24} /> {inputMode === 'draw' ? '정답 확인' : '제출하기'}
