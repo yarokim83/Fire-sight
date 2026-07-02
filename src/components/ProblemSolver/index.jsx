@@ -372,7 +372,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     const handleSubmit = async () => {
         if (showAnswer) return; // 중복 제출 방지
         
-        // 1. 키보드가 닫혀 화면이 리사이징되거나 포커스가 해제되기 직전, 최신 답안 텍스트를 즉시 동기식으로 안전하게 선점 캡처합니다.
+        // 1. 키보드가 닫히기 직전 최신 입력을 동기식으로 즉시 안전하게 확보합니다.
         let finalAnswer = userAnswer;
         if (inputMode === 'text' && textInputRef.current) {
             finalAnswer = textInputRef.current.value || '';
@@ -383,7 +383,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         // 2. 캡처 완료된 원시 데이터를 React 상태에 동기화
         setUserAnswer(finalAnswer);
 
-        // 3. 포커스 해제하여 키보드를 신속하게 내림 (이미 데이터는 확보됨)
+        // 3. 포커스 해제하여 키보드를 신속하게 내림
         if (document.activeElement instanceof HTMLElement) {
             document.activeElement.blur();
         }
@@ -391,25 +391,23 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
             textInputRef.current.blur();
         }
         
-        // 4. 가상 키보드가 완전히 들어가고 브라우저 리사이징이 끝날 때까지 300ms 지연 후 채점 화면 전환
-        setTimeout(async () => {
-            try {
-                const res = analyzeAnswer(finalAnswer);
-                setGradingResult(res); 
-                setShowAnswer(true);
+        // 4. 동기식으로 채점 진행 및 정답지 전환을 실행하여 React 상태 연쇄 업데이트 누락을 차단합니다.
+        try {
+            const res = analyzeAnswer(finalAnswer);
+            setGradingResult(res); 
+            setShowAnswer(true);
 
-                if (inputMode === 'text' && finalAnswer.trim() && !res.manualGradingRequired) {
-                    try {
-                        await updateProblemResult(currentProblem.id, res.percentage);
-                    } catch (dbErr) {
-                        console.error("Firestore 점수 업데이트 실패:", dbErr);
-                    }
+            if (inputMode === 'text' && finalAnswer.trim() && !res.manualGradingRequired) {
+                try {
+                    await updateProblemResult(currentProblem.id, res.percentage);
+                } catch (dbErr) {
+                    console.error("Firestore 점수 업데이트 실패:", dbErr);
                 }
-            } catch (err) {
-                console.error("답안 제출 실패:", err);
-                alert(`제출 중 오류가 발생했습니다: ${err.message}`);
             }
-        }, 300);
+        } catch (err) {
+            console.error("답안 제출 실패:", err);
+            alert(`제출 중 오류가 발생했습니다: ${err.message}`);
+        }
     };
 
     const handleRetrySubmit = async () => {
@@ -1217,9 +1215,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                         해설 바로가기
                                     </button>
                                     <button 
-                                        onClick={(e) => { e.stopPropagation(); }}
-                                        onMouseDown={(e) => { e.stopPropagation(); handleSubmit(); }}
-                                        onTouchStart={(e) => { e.stopPropagation(); handleSubmit(); }}
+                                        onClick={handleSubmit}
                                         className="flex items-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-10 py-4 rounded-[1.5rem] font-black shadow-[0_10px_30px_rgba(37,99,235,0.3)] transition-all transform active:scale-95 pointer-events-auto"
                                     >
                                         <Check size={24} /> {inputMode === 'draw' ? '정답 확인' : '제출하기'}
