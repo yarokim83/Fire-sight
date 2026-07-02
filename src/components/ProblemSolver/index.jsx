@@ -360,26 +360,47 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     };
 
     const handleSubmit = async () => {
-        let currentAnswer = userAnswer;
-        // 도화지에 그림을 그렸다면, 새 도화지에서 이미지를 뽑아옵니다!
-        if (inputMode === 'draw' && canvasRef.current) {
-            currentAnswer = canvasRef.current.getImageData('white');
-            setUserAnswer(currentAnswer);
-        }
+        try {
+            let currentAnswer = userAnswer;
+            // 도화지에 그림을 그렸다면, 새 도화지에서 이미지를 뽑아옵니다!
+            if (inputMode === 'draw' && canvasRef.current) {
+                currentAnswer = canvasRef.current.getImageData('white') || '';
+                setUserAnswer(currentAnswer);
+            }
 
-        const res = analyzeAnswer(currentAnswer);
-        setGradingResult(res); 
-        setShowAnswer(true);
+            const res = analyzeAnswer(currentAnswer);
+            setGradingResult(res); 
+            setShowAnswer(true);
 
-        if (inputMode === 'text' && currentAnswer.trim() && !res.manualGradingRequired) {
-            await updateProblemResult(currentProblem.id, res.percentage);
+            if (inputMode === 'text' && currentAnswer.trim() && !res.manualGradingRequired) {
+                try {
+                    await updateProblemResult(currentProblem.id, res.percentage);
+                } catch (dbErr) {
+                    console.error("Firestore 점수 업데이트 실패:", dbErr);
+                }
+            }
+        } catch (err) {
+            console.error("답안 제출 실패:", err);
+            alert(`제출 중 오류가 발생했습니다: ${err.message}`);
         }
     };
 
     const handleRetrySubmit = async () => {
-        const res = analyzeAnswer();
-        setGradingResult(res); setIsRetrying(false);  
-        if (!res.manualGradingRequired) await updateProblemResult(currentProblem.id, res.percentage);
+        try {
+            const res = analyzeAnswer();
+            setGradingResult(res); 
+            setIsRetrying(false);  
+            if (!res.manualGradingRequired) {
+                try {
+                    await updateProblemResult(currentProblem.id, res.percentage);
+                } catch (dbErr) {
+                    console.error("Firestore 재채점 업데이트 실패:", dbErr);
+                }
+            }
+        } catch (err) {
+            console.error("재채점 제출 실패:", err);
+            alert(`재채점 중 오류가 발생했습니다: ${err.message}`);
+        }
     };
 
     const handleSaveMemo = async () => {
