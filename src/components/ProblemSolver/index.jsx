@@ -255,6 +255,15 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         }
     }, [userAnswer, isRetrying]);
 
+    useEffect(() => {
+        if (showAnswer && gradingResult && containerRef.current) {
+            const scrollTimer = setTimeout(() => {
+                containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+            return () => clearTimeout(scrollTimer);
+        }
+    }, [showAnswer, gradingResult]);
+
     const addTerm = () => {
         if (newTerm.trim() && !editedTerms.includes(newTerm.trim())) {
             setEditedTerms([...editedTerms, newTerm.trim()]);
@@ -393,7 +402,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                 console.error("답안 제출 실패:", err);
                 alert(`제출 중 오류가 발생했습니다: ${err.message}`);
             }
-        }, 150);
+        }, 200);
     };
 
     const handleRetrySubmit = async () => {
@@ -1201,9 +1210,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                                         해설 바로가기
                                     </button>
                                     <button 
-                                        onClick={(e) => { e.preventDefault(); }}
-                                        onMouseDown={(e) => { e.preventDefault(); handleSubmit(); }}
-                                        onTouchStart={(e) => { e.preventDefault(); handleSubmit(); }}
+                                        onClick={() => handleSubmit()}
                                         className="flex items-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-10 py-4 rounded-[1.5rem] font-black shadow-[0_10px_30px_rgba(37,99,235,0.3)] transition-all transform active:scale-95 pointer-events-auto"
                                     >
                                         <Check size={24} /> {inputMode === 'draw' ? '정답 확인' : '제출하기'}
