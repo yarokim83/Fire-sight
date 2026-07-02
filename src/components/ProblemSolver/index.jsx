@@ -175,6 +175,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
     };
     const canvasRef = useRef(null);        
     const overlayCanvasRef = useRef(null); 
+    const textInputRef = useRef(null); 
     
     const [penColor, setPenColor] = useState('#facc15'); 
     const [lineWidth, setLineWidth] = useState(4);
@@ -363,29 +364,36 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
         if (document.activeElement instanceof HTMLElement) {
             document.activeElement.blur();
         }
-        try {
-            let currentAnswer = userAnswer;
-            // 도화지에 그림을 그렸다면, 새 도화지에서 이미지를 뽑아옵니다!
-            if (inputMode === 'draw' && canvasRef.current) {
-                currentAnswer = canvasRef.current.getImageData('white') || '';
-                setUserAnswer(currentAnswer);
-            }
-
-            const res = analyzeAnswer(currentAnswer);
-            setGradingResult(res); 
-            setShowAnswer(true);
-
-            if (inputMode === 'text' && currentAnswer.trim() && !res.manualGradingRequired) {
-                try {
-                    await updateProblemResult(currentProblem.id, res.percentage);
-                } catch (dbErr) {
-                    console.error("Firestore 점수 업데이트 실패:", dbErr);
+        
+        // 가상 키보드가 내려가면서 레이아웃이 갱신되는 출렁임(리사이즈)이 끝난 후,
+        // React 상태 반영과 채점지가 화면에 안정적으로 렌더링되도록 150ms의 지연시간을 부여합니다.
+        setTimeout(async () => {
+            try {
+                let currentAnswer = userAnswer;
+                if (inputMode === 'text' && textInputRef.current) {
+                    currentAnswer = textInputRef.current.value || '';
+                    setUserAnswer(currentAnswer);
+                } else if (inputMode === 'draw' && canvasRef.current) {
+                    currentAnswer = canvasRef.current.getImageData('white') || '';
+                    setUserAnswer(currentAnswer);
                 }
+
+                const res = analyzeAnswer(currentAnswer);
+                setGradingResult(res); 
+                setShowAnswer(true);
+
+                if (inputMode === 'text' && currentAnswer.trim() && !res.manualGradingRequired) {
+                    try {
+                        await updateProblemResult(currentProblem.id, res.percentage);
+                    } catch (dbErr) {
+                        console.error("Firestore 점수 업데이트 실패:", dbErr);
+                    }
+                }
+            } catch (err) {
+                console.error("답안 제출 실패:", err);
+                alert(`제출 중 오류가 발생했습니다: ${err.message}`);
             }
-        } catch (err) {
-            console.error("답안 제출 실패:", err);
-            alert(`제출 중 오류가 발생했습니다: ${err.message}`);
-        }
+        }, 150);
     };
 
     const handleRetrySubmit = async () => {
@@ -1166,7 +1174,7 @@ export default function ProblemSolver({ problems, startIndex = 0, onBack, onComp
                             <div className="relative w-full h-[500px] bg-slate-900 overflow-hidden"> 
                                 <div className="absolute inset-0 z-0 bg-grid-white/[0.02]" style={{ backgroundSize: '20px 20px', backgroundImage: 'linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px)' }} />
                                 {inputMode === 'text' ? (
-                                    <textarea value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} placeholder="답안을 서술하세요..." className="w-full h-full p-8 text-white text-xl font-bold leading-relaxed outline-none resize-none border-none placeholder:text-white/20 shadow-inner bg-transparent relative z-10" spellCheck="false" />
+                                    <textarea ref={textInputRef} value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} placeholder="답안을 서술하세요..." className="w-full h-full p-8 text-white text-xl font-bold leading-relaxed outline-none resize-none border-none placeholder:text-white/20 shadow-inner bg-transparent relative z-10" spellCheck="false" />
                                 ) : (
                                     <>
                                         <div className="absolute inset-0 z-10">
